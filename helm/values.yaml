@@ -90,9 +90,6 @@ viewer:
   service:
     port: 80
     type: ClusterIP
-  image:
-    repository: nginx
-    tag: "stable"
   podAnnotations: {}
   podLabels: {}
   resources: 

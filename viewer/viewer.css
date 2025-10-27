@@ -229,6 +229,7 @@ td.ip-netname {
 }
 #input form {
   display: inline-block;
+  width: 100%;
 }
 #urlForm button{
   min-width: 19%; 
