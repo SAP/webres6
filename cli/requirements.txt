@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+urllib3==2.5.0
+urllib3-future==2.14.900

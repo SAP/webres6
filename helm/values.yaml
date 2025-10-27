@@ -1,0 +1,175 @@
+# Default values for IPv6 Web Resource Checker.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# This is to override the chart name.
+nameOverride: ""
+fullnameOverride: ""
+
+
+# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+imagePullSecrets: 
+- name: hyperspace-docker
+
+# API server based server message and privacy text configuration
+serverconfig:
+  privacy: |-
+    <p>All data input is processed in accordance with <a href="https://www.sap.com/about/legal/privacy.html">SAP privacy policy</a>.<br/>
+    IP addresses resolved by this server my be processed by the WHOIS services of the respective Regional Internet Registries.</p>
+  message: ""
+
+# Default image for both API and Viewer unless overridden
+image:
+  # Image repository (default is "") – needs to end with a slash if name is set
+  repository: my-repository/
+  # Overrides the image tag whose default is "latest"
+  tag: "latest"
+
+# API server specific configuration
+api:
+  image:
+    # Overrides the image repository whose default is "" – needs to end with a slash if name is set
+    repository: ""
+    # Overrides the image name whose default is "webres6-api"
+    name: webres6-api
+    # Overrides the image tag whose default is "latest"
+    tag: ""
+    # This sets the pull policy for images.
+    pullPolicy: Always
+  port: 6400
+  timeout: 180
+  gunicornThreads: 64
+  podAnnotations: {}
+  podLabels: {}
+  whois:
+    enabled: true
+    cacheTTL: 86400
+    cacheExpire: 1800
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1024Mi"
+  replicas: 1
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+  service:
+    type: ClusterIP
+    port: 80
+  securityContext: {}
+  podSecurityContext: {}
+
+# Selenium hub configuration
+seleniumHub:
+  url: "http://selenium-hub.default.svc.cluster.local:4444/wd/hub"
+
+# Prometheteus Operator configuration
+prometheus:
+  enabled: true
+  additionalLabels: 
+    Release: prometheus
+
+# Viewer (static content) configuration
+viewer:
+  enabled: true
+  image:
+    # Overrides the image repository whose default is "" – needs to end with a slash if name is set
+    repository: ""
+    # Overrides the image name whose default is "webres6-viewer"
+    name: webres6-viewer
+    # Overrides the image tag whose default is "latest"
+    tag: ""
+    # This sets the pull policy for images.
+    pullPolicy: Always
+  port: 80
+  service:
+    port: 80
+    type: ClusterIP
+  image:
+    repository: nginx
+    tag: "stable"
+  podAnnotations: {}
+  podLabels: {}
+  resources: 
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  replicas: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+  securityContext: {}
+  podSecurityContext: {}
+
+# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations: {}
+  hosts:
+     - webres6.example.com
+  tls:
+    - secretName: prod-tls
+      hosts:
+        - webres6.example.com
+  additionalPaths: {}
+
+# .well-known file contents
+well_known: 
+  security.txt: |-
+    Contact: mailto:security@example.com
+
+# Admin key configuration
+adminSecret:
+  create: true
+  secretName: webres6-admin
+  secretKey: admin-key
+
+# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+
+  # fsGroup: 2000
+
+securityContext: {}
+#  capabilities:
+#    drop:
+#    - ALL
+#  readOnlyRootFilesystem: true
+#  runAsNonRoot: true
+#  runAsUser: 1000
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+
+# curl helper configuration
+curl:
+  image:
+    repository: curlimages/curl
+    tag: "7.72.0"
+  securityContext: {}
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"

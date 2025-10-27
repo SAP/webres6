@@ -1,0 +1,4 @@
+*/.venv/
+.vscode/
+pyvenv.cfg
+deploy/*-secret.yaml

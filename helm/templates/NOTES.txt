@@ -1,0 +1,12 @@
+IPv6 Web Resource Checker (webres6) has been deployed in the {{ .Release.Namespace }} namespace
+
+Services:
+  API server: {{ include "webres6.fullname" . }}-api
+  Viewer:     {{ include "webres6.fullname" . }}-viewer
+
+{{ if .Values.ingress.enabled -}}
+Ingress for the following host names was deployed:
+  {{- range .Values.ingress.hosts }}
+  - {{ . | quote }}
+  {{- end }}
+{{- end }}

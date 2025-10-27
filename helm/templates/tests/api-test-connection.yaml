@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  # SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+  # SPDX-License-Identifier: Apache-2.0
+  name: "{{ include "webres6.fullname" . }}-test-connection"
+  labels:
+    {{- include "webres6.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: "{{ .Values.curl.image.repository | default "curlimages/curl" }}:{{ .Values.curl.image.tag | default "latest" }}"
+      imagePullPolicy: {{ .Values.curl.image.pullPolicy }}
+      args: ['--no-progress-meter', '--request', 'GET', 'http://{{ include "webres6.fullname" . }}:{{ .Values.api.service.port }}/ping']
+  restartPolicy: Never

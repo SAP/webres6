@@ -1,0 +1,383 @@
+/* viewer.css - CSS for the IPv6 Web Resource Checker viewer HTML page
+ *
+ * SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ */
+@font-face {
+    font-family: '72';
+    src: url('fonts/72-Regular.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: '72';
+    src: url('fonts/72-Bold.woff2') format('woff2');
+    font-weight: bold;
+    font-style: normal;
+    font-display: swap;
+}
+@font-face {
+    font-family: '72';
+    src: url('fonts/72-Condensed.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+    font-stretch: condensed;
+    font-display: swap;
+}
+@font-face {
+    font-family: '72Mono';
+    src: url('fonts/72Mono-Regular.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+:root {
+  color-scheme: light dark; /* both supported */
+}
+body {
+  font-family: '72', Arial, sans-serif;
+  background: #f4f4f9;
+  color: #222;
+  margin: 0;
+  padding: 0;
+}
+.container {
+  max-width: 1024px;
+  margin: auto;
+  padding: 0px 20px 20px 20px;
+}
+.contents-container {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  padding: 24px 24px 20px 24px;
+  margin-bottom: 20px;
+}
+.contents-container h2 {
+  margin-top: 0px;
+}
+.contents-container-header, .contents-container-footer {
+  display: flow-root;
+}
+.contents-container-header h2 {
+  float: left;
+}
+.contents-container-footer {
+  margin-top: 20px;
+}
+.footer {
+  text-align: center;
+  font-size: small;
+  color: gray;
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+h1 {
+  color: #2a4d7a;
+}
+.results h2 {
+  text-overflow: ellipsis;
+  text-wrap: nowrap;
+  overflow: hidden;
+}
+.results h3 {
+  margin-top: 24px;
+}
+.overview-item {
+  font-weight: bold;
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  background: #eaf1fb;
+  color: #2a4d7a;
+}
+.status.error {
+  background: #b30000;
+  color: #fddede;
+  border: 2px dashed #300010;
+}
+.status.ipv6only-ready {
+  background: #e6fbe6;
+  color: #1a7a1a;
+}
+.status.ipv6only-not-ready {
+  background: #ffeaea;
+  color: #b32020;
+}
+.status.ipv6only-unknown {
+  background: lightgray;
+  color: #501030;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+  padding: 2px 4px;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  background: #fafcff;
+}
+th, td {
+  /* border: 1px solid #e0e6ef; */
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+thead {
+  background: #eaf1fb;
+  color: #2a4d7a;
+}
+tbody {
+  border-top: 1px solid #b0b0b0;
+}
+button {
+  margin-top: 10px;
+  padding: 10px 20px;
+  background-color: #2a4d7a;
+  color: white;
+  border: none;
+  border-radius: 4px;
+}
+input[type="text"] {
+  padding: 10px;
+  border: 1px solid darkgray;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+td.protocol {
+  color: gray;
+  width: 10%;
+  text-wrap-mode: nowrap;
+}
+.protocol ul {
+  list-style: none;
+  margin-top: 2px;
+  padding-left: 0;
+}
+td.host-localpart {
+  color: gray;
+  text-align: right;
+  padding-right: 0;
+  overflow-wrap: anywhere;
+  font-stretch: condensed;
+}
+td.host-dompart {
+  padding-left: 0.1em;
+  overflow-wrap: break-word;
+}
+td.as-number {
+  color: gray;
+  max-width: 10%;
+  font-family: '72Mono', monospace;
+  text-align: right;
+}
+td.as-descr {
+  color: gray;
+  max-width: 10%;
+  text-align: left;
+}
+td.ip-address, th.ip-address {
+  max-width: 40%;
+}
+td.ip-address {
+  font-family: '72Mono', monospace;
+  letter-spacing: 0.05ex;
+}
+td.ip-netname {
+  text-align: left;
+}
+.ipv4 {
+  color: Red;
+}
+.ipv6 {
+  color: Darkgreen;
+}
+.nat64 {
+  color: Red;
+}
+.hide {
+  display: none;
+}
+.host-info-block td div {
+  max-width: initial;
+  font-size: small;
+  color: gray;
+  margin-left: 24px;
+  text-wrap: wrap;
+  word-break: break-all;
+}
+.host-info-block ul {
+  list-style-type: "- ";
+  list-style-position: outside;
+  padding: 0;
+  margin-left: 20px;
+  margin-top: 2px;
+}
+.input-parameter-container {
+  display: inline-flex;
+  flex-direction: row;
+  margin-bottom: 20px;
+  margin-top: 20px;
+  margin-right: 20px;
+  white-space: nowrap;
+}
+#srvmessage {
+  background: #ffa0cd;
+}
+#input form {
+  display: inline-block;
+}
+#urlForm button{
+  min-width: 19%; 
+  float: right;
+}
+#urlInput {
+  width: 100%;
+}
+#waitTime{
+  width: 3em; 
+  text-align: right;
+}
+#privacy-policy {
+  text-align: left;
+}
+.hosts table {
+  width: 100%;
+  empty-cells: hide;
+  font-size: small;
+}
+.timestamp {
+  font-size: small;
+  float: right;
+  color: gray;
+  margin-bottom: 10px;
+}
+.timings {
+  font-size: small;
+  color: gray;
+  float: left;
+}
+.rawdata {
+  font-size: small;
+  float: right;
+}
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #101014;
+    color: #ababba
+  }
+  .contents-container {
+    background: #1e1e1e;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  }
+  .overview-item {
+    background: #2a3b4e;
+    color: #aad4ff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  }
+  .status.error {
+    background: #aa6680;
+    color: aliceblue;
+    border: 2px dashed #ff8080;
+  }
+  #srvmessage {
+    background: #aa6680;
+    color: aliceblue
+  }
+  h1 {
+    color: #5695e8;
+  }
+  table {
+    background: #333;
+  }
+  thead {
+    background: #26262e;
+    color: #aad4ff;
+  }
+  input[type="text"] {
+    background: #333;
+    color: #ddd;
+    border: 1px solid gray;
+  }
+  .status.ipv6only-ready {
+    background: lightseagreen;
+    color: #003300;
+  }
+  .status.ipv6only-not-ready {
+    background: darkred;
+    color: #ffb2b2;
+  }
+  .status.ipv6only-unknown {
+    background: darkgray;
+    color: #501030;
+  }
+  td.protocol {
+    color: #666
+  }
+  .host-localpart {
+    color: #666
+  }
+  .ipv4 {
+    color: red
+  }
+  .ipv6 {
+    color: lightseagreen
+  }
+  .nat64 {
+    color: red;
+  }
+  td.as-number {
+    color: #666
+  }
+  .host-info-block td div {
+    color: #666
+  }
+}
+@media screen and (max-width: 720px) {
+  .container {
+    padding: 5px;
+  }
+  .contents-container {
+    padding: 16px 16px 12px 16px;
+  }
+  td.protocol, th.protocol {
+    visibility: collapse;
+    display: none;
+  }
+  td.as-number, th.as-number {
+    visibility: collapse;
+    display: none;
+  }
+  td.ip-address, th.ip-address {
+    width: auto;
+    text-wrap: nowrap;
+  }
+  td.host-dompart {
+    font-stretch: condensed;
+  }
+  td.host-localpart {
+    overflow-wrap: break-word;
+    font-stretch: condensed;
+  }
+}
+@media print {
+  #input, #srvmessage, #rawdata {
+    display: none;
+  }
+  body {
+    background: white;
+    color: black;
+  }
+  .container {
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+  .contents-container {
+    page-break-inside: avoid;
+    border: darkgray 1px solid;
+  }
+}

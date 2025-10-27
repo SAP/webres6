@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+
+SPDX-License-Identifier: Apache-2.0
+-->
+<edmx:Edmx xmlns:edmx="http://docs.oasis-open.org/odata/ns/edmx" Version="4.0">
+    <edmx:DataServices>
+        <Schema xmlns="http://docs.oasis-open.org/odata/ns/edm" Namespace="WebRes6.Models">
+            
+            <EnumType Name="ScreenshotOptions">
+                <Member Name="none" Value="0"/>
+                <Member Name="full" Value="1"/>
+                <Member Name="viewport" Value="2"/>
+            </EnumType>
+
+            <!-- Complex Types -->
+            <ComplexType Name="TransportInfo">
+                <Property Name="protocol" Type="String"/>
+                <Property Name="security" Type="String"/>
+            </ComplexType>
+            
+            <ComplexType Name="IpInfo">
+                <Property Name="address_family" Type="String"/>
+                <Property Name="transport" Type="Collection(WebRes6.Models.TransportInfo)"/>
+                <Property Name="whois" Type="String"/>
+            </ComplexType>
+            
+            <ComplexType Name="HostInfo">
+                <Property Name="domain_part" Type="String"/>
+                <Property Name="local_part" Type="String"/>
+                <Property Name="subject_alt_names" Type="Collection(String)"/>
+                <Property Name="urls" Type="Collection(String)"/>
+                <Property Name="ips" Type="Collection(WebRes6.Models.IpInfo)"/>
+            </ComplexType>
+            
+            <ComplexType Name="UrlResponse">
+                <Property Name="ID" Type="String"/>
+                <Property Name="url" Type="String"/>
+                <Property Name="error" Type="String"/>
+                <Property Name="extension" Type="String"/>
+                <Property Name="hosts" Type="Collection(WebRes6.Models.HostInfo)"/>
+                <Property Name="ipv6_only_ready" Type="Boolean"/>
+                <Property Name="screenshot" Type="String"/>
+            </ComplexType>
+            
+            <!-- Entity Types -->
+            <EntityType Name="ServerConfigResponse">
+                <Property Name="extensions" Type="Collection(String)"/>
+                <Property Name="screenshot_modes" Type="Collection(String)"/>
+                <Property Name="whois" Type="Boolean"/>
+                <Property Name="message" Type="String"/>
+            </EntityType>
+            
+            <!-- Entity Container -->
+            <EntityContainer Name="DefaultContainer">
+                <!-- Function Imports -->
+                <FunctionImport Name="url" Function="WebRes6.Models.url"/>
+                <EntitySet Name="srvconfig" EntityType="WebRes6.Models.ServerConfigResponse"/>
+                
+                <!-- Functions -->
+                <Function Name="url">
+                    <Parameter Name="targetUrl" Type="String"/>
+                    <CustomQueryOption Name="ext" Type="String" Nullable="true"/>
+                    <CustomQueryOption Name="timeout" Type="Float" Nullable="true"/>
+                    <CustomQueryOption Name="wait" Type="Float" Nullable="true"/>
+                    <CustomQueryOption Name="screenshot" Type="WebRes6.Models.ScreenshotOptions" Nullable="true"/>
+                    <ReturnType Type="WebRes6.Models.UrlResponse"/>
+                </Function>
+            </EntityContainer>
+            
+        </Schema>
+    </edmx:DataServices>
+</edmx:Edmx>

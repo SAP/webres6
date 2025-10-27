@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This is an example file for docker-compose.
+# make sure your docker network has IPv6 enabled.
+# see https://docs.docker.com/engine/daemon/ipv6/
+
+services:
+  webres6-api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+      x-bake:
+        platforms:
+          - linux/amd64
+          - linux/arm64
+    container_name: webres6-api
+    networks:
+      - webres6-network
+    ports:
+      - "6400:6400"
+    environment:
+      - SELENIUM_REMOTE_URL=http://selenium:4444/wd/hub
+    depends_on:
+      - selenium
+
+  webres6-viewer:
+    build: 
+      context: .
+      dockerfile: viewer/Dockerfile
+      x-bake:
+        platforms:
+          - linux/amd64
+          - linux/arm64
+    container_name: webres6-viewer
+    networks:
+      - webres6-network
+    ports:
+      - "6480:80"
+    volumes:
+      - ./viewer/nginx.conf.docker-compose:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - webres6-api
+
+  selenium:
+    image: selenium/standalone-chromium:latest
+    networks:
+      - webres6-network
+    # Uncomment below if you want to expose the Selenium Remote
+    # ports:
+    #   - "4444:4444"
+
+networks:
+  webres6-network:
+    enable_ipv6: true
+

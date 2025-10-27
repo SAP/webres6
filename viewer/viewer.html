@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<!--
+SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="same-origin">
+  <meta name="viewport" content="width=device-width, initial-scale=0.8">
+  <style>
+    /* Fallback CSS in case viewer.css is not loaded */
+    .template { display: none !important; }
+    .hide     { display: none !important; }
+  </style>
+  <link rel="stylesheet" href="viewer.css"/>
+  <link rel="shortcut icon" type="image/png" href="favicon.png"/>
+  <link rel="x-webres6-api" href="/res6"/>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="viewer.js"></script>
+  <title>IPv6 Web Resource Checker</title>
+</head>
+<body on>
+  <div class="container">
+  <h1>IPv6 Web Resource Checker</h1>
+    <div class="contents-container template" id="srvmessage">
+    </div>
+    <div class="contents-container template" id="input">
+      <div class="contents-container-header">
+        <h2>Enter URL to analyze</h2>
+      </div>
+      <form id="urlForm">
+        <input type="text" id="urlInput" placeholder="https://sap.com" required>
+        <div class="input-parameter-container template" id="extensionSelectContainer" title="Select a Chrome extension to load in Selenium">
+          <label for="extensionSelect"><strong>Extension:</strong></label>
+          <select id="extensionSelect" name="extensionSelect" style="max-width: 10em;">
+            <option value="" selected>(none)</option>
+          </select>
+        </div>
+        <div class="input-parameter-container template" id="screenshotSelectContainer">
+          <label for="screenshotSelect"><strong>Screenshot:</strong></label>
+          <select id="screenshotSelect" name="screenshotSelect" style="text-align: right;">
+          </select>
+        </div>
+        <div class="input-parameter-container template" id="whoisSwitchContainer">
+          <label for="whoisLookup"><strong>WHOIS lookups:</strong></label>
+          <input type="checkbox" id="whoisLookup" name="whoisLookup" value="true">
+        </div>
+        <div class="input-parameter-container">
+          <label for="waitTime"><strong>Wait time:</strong></label>
+          <input type="number" id="waitTime" name="waitTime" min="1" max="30" step="0.5" value="2" required>&nbsp;s
+        </div>
+        <button type="submit">Analyze</button>
+      </form>
+    </div>
+    <div class="contents-container results template" id="results-template">
+      <div class="contents-container-header">
+        <h2 class="url"></h2>
+        <div class="timestamp"></div>
+      </div>
+      <div class="overview">
+        <div class="overview-item status status-loading">
+          <strong>Loading resource details... this may take a few minutes</strong>
+        </div>
+        <div class="overview-item status ipv6only-ready">
+          <strong>IPv6-Only Ready: YES</strong>
+        </div>
+        <div class="overview-item status ipv6only-not-ready">
+          <strong>IPv6-Only Ready: NO</strong>
+        </div>
+        <div class="overview-item status ipv6only-unknown">
+          <strong>IPv6-Only Ready: UNKNOWN</strong>
+        </div>
+        <div class="overview-item status error" class="overview-item">
+          <strong>Error loading results: <span class="placeholder"/></strong>
+        </div>
+      </div>
+      <div class="hosts template">
+        <h3>Hosts</h3>
+        <table class="hosts_table">
+          <colgroup>
+            <col/>
+            <col/>
+          </colgroup>
+          <colgroup>
+            <col/>
+            <col/>
+          </colgroup>
+          <colgroup>
+            <col/>
+            <col/>
+            <col/>
+            <col/>
+          </colgroup>
+          <thead>
+            <tr>
+              <th colspan="2" class="hostname">Hostname</th>
+              <th colspan="2" class="protocol">Protocols</th>
+              <th class="as-number">ASN</th>
+              <th class="as-descr">AS Description</th>
+              <th class="ip-address">IP Addresses</th>
+              <th class="ip-netname">Network Name</th>
+            </tr>
+          </thead>
+        </table>
+      </div>
+      <div class="screenshot template">
+        <h3>Screenshot</h3>
+        <div style="max-height: 600px; overflow: scroll;">
+          <img style="max-width: 100%; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"/>
+        </div>
+      </div>
+      <div class="contents-container-footer">
+        <div class="timings template">
+          <strong>Time spent:</strong> <span class="placeholder"/>
+        </div>
+        <div class="rawdata template">
+          <a target="_blank" download="data.json">Download raw json</a>
+        </div>
+      </div>
+    </div>
+    <div class="contents-container">
+      <div class="contents-container-header">
+        <h2>Introduction / Help</h2>
+      </div>
+      <p>This is the <i>IPv6 Web Resource Checker (webres6)</i>. It checks IPv6-only readiness of a Web page or app 
+        by crawling a given URL using Selenium and analyzes whether all page resources have been loaded via IPv6.</p>
+      <p><strong>Limitations:</strong> The Selenium automation used is quite simple. 
+        It just loads the URL.
+        As modern Web pages tend to be complex, this will most likely result in many resources not getting loaded/analyzed a normal browser would load.
+        <ul>
+          <li> No efforts are taken to hide this being a robot.</li>
+          <li> No delayed on-scroll content loading takes place.</li>
+          <li> Limited Cookie consent interactions can be supported through browser extensions.</li>
+          <li> Because we don't have long-term cookie state, we expect that some advertisements and analytics may not be loaded.</li>
+          <li> No authentication/login takes place.</li>
+        </ul>
+      </p>
+      <p><i>Webres6</i> was inspired by Paul Marks' <i><a href="https://github.com/pmarks-net/ipvfoo">IPvFoo</a></i> browser extension.
+        While <i>IPvFoo</i> is more flexible and interactive, <i>Webres6</i> can be run as a service and allows IPv6-only testing without installation or IPv6 on the users' client as well as automated analysis.</p>
+      <p>Further documentation can be found on the <a href="https://github.com/sap/webres6">IPv6 Web Resource Checker</a> project page on GitHub.</p>
+    </div>
+    <div class="footer">
+      <div id="privacy-policy"></div>
+      <div id="copyright-notice"><p>&copy; 2025 <a href="https://www.sap.com">SAP SE</a> and <a href="https://github.com/sap/webres6">IPv6 Web Resource Checker contributors</a></p></div>
+  </div>
+</body>
+</html>

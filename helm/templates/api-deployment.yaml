@@ -1,0 +1,130 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+  # SPDX-License-Identifier: Apache-2.0
+  name: {{ include "webres6.fullname" . }}-api
+  labels:
+    {{- include "webres6.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.api.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicas | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "webres6.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.api.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "webres6.labels" . | nindent 8 }}
+        {{- with .Values.api.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        app: webres6-api
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: webres6-api
+          image: {{ .Values.api.image.repository | default "" .Values.image.repository }}{{ .Values.api.image.name | default "webres6-api" }}:{{ .Values.api.image.tag | default "latest" .Values.image.tag }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy | default "IfNotPresent" }}
+          env:
+            - name: DEPLOYMENT
+              value: {{ .Release.Name | quote }}
+            - name: SELENIUM_REMOTE_URL
+              value: {{ .Values.seleniumHub.url | quote }}
+            - name: ENABLE_WHOIS
+              value: {{ .Values.api.whois.enabled | quote }}
+            - name: WHOIS_TTL
+              value: {{ .Values.api.whois.cacheTTL | quote }}
+            - name: TIMEOUT
+              value: {{ .Values.requestTimeout | quote }}
+            - name: PORT
+              value: {{ .Values.api.port | quote }}
+            - name: GUNICORN_CMD_ARGS
+              value: "--threads {{ .Values.api.gunicornThreads }}"
+            - name: ADMIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.adminSecret.name | default (include "webres6.fullname" .) }}
+                  key: admin-key
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.port }}
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: {{ .Values.api.port }}
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: {{ .Values.api.port }}
+          volumeMounts:
+            - name: serverconfig
+              mountPath: /app/serverconfig
+              readOnly: true
+          {{- with .Values.api.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.api.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- if .Values.api.whois.enabled }}
+        - name: webres6-whois-cache-expire
+          image: "{{ .Values.curl.image.repository | default "curlimages/curl" }}:{{ .Values.curl.image.tag | default "latest" }}"
+          imagePullPolicy: {{ .Values.curl.image.pullPolicy }}
+          env: 
+            - name: SLEEP_INTERVAL
+              value: {{ .Values.api.whois.cacheExpire | default "3600" | quote }}
+            - name: ADMIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.adminSecret.name | default (include "webres6.fullname" .) }}
+                  key: admin-key
+          command: ['/bin/sh']
+          args:
+            - -ec
+            - "while sleep $SLEEP_INTERVAL; do curl --no-progress-meter --request GET 'http://localhost:6400/adm/whois/expire?key='${ADMIN_KEY} ; done"
+          {{- with .Values.curl.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{ with .Values.curl.resources}}
+          resources:
+            requests:
+              memory: {{ .requests.memory | default "64Mi" }}
+              cpu: {{ .requests.cpu | default "100m" }}
+            limits:
+              memory: {{ .limits.memory | default "128Mi" }}
+              cpu: {{ .limits.cpu | default "200m" }}
+          {{- end }}
+        {{- end }}
+      volumes:
+        - name: serverconfig
+          configMap:
+            name: {{ include "webres6.fullname" . }}-serverconfig
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

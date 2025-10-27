@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+  # SPDX-License-Identifier: Apache-2.0
+  name: {{ include "webres6.fullname" . }}-viewer
+  labels:
+    {{- include "webres6.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.viewer.autoscaling.enabled }}
+  replicas: {{ .Values.viewer.replicas | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "webres6.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.viewer.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "webres6.labels" . | nindent 8 }}
+        {{- with .Values.viewer.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        app: webres6-viewer
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.viewer.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: webres6-nginx
+          image: {{ .Values.viewer.image.repository | default "" .Values.image.repository }}{{ .Values.viewer.image.name | default "webres6-viewer" }}:{{ .Values.viewer.image.tag | default "latest" .Values.image.tag }}
+          imagePullPolicy: {{ .Values.viewer.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.viewer.port | default 80 }}
+              protocol: TCP
+          volumeMounts:
+            - name: well-known-content
+              mountPath: /usr/share/nginx/html/.well-known
+              readOnly: true
+          {{- with .Values.viewer.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.viewer.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: well-known-content
+          configMap:
+            name: {{ include "webres6.fullname" . }}-viewer-well-known
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

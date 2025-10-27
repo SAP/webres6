@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  # SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+  # SPDX-License-Identifier: Apache-2.0
+  name: {{ include "webres6.fullname" . }}-serverconfig
+  labels:
+    {{- include "webres6.labels" . | nindent 4 }}
+data:
+  PRIVACY: |
+    {{- .Values.serverconfig.privacy | nindent 4 }}
+  MESSAGE: |
+    {{- .Values.serverconfig.message | nindent 4 }}

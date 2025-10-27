@@ -1,0 +1,45 @@
+#!/bin/bash
+#
+# This is a wrapper script to start run webres6-client.py
+# it uses WEBRES6_API_URL as API backend if set,
+# otherwise it starts a local webres6-server.py instance.
+#
+# SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+SCRIPT_DIR=$(cd $(dirname $(readlink -f "$0")) && pwd)
+CLI_DIR="$SCRIPT_DIR/cli"
+API_DIR="$SCRIPT_DIR/api"
+PORT=6400
+
+
+# Start webres6-server if WEBRES6_API_URL is not set
+if [ -z ${WEBRES6_API_URL} ]; then
+  export WEBRES6_API_URL="http://[::1]:$PORT/res6"
+  # Check if virtual environment is existing
+  if [ ! -d "$API_DIR/.venv" ]; then
+    echo "Could not find virtual environment for webres6-api, please run create_virtualenvs.sh first." >&2
+    exit 2
+  fi
+  (
+    cd "$API_DIR"
+    source ".venv/bin/activate"
+    echo "Starting local webres6-api $WEBRES6_API_URL" >&2
+    ENABLE_WHOIS="true" exec "$API_DIR/.venv/bin/python3" "./webres6-api.py" "--port=$PORT" >/dev/null 1>&2
+  ) &
+  export SPID=$!
+  echo "Started webres6-api with PID $SPID" >&2
+  sleep 1
+  trap "if [ ! -z $SPID ]; then kill $SPID; fi" EXIT
+else
+  echo "Using remote webres6-api at $WEBRES6_API_URL"
+fi
+
+# Check if virtual environment is existing
+if [ ! -d "$CLI_DIR/.venv" ]; then
+  echo "Could not find virtual environment for webres6-cli, please run create_virtualenvs.sh first." >&2
+  exit 2
+fi
+# Start webres6-cli
+source "$CLI_DIR/.venv/bin/activate"
+"$CLI_DIR/.venv/bin/python3" "$CLI_DIR/webres6-cli.py" "$@" 

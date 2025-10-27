@@ -1,0 +1,29 @@
+general:
+  buildTool: 'docker'
+  productiveBranch: 'main'
+  vaultPath: 'piper/sap-project-test-webres6'
+  vaultBasePath: 'piper/sap-project-test-webres6'
+  vaultPipelineName: 'test-webres6'
+  vaultServerUrl: 'https://vault.tools.sap'
+  vaultNamespace: 'ies/hyperspace/pipelines'
+  targetArchitectures: 
+    - linux/amd64
+    - linux/arm64
+  nativeBuild: true
+stages:
+  Release:
+    sapDownloadArtifact: false
+  Post:
+    # Secret rotation handled by Hyperspace Portal, enabling it back might cause unintended behavior
+    vaultRotateSecretId: false
+steps:
+  sapCallStagingService:
+    url: 'https://staging.repositories.cloud.sap/stage/api'
+    profile: 'group-test-webres6-sdbqn-default'
+  kanikoExecute:
+    containerImageName: 'webres6'
+    containerMultiImageBuild: true
+  sapCumulusUpload:
+    pipelineId: '19aae296-36f3-4eed-b0b1-56b13ba37e4c'
+  sonarExecuteScan:
+    serverUrl: 'https://sonar.tools.sap'
