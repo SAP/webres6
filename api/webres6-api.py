@@ -54,6 +54,13 @@ if os.path.exists(srv_message_file):
     with open(srv_message_file) as f:
         srv_message = f.read()
 
+# load blocklist
+url_blocklist = ["*://*.local/*", "*://*.internal/*"]
+url_blocklist_file = os.path.join(srvconfig_dir, 'url-blocklist')
+if os.path.exists(url_blocklist_file):
+    with open(url_blocklist_file) as f:
+        url_blocklist = f.read().splitlines()
+
 # global whois cache
 whois_cache = {}
 whois_cache_stats = {'local_hits': 0, 'global_hits': 0, 'lookups': 0, 'failed': 0}
@@ -123,6 +130,7 @@ def is_ip(address):
     """
     return isinstance(address, IPv4Address) or isinstance(address, IPv6Address)
 
+
 def init_webdriver(headless=False, log_prefix='', implicit_wait=0.5, extension=None):
     """ Initializes the Selenium WebDriver with the necessary options.
     """
@@ -162,16 +170,26 @@ def init_webdriver(headless=False, log_prefix='', implicit_wait=0.5, extension=N
 
     # If SELENIUM_REMOTE_URL is set, use it to connect to a remote Selenium server
     driver = None
-    if selenium_remote:
-        print(f"{log_prefix}connecting to remote Selenium server at {selenium_remote}", file=sys.stderr)
-        driver = webdriver.Remote(command_executor=selenium_remote, options=options)
-    else:
-        print(f"{log_prefix}starting local Selenium", file=sys.stderr)
-        driver = webdriver.Chrome(options=options)
 
-    # set implicit wait for almost all actions
-    driver.implicitly_wait(implicit_wait)
-    
+    try:
+        if selenium_remote:
+            print(f"{log_prefix}connecting to remote Selenium server at {selenium_remote}", file=sys.stderr)
+            driver = webdriver.Remote(command_executor=selenium_remote, options=options)
+        else:
+            print(f"{log_prefix}starting local Selenium", file=sys.stderr)
+            driver = webdriver.Chrome(options=options)
+
+        # set implicit wait for almost all actions
+        driver.implicitly_wait(implicit_wait)
+
+        # add block list
+        driver.execute_cdp_cmd("Network.enable", {})
+        driver.execute_cdp_cmd("Network.setBlockedURLs", {"urls": url_blocklist })
+
+    except WebDriverException as e:
+        print(f"{log_prefix}ERROR: failed initializing Selenium WebDriver: {e.msg}", file=sys.stderr)
+        driver = None
+
     return driver
 
 
