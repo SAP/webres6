@@ -13,7 +13,6 @@ from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.bidi.network import Network
 from selenium.common.exceptions import WebDriverException
 from urllib.parse import urlparse
 from flask import Flask, redirect, request, jsonify, send_from_directory
@@ -21,7 +20,6 @@ import os
 import platform
 import time
 from ipwhois import IPWhois
-from ipwhois.exceptions import IPDefinedError, HTTPLookupError, ASNRegistryError
 
 # config/flag variables
 webres6_version  = "0.8.0"
@@ -30,6 +28,7 @@ debug_hostinfo   = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask      = 'flask'    in getenv("DEBUG", '').lower().split(',')
 admin_api_key    = getenv("ADMIN_API_KEY", None)
 selenium_remote  = getenv("SELENIUM_REMOTE_URL", None)
+headless_selenium = getenv("HEADLESS_SELENIUM", False)
 app_home         = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 extensions_dir   = os.path.join(app_home, 'extensions')
 viewer_dir       = os.path.join(app_home, '..', 'viewer')
@@ -696,8 +695,13 @@ def check_auth(request):
     return False
 
 
-def create_http_app(headless_selenium=getenv("HEADLESS_SELENIUM", False)):
-    """ Starts a simple HTTP API server to serve host information.
+def create_http_app():
+    """ Start HTTP API server to serve host information.
+
+    All api endpoints are created here.
+
+    Returns:
+        Flask app instance
     """
 
     # Discover extensions available in the extensions directory

@@ -88,6 +88,9 @@ available as a service and have ```SELENIUM_REMOTE_URL``` environment variable p
 
 Run the following script to build virtualenvs for API and CLI: ```bash create-virtualenvs.sh ```
 
+The *api* and *cli* code can be found in the respective folders.
+Don't forget to run ```bash source .venv/bin/activate``` within the respective folder before trying to execute the python code.
+
 ## Setup (docker compose):
 
 ```bash docker-compose build``` should build the containers for the APi server and an NGNIX container serving the Web app.
