@@ -250,6 +250,15 @@ td.ip-netname {
   empty-cells: hide;
   font-size: small;
 }
+.screenshot-wrapper {
+  max-height: 600px;
+  overflow: scroll;
+}
+.screenshot-wrapper img {
+  style="max-width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
 .timestamp {
   font-size: small;
   float: right;
@@ -380,5 +389,15 @@ td.ip-netname {
   .contents-container {
     page-break-inside: avoid;
     border: darkgray 1px solid;
+  }
+  .contents-container div {
+    page-break-inside: avoid !important;
+  }
+  .screenshot-wrapper {
+    max-height: fit-content;
+    overflow: unset;
+  }
+  .contents-container-footer {
+    page-break-before: avoid !important;
   }
 }

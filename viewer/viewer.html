@@ -11,7 +11,7 @@ SPDX-License-Identifier: Apache-2.0
   <style>
     /* Fallback CSS in case viewer.css is not loaded */
     .template { display: none !important; }
-    .hide     { display: none !important; }
+    .hide     { display: none ; }
   </style>
   <link rel="stylesheet" href="viewer.css"/>
   <link rel="shortcut icon" type="image/png" href="favicon.png"/>
@@ -106,8 +106,8 @@ SPDX-License-Identifier: Apache-2.0
       </div>
       <div class="screenshot template">
         <h3>Screenshot</h3>
-        <div style="max-height: 600px; overflow: scroll;">
-          <img style="max-width: 100%; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"/>
+        <div class="screenshot-wrapper">
+          <img />
         </div>
       </div>
       <div class="contents-container-footer">

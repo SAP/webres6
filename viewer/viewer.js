@@ -9,33 +9,36 @@ function getAPIBase() {
   return document.querySelector('link[rel="x-webres6-api"]').getAttribute('href');
 }
 
+/* Load server config
+ * this loads and renders messages, browser extensions in remote Selenium, screenshot modes, whois support and more
+ */
 async function loadSrvConfig() {
-  // Load available extensions from the server
+  // load config
   try {
     const resp = await fetch(getAPIBase() + '/serverconfig');
     if (resp.ok) {
       const srvconfig = await resp.json();
-      // Server message
+      // render server message (if available)
       if (srvconfig && srvconfig.message) {
         $('#srvmessage').html(srvconfig.message);
         $('#srvmessage').removeClass('template');
       }
-      // Privacy policy
+      // render privacy policy (if available)
       if (srvconfig && srvconfig.privacy_policy) {
         $('#privacy-policy').html(srvconfig.privacy_policy);
       }
-      // Max wait time
+      // update wait time control
       if (srvconfig && srvconfig.max_wait) {
         $('#waitTime').attr('max', srvconfig.max_wait);
       }
-      // Extension selector
+      // If browser extensions are available in remote selenium, show selector
       if (srvconfig && srvconfig.extensions && Array.isArray(srvconfig.extensions) && srvconfig.extensions.length > 0) {
         srvconfig.extensions.forEach(function(ext) {
           $('#extensionSelect').append(
             $('<option>').val(ext).text(ext)
           );
-          $('#extensionSelectContainer').removeClass('template');
         });
+        $('#extensionSelectContainer').removeClass('template');
       }
       // Screenshot selector
       if (srvconfig && srvconfig.screenshot_modes && Array.isArray(srvconfig.screenshot_modes) && srvconfig.screenshot_modes.length > 0) {
@@ -58,6 +61,7 @@ async function loadSrvConfig() {
   }
 }
 
+/* Helper function to create new results container */
 function createResultsDomContainer(url) {
   const domContainerId = Date.now();
   const domContainer = $('#results-template').clone();
@@ -70,54 +74,15 @@ function createResultsDomContainer(url) {
   return [domContainer, overview, domContainerId];
 }
 
-function handleJsonDrop(event) {
-  $.each(event.dataTransfer.files, function(i, file) {
-    if (file.type === 'application/json') {
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const data = e.target.result;
-        let jsonData;
-        try {
-          jsonData = JSON.parse(data);
-        } catch (e) {
-          alert('Invalid JSON data dropped. Please drop a valid JSON object.');
-        }
-        const [domContainer, overview, domContainerId] = createResultsDomContainer('Dropped URL');
-        renderData(jsonData, domContainer, overview);
-      };
-      reader.readAsText(file);
-    } else {
-      alert('Please drop a valid JSON file.');
-    }
-  });
-}
-
-async function analyzeURL(url, wait, screenshot = 'none',  ext = null, whois = 'false') {
-  // Generate new container
-  const [domContainer, overview, domContainerId] = createResultsDomContainer(url);
-  $('#results-template .overview .status.status-loading').clone().appendTo(overview);
-  // Load the JSON data from the server
-  let apiUrl = getAPIBase() + `/url(${encodeURIComponent(url)})?wait=${wait}&screenshot=${screenshot}&whois=${whois}`;
-  if (ext && ext !== "(none)") apiUrl += `&ext=${encodeURIComponent(ext)}`;
-  const response = await fetch(apiUrl);
-  domContainer.find('.overview .status.status-loading').remove();
-  if (response.ok) {
-    const data = await response.json();
-    renderData(data, domContainer, overview);
-  } else {
-    const errStatus = $('#results-template .overview .status.error').clone()
-    errStatus.find('.placeholder').text(response.statusText);
-    overview.append(errStatus);
-  }
-}
-
+/* Render JSON dump of IPv6 Web Resource Checker dump */
 function renderData(data, domContainer, overview) {
-  // Status
+  // Error (if present)
   if (data.error) {
     const errStatus = $('#results-template .overview .status.error').clone()
     errStatus.find('.placeholder').text(data.error);
     overview.append(errStatus);
   }
+  // Status
   let v6status;
   if (data.ipv6_only_ready == true) {
     v6status = $('#results-template .overview .status.ipv6only-ready').clone()
@@ -136,10 +101,34 @@ function renderData(data, domContainer, overview) {
   if(data.url) {
     domContainer.find('.url').html(data.url);
   }
-  // Hosts
+  // add screenshot if present
+  if (data.screenshot) {
+    const screenshot = domContainer.find('.screenshot');
+    const img = screenshot.find('img');
+    img.attr("src", `data:image/png;base64, ${data.screenshot}`);
+    img.attr("alt", `Screenshot of ${data.URL}`);
+    screenshot.removeClass('template');
+  }
+  // render hosts table
+  renderHostsTable(data, domContainer.find('.hosts'));
+  // set footer
+  const footer = domContainer.find('.contents-container-footer');
+  if (data.timings) {
+    const timingContainer = footer.find('.timings');
+    timingContainer.find('.placeholder').text(
+      $.map(['crawl', 'screenshot', 'extract', 'whois'], function(label) { return data.timings[label] ? `${label}: ${data.timings[label].toFixed(2)}s` : null; }).join(', ')
+    );
+    timingContainer.removeClass('template');
+  }
+  const rawdataContainer = footer.find('.rawdata');
+  rawdataContainer.find('a').attr('href', `data:text/json;charset=utf-8;base64, ${btoa(JSON.stringify(data, null, 2))}`);
+  rawdataContainer.removeClass('template');
+}
+
+/* Ugly helper to render hosts data */
+function renderHostsTable(data, hostsContainer) {
   if (data.hosts && Object.keys(data.hosts).length > 0) {
-    const hosts= domContainer.find('.hosts');
-    const hostsTable = hosts.find('.hosts_table');
+    const hostsTable = hostsContainer.find('.hosts_table');
     let hasWhoisInfo = false;
     const sortedHosts = Object.keys(data.hosts).sort(function(a, b) {
       if(data.hosts[a].domain_part===data.hosts[b].domain_part){
@@ -172,30 +161,42 @@ function renderData(data, domContainer, overview) {
           return `<td class="protocol">${v.length>0?v[0]:'_'}</td>`+
                   `<td class="protocol">${v.length>1?v[1]:'_'}</td>`
         });
-        // pre-format whois info if available
-        let asn = ''
-        let ipnetname = '';
-        let asdescr = '';
+        // render IP and whois cells
+        const asnCell       = $(`<td rowspan="${pr.length + 1}" class="as-number" />`);
+        const asDescrCell   = $(`<td rowspan="${pr.length + 1}" class="as-descr" />`);
+        const ipCell        = $(`<td rowspan="${pr.length + 1}" class="ip-address ${info.ips[ip].address_family.toLowerCase()}" >${ip}</td>`);
+        const ipNetnameCell = $(`<td rowspan="${pr.length + 1}" class="ip-netname ${info.ips[ip].address_family.toLowerCase()}" />`);
+        // add whois info if available
         if (info.ips[ip].whois) {
           hasWhoisInfo = true;
-          asn = info.ips[ip].whois.asn || '';
-          asdescr = info.ips[ip].whois.asn_description || '';
-          ipnetname = info.ips[ip].whois.network.name || '';
+          // fill data
+          asnCell.text(info.ips[ip].whois.asn || '');
+          asnCell.attr('title', info.ips[ip].whois.asn || '');
+          asDescrCell.text(info.ips[ip].whois.asn_description || '');
+          asDescrCell.attr('title', info.ips[ip].whois.network.name || '');
+          ipNetnameCell.text(info.ips[ip].whois.network.name || '');
+          ipNetnameCell.attr('title', ip);
+          ipCell.attr('title', info.ips[ip].whois.network.name || '');
+          // add toggles
+          asnCell.on('click', function(e) { asnCell.addClass('hide'); asDescrCell.removeClass('hide'); } );
+          asDescrCell.on('click', function(e) { asDescrCell.addClass('hide'); asnCell.removeClass('hide'); } );
+          ipCell.on('click', function(e) { ipCell.addClass('hide'); ipNetnameCell.removeClass('hide'); } );
+          ipNetnameCell.on('click', function(e) { ipNetnameCell.addClass('hide'); ipCell.removeClass('hide'); } );
         }
-        // first row with ip
+        // construct first row
         row.append(pr[0]); pr.shift();
-        row.append(`<td rowspan="${pr.length + 1}" class="as-number" title='${asdescr}'>${asn}</td>`);
-        row.append(`<td rowspan="${pr.length + 1}" class="as-descr" title='${asn}'>${asdescr}</td>`);
-        row.append(`<td rowspan="${pr.length + 1}" class="ip-address ${info.ips[ip].address_family.toLowerCase()}" title="${ipnetname}">${ip}</td>`);
-        row.append(`<td rowspan="${pr.length + 1}" class="ip-netname ${info.ips[ip].address_family.toLowerCase()}" title="${ip}">${ipnetname}</td>`);
+        row.append(asnCell);
+        row.append(asDescrCell);
+        row.append(ipCell);
+        row.append(ipNetnameCell)
         appendRow();
-        // additional rows for additional protocols
+        // costruct additional rows for additional protocols
         $.each(pr, function(pi, pe) {
           row.append(pr[0]);
           appendRow();
         });
       })
-      // render other per-host info
+      // render appendix with other per-host info
       const hostInfoDiv = $('<div>')
       row.addClass('host-info-block');
       row.addClass('hide');
@@ -223,60 +224,61 @@ function renderData(data, domContainer, overview) {
       // add block to the table
       hostsTable.append(hostsTableBlock);
     });
-    // Prepare whois info toggling
-    const asNumberCells = hostsTable.find('.as-number');
-    const asDescrCells = hostsTable.find('.as-descr');
-    const ipAddressCells = hostsTable.find('.ip-address');
-    const ipNetnameCells = hostsTable.find('.ip-netname');
     // Show/hide whois info based on availability and default
-    asNumberCells.toggleClass('hide', !hasWhoisInfo);
-    asDescrCells.addClass('hide');
-    ipNetnameCells.addClass('hide');
-    if (hasWhoisInfo) {
-      // Toggle between as-number and as-descr on click
-      asNumberCells.on('click', function(e) {
-        asNumberCells.addClass('hide');
-        asDescrCells.removeClass('hide');
-      });
-      asDescrCells.on('click', function(e) {
-        asDescrCells.addClass('hide');
-        asNumberCells.removeClass('hide');
-      });
-      // Toggle between ip-address and ip-netname on click
-      ipAddressCells.on('click', function(e) {
-        ipAddressCells.addClass('hide');
-        ipNetnameCells.removeClass('hide');
-      });
-      ipNetnameCells.on('click', function(e) {
-        ipNetnameCells.addClass('hide');
-        ipAddressCells.removeClass('hide');
-      });
-    }
+    hostsTable.find('.as-number').toggleClass('hide', !hasWhoisInfo);
+    hostsTable.find('.as-descr').addClass('hide');
+    hostsTable.find('.ip-netname').addClass('hide');
     // Show the hosts section
-    hosts.removeClass('template');
+    hostsContainer.removeClass('template');
   }
-  if (data.screenshot) {
-    const screenshot = domContainer.find('.screenshot');
-    const img = screenshot.find('img');
-    img.attr("src", `data:image/png;base64, ${data.screenshot}`);
-    img.attr("alt", `Screenshot of ${data.URL}`);
-    screenshot.removeClass('template');
-  }
-  const footer = domContainer.find('.contents-container-footer');
-  if (data.timings) {
-    const timingContainer = footer.find('.timings');
-    timingContainer.find('.placeholder').text(
-      $.map(['crawl', 'screenshot', 'extract', 'whois'], function(label) { return data.timings[label] ? `${label}: ${data.timings[label].toFixed(2)}s` : null; }).join(', ')
-    );
-    timingContainer.removeClass('template');
-  }
-  const rawdataContainer = footer.find('.rawdata');
-  rawdataContainer.find('a').attr('href', `data:text/json;charset=utf-8;base64, ${btoa(JSON.stringify(data, null, 2))}`);
-  rawdataContainer.removeClass('template');
 }
 
+/* Call API and fetch analysis */ 
+async function analyzeURL(url, wait, screenshot = 'none',  ext = null, whois = 'false') {
+  // Generate new container
+  const [domContainer, overview, domContainerId] = createResultsDomContainer(url);
+  $('#results-template .overview .status.status-loading').clone().appendTo(overview);
+  // Load the JSON data from the server
+  let apiUrl = getAPIBase() + `/url(${encodeURIComponent(url)})?wait=${wait}&screenshot=${screenshot}&whois=${whois}`;
+  if (ext && ext !== "(none)") apiUrl += `&ext=${encodeURIComponent(ext)}`;
+  const response = await fetch(apiUrl);
+  domContainer.find('.overview .status.status-loading').remove();
+  if (response.ok) {
+    const data = await response.json();
+    renderData(data, domContainer, overview);
+  } else {
+    const errStatus = $('#results-template .overview .status.error').clone()
+    errStatus.find('.placeholder').text(response.statusText);
+    overview.append(errStatus);
+  }
+}
+
+/* Allow to load saved json dumps of previous analysis by dropping them somewhere on the browser window */
+function handleJsonDrop(event) {
+  $.each(event.dataTransfer.files, function(i, file) {
+    if (file.type === 'application/json') {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = e.target.result;
+        let jsonData;
+        try {
+          jsonData = JSON.parse(data);
+          const [domContainer, overview, domContainerId] = createResultsDomContainer('Dropped URL');
+          renderData(jsonData, domContainer, overview);
+        } catch (e) {
+          alert('Invalid JSON data dropped. Only IPv6 Web Resource Checker JSON dumps can be rendered!');
+        }
+      };
+      reader.readAsText(file);
+    } else {
+      alert('Only IPv6 Web Resource Checker JSON dumps can be rendered!');
+    }
+  });
+}
+
+/* Load server config and register callbacks */ 
 $(document).ready(function() {
-  // Load server config (extensions, screenshot modes, whois support)
+  // Load server config (messages, browser extensions in remote Selenium, screenshot modes, whois support)
   loadSrvConfig();
   // Check for URL anchor and analyze it if present
   const anchorUrl = document.URL.split('#')[1];
