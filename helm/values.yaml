@@ -45,6 +45,9 @@ api:
     enabled: true
     cacheTTL: 86400
     cacheExpire: 1800
+  redisCache:
+    url: ""
+    cacheTTL: 900
   resources:
     requests:
       cpu: "500m"

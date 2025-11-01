@@ -121,6 +121,8 @@ Environment variables:
   TIMEOUT                     Maximum timeout value in seconds
   ENABLE_WHOIS                Enable clients to request whois lookups
   WHOIS_TTL                   Expiry time for internal whois cache
+  REDIS_URL                   URL for optional REDIS cache
+  REDIS_CACHE_TTL             Expiry time for REDIS results cache
 
 API endpoints:
   /ping                       liveness probe endpoint

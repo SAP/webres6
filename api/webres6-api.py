@@ -8,18 +8,20 @@
 import sys
 import argparse
 import json
+import os
+import platform
+import time
 from os import getenv
 from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 from datetime import datetime
+from hashlib import sha256
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import WebDriverException
 from urllib.parse import urlparse
 from flask import Flask, redirect, request, jsonify, send_from_directory
-import os
-import platform
-import time
 from ipwhois import IPWhois
+import redis
 
 # config/flag variables
 webres6_version  = "0.8.0"
@@ -29,6 +31,8 @@ debug_flask      = 'flask'    in getenv("DEBUG", '').lower().split(',')
 admin_api_key    = getenv("ADMIN_API_KEY", None)
 selenium_remote  = getenv("SELENIUM_REMOTE_URL", None)
 headless_selenium = getenv("HEADLESS_SELENIUM", False)
+redis_url        = getenv("REDIS_URL", None)
+redis_cache_ttl  = int(getenv("REDIS_CACHE_TTL", 900))  # Default 15min
 app_home         = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 extensions_dir   = os.path.join(app_home, 'extensions')
 viewer_dir       = os.path.join(app_home, '..', 'viewer')
@@ -60,13 +64,18 @@ if os.path.exists(url_blocklist_file):
     with open(url_blocklist_file) as f:
         url_blocklist = f.read().splitlines()
 
+# initialize redis client if redis url is set
+redis_client = None
+if redis_url and redis_url.strip() != '':
+    redis_client = redis.from_url(redis_url, decode_responses=False)
+
 # global whois cache
 whois_cache = {}
 whois_cache_stats = {'local_hits': 0, 'global_hits': 0, 'lookups': 0, 'failed': 0}
 
 #statistsics
 time_total_spent = {'init': 0.0, 'crawl': 0.0, 'screenshot': 0.0, 'extract': 0.0, 'whois': 0.0}
-check_results_total = {'tested': 0, 'ipv6_only_ready': 0, 'not_ipv6_only_ready': 0, 'errors': 0}
+check_results_total = {'tested': 0, 'ipv6_only_ready': 0, 'not_ipv6_only_ready': 0, 'cached': 0, 'errors': 0}
 hostinfo_parsed_total = {'without_ip': 0, 'valid_ip': 0, 'invalid_ip': 0, 'without_hostname': 0, 'skipped': 0, 'error': 0}
 
 # patch ip address object to support NAT64 detection
@@ -580,71 +589,122 @@ def gen_json(url, hosts={}, ipv6_only_ready=None, screenshot=None, report_id=Non
              'timings': timings if timings else {} }
 
 
-def crawl_and_analyze(url, wait=2, timeout=10, ext=None, screenshot_mode=None, lookup_whois=False,
-                      report_node='unknown', headless_selenium=False):
+def crawl_and_analyze_url(url, wait=2, timeout=10,
+                          ext=None, screenshot_mode=None, headless_selenium=False,
+                          lookup_whois=False, report_node='unknown'):
+    """ Crawls and analyzes the given URL, returning the results as a JSON object.
+    """
 
-        # collect timing stats
-        timings = {}
-        ts = datetime.now()
-        last_ts = ts
+    # collect timing stats
+    timings = {}
+    ts = datetime.now()
+    last_ts = ts
 
-        def push_timing(key):
-            nonlocal last_ts
-            now = datetime.now()
-            spent = (now - last_ts).total_seconds()
-            timings[key] = spent
-            time_total_spent[key] += spent
-            last_ts = now
+    def push_timing(key):
+        nonlocal last_ts
+        now = datetime.now()
+        spent = (now - last_ts).total_seconds()
+        timings[key] = spent
+        time_total_spent[key] += spent
+        last_ts = now
 
-        # init logging
-        report_id = f"{int(ts.timestamp())}-{hash(url) % 2**sys.hash_info.width}-{report_node}"
-        lp = f"res6 {report_id} "
-        check_results_total['tested'] += 1
-        print(f"{lp}testing {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
-        push_timing('init')
+    # init logging
+    report_id = f"{int(ts.timestamp())}-{hash(url) % 2**sys.hash_info.width}-{report_node}"
+    lp = f"res6 {report_id} "
+    check_results_total['tested'] += 1
+    print(f"{lp}testing {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
+    print(f"{lp}options: wait={wait}s, timeout={timeout}s, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
+    push_timing('init')
 
-        # initialize webdriver and crawl page
-        driver = init_webdriver(headless=headless_selenium, log_prefix=lp, extension=ext)
-        if not driver:
-            check_results_total['errors'] += 1
-            return jsonify({'error': 'Could not initialize selenium with the requested extension'}), 400
-        crawl, err = crawl_page(url, driver, wait=wait, timeout=timeout, log_prefix=lp);
-        push_timing('crawl')
+    # initialize webdriver and crawl page
+    driver = init_webdriver(headless=headless_selenium, log_prefix=lp, extension=ext)
+    if not driver:
+        check_results_total['errors'] += 1
+        return jsonify({'error': 'Could not initialize selenium with the requested extension'}), 400
+    crawl, err = crawl_page(url, driver, wait=wait, timeout=timeout, log_prefix=lp);
+    push_timing('crawl')
 
-        # take screenshot if requested
-        screenshot = None
-        if screenshot_mode:
-            screenshot = take_screenshot(driver, mode=screenshot_mode, log_prefix=lp)
-            push_timing('screenshot')
+    # take screenshot if requested
+    screenshot = None
+    if screenshot_mode:
+        screenshot = take_screenshot(driver, mode=screenshot_mode, log_prefix=lp)
+        push_timing('screenshot')
 
-        if not crawl:
-            print(f"{lp}ERROR: fetching page failed: {err.replace('\n', ' --- ')}", file=sys.stderr)
-            cleanup_crawl(driver)
-            check_results_total['errors'] += 1
-            return gen_json(url, report_id=report_id, screenshot=screenshot, timestamp=ts, timings=timings, error=err)
-
-        # collect host info and analyze
-        hosts = get_hostinfo(driver, log_prefix=lp)
-        print(f"{lp}found {len(hosts)} hosts", file=sys.stderr)
+    if not crawl:
+        print(f"{lp}ERROR: fetching page failed: {err.replace('\n', ' --- ')}", file=sys.stderr)
         cleanup_crawl(driver)
-        ipv6_only_ready = check_ipv6_only_ready(hosts)
-        print(f"{lp}website is {'' if ipv6_only_ready else 'NOT '}ipv6-only ready", file=sys.stderr)
-        push_timing('extract')
+        check_results_total['errors'] += 1
+        return gen_json(url, report_id=report_id, screenshot=screenshot, timestamp=ts, timings=timings, error=err)
 
-        if lookup_whois:
-            gch, lch, qs, qf = add_whois_info(hosts)
-            print(f"{lp}whois lookups: {qs} successful, {qf} failed, {gch} global cache hits, {lch} local cache hits", file=sys.stderr)
-            push_timing('whois')
+    # collect host info and analyze
+    hosts = get_hostinfo(driver, log_prefix=lp)
+    print(f"{lp}found {len(hosts)} hosts", file=sys.stderr)
+    cleanup_crawl(driver)
+    ipv6_only_ready = check_ipv6_only_ready(hosts)
+    print(f"{lp}website is {'' if ipv6_only_ready else 'NOT '}ipv6-only ready", file=sys.stderr)
+    push_timing('extract')
 
-        # report statistics
-        if ipv6_only_ready is True:
-            check_results_total['ipv6_only_ready'] += 1
-        else:
-            check_results_total['not_ipv6_only_ready'] += 1
+    if lookup_whois:
+        gch, lch, qs, qf = add_whois_info(hosts)
+        print(f"{lp}whois lookups: {qs} successful, {qf} failed, {gch} global cache hits, {lch} local cache hits", file=sys.stderr)
+        push_timing('whois')
 
-        # send response
-        return gen_json(url, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready,
-                             screenshot=screenshot, timestamp=ts, extension=ext, timings=timings)
+    # report statistics
+    if ipv6_only_ready is True:
+        check_results_total['ipv6_only_ready'] += 1
+    else:
+        check_results_total['not_ipv6_only_ready'] += 1
+
+    # send response
+    return gen_json(url, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready,
+                            screenshot=screenshot, timestamp=ts, extension=ext, timings=timings)
+
+
+def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
+                                 ext=None, screenshot_mode=None, headless_selenium=False,
+                                 lookup_whois=False, report_node='unknown'):
+    """ Crawls and analyzes the given URL, using cached results if available.
+    """
+
+    if not redis_client:
+        # Redis is not configured, skip cache lookup
+        return crawl_and_analyze_url(url, wait=wait, timeout=timeout, ext=ext,
+                                      screenshot_mode=screenshot_mode, headless_selenium=headless_selenium,
+                                      lookup_whois=lookup_whois, report_node=report_node)
+
+    # Try to lookup in Redis cache first if available
+    cache_key = 'webres6:url:' + sha256(f"{url}:{wait}:{timeout}:{ext}:{screenshot_mode}:{lookup_whois}".encode('ascii')).hexdigest()
+    try:
+        cached_result = redis_client.get(cache_key)
+        if cached_result:
+            # load cached result
+            json_result = json.loads(cached_result)
+            # update logging
+            ts = datetime.fromisoformat(json_result.get('ts'))
+            report_id = f"{int(ts.timestamp())}-{hash(url) % 2**sys.hash_info.width}-{report_node}"
+            lp = f"res6 {report_id} "
+            cache_age = datetime.now() - ts
+            print(f"{lp}sending cached result age={cache_age.total_seconds()}s {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
+            print(f"{lp}options: wait={wait}s, timeout={timeout}s, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
+            # update statistics
+            check_results_total['cached'] += 1
+            return json_result
+    except (redis.RedisError, json.JSONDecodeError) as e:
+        print(f"WARNING: Redis cache lookup failed: {e}", file=sys.stderr)
+
+    # Perform actual crawl and cache the result
+    json_result = crawl_and_analyze_url(url, wait=wait, timeout=timeout, ext=ext,
+                                   screenshot_mode=screenshot_mode, headless_selenium=headless_selenium,
+                                   lookup_whois=lookup_whois, report_node=report_node)
+
+    # Cache the result in Redis if available
+    try:
+        redis_client.setex(cache_key, redis_cache_ttl, json.dumps(json_result, ensure_ascii=False, default=str).encode('utf-8'))
+    except (redis.RedisError, NameError) as e:
+        print(f"WARNING: Redis cache store failed: {e}", file=sys.stderr)
+
+    # return the result
+    return json_result
 
 
 def discover_extensions():
@@ -672,6 +732,10 @@ def render_metrics():
     yield f"webres6_tested_results{{result=\"ipv6_only_ready\"}} {check_results_total['ipv6_only_ready']}\n"
     yield f"webres6_tested_results{{result=\"not_ipv6_only_ready\"}} {check_results_total['not_ipv6_only_ready']}\n"
     yield f"webres6_tested_results{{result=\"errors\"}} {check_results_total['errors']}\n"
+
+    yield "# HELP webres6_cache_hits_total Total number of cache hits\n"
+    yield "# TYPE webres6_cache_hits_total counter\n"
+    yield f"webres6_cache_hits_total {check_results_total['cached']}\n"
 
     yield "# HELP webres6_time_spent Time spent in different processing phases\n"
     yield "# UNIT seconds\n"
@@ -773,7 +837,7 @@ def create_http_app():
         if enable_whois and request.args.get('whois', 'false').lower() in ['1', 'true', 'yes', 'on']:
             lookup_whois = True
 
-        return jsonify(crawl_and_analyze(url, wait=wait, timeout=timeout, ext=ext,
+        return jsonify(crawl_and_analyze_url_cached(url, wait=wait, timeout=timeout, ext=ext,
                                           screenshot_mode=screenshot_mode, lookup_whois=lookup_whois,
                                           headless_selenium=headless_selenium, report_node=report_node)), 200
 

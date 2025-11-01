@@ -22,8 +22,13 @@ services:
       - "6400:6400"
     environment:
       - SELENIUM_REMOTE_URL=http://selenium:4444/wd/hub
+      - REDIS_URL=redis://webres6-redis:6379/0
+      - REDIS_CACHE_TTL=90
+      - ENABLE_WHOIS=true
+      - WHOIS_TTL=3600
     depends_on:
       - selenium
+      - redis
 
   webres6-viewer:
     build: 
@@ -50,6 +55,14 @@ services:
     # Uncomment below if you want to expose the Selenium Remote
     # ports:
     #   - "4444:4444"
+
+  redis:
+    image: redis:latest
+    container_name: webres6-redis
+    networks:
+      - webres6-network
+    ports:
+      - "6379:6379"
 
 networks:
   webres6-network:
