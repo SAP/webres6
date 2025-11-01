@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 from flask import Flask, redirect, request, jsonify, send_from_directory
 from ipwhois import IPWhois
 import redis
+from prometheus_client import Counter, Gauge, disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 
 # config/flag variables
 webres6_version  = "0.8.0"
@@ -83,12 +84,17 @@ if redis_url and redis_url.strip() != '':
 
 # global whois cache
 whois_cache = {}
-whois_cache_stats = {'local_hits': 0, 'global_hits': 0, 'lookups': 0, 'failed': 0}
 
-#statistsics
-time_total_spent = {'init': 0.0, 'crawl': 0.0, 'screenshot': 0.0, 'extract': 0.0, 'whois': 0.0}
-check_results_total = {'tested': 0, 'ipv6_only_ready': 0, 'not_ipv6_only_ready': 0, 'cached': 0, 'errors': 0}
-hostinfo_parsed_total = {'without_ip': 0, 'valid_ip': 0, 'invalid_ip': 0, 'without_hostname': 0, 'skipped': 0, 'error': 0}
+# Prometheus metrics
+disable_created_metrics()
+webres6_tested_total = Counter('webres6_tested_total', 'Total number of checks performed')
+webres6_tested_results = Counter('webres6_tested_results', 'Total number of results for checks performed', ['result'])
+webres6_cache_hits_total = Counter('webres6_cache_hits_total', 'Total number of cache hits')
+webres6_time_spent = Counter('webres6_time_spent_seconds_total', 'Time spent in different processing phases', ['phase'])
+webres6_hostinfo_parsed = Counter('webres6_hostinfo_parsed_total', 'Total number of hostinfo entries parsed', ['type'])
+webres6_whois_lookups = Counter('webres6_whois_lookups_total', 'WHOIS lookups performed', ['type'])
+webres6_whois_cache_size = Gauge('webres6_whois_cache_size', 'Number of entries in whois cache')
+webres6_whois_cache_size.set_function(lambda: len(whois_cache))
 
 # patch ip address object to support NAT64 detection
 def _is_nat64(self):
@@ -287,19 +293,19 @@ def get_hostinfo(driver, log_prefix=''):
             obj = json.loads(msg)
         except Exception as e:
             print(f"{log_prefix}ERROR: failed parsing log entry: {e}", file=sys.stderr)
-            hostinfo_parsed_total['error'] += 1
+            webres6_hostinfo_parsed.labels(type='error').inc()
             continue
 
         # We are only interested in Network.responseReceived events
         if 'message' not in obj or obj['message'].get('method') != 'Network.responseReceived':
-            hostinfo_parsed_total['skipped'] += 1
+            webres6_hostinfo_parsed.labels(type='skipped').inc()
             continue
 
         # Check for valid IP in response
         response = obj['message']['params']['response']
         remote_ip = response.get('remoteIPAddress', None)
         if not remote_ip:
-            hostinfo_parsed_total['without_ip'] += 1
+            webres6_hostinfo_parsed.labels(type='without_ip').inc()
             if debug_hostinfo:
                 print(f"{log_prefix}WARNING: No valid IP address found in {response}", file=sys.stderr)
             continue
@@ -309,9 +315,9 @@ def get_hostinfo(driver, log_prefix=''):
         # Parse the IP address
         try:
             ip = ip_address(remote_ip)
-            hostinfo_parsed_total['valid_ip'] += 1
+            webres6_hostinfo_parsed.labels(type='valid_ip').inc()
         except ValueError as e:
-            hostinfo_parsed_total['invalid_ip'] += 1
+            webres6_hostinfo_parsed.labels(type='invalid_ip').inc()
             print(f"{log_prefix}WARNING: Error parsing IP address: {remote_ip} - {e}", file=sys.stderr)
             ip = None
 
@@ -335,7 +341,7 @@ def get_hostinfo(driver, log_prefix=''):
 
         # Update the hosts dictionary with the response details
         if not url.hostname:
-            hostinfo_parsed_total['without_hostname'] += 1
+            webres6_hostinfo_parsed.labels(type='without_hostname').inc()
             if debug_hostinfo:
                 print(f"{log_prefix}WARNING: No valid hostname found in URL {response.get('url')}", file=sys.stderr)
             continue
@@ -468,7 +474,7 @@ def get_whois_info(ip, local_cache, global_cache):
         # Cache the result locally
         push_to_local_cache(global_cache[ip])
         # store result
-        whois_cache_stats['global_hits']+=1
+        webres6_whois_lookups.labels(type='cache-global').inc()
         return whois_info, 'global_cache_hit'
 
     # Check if IP falls into any locally cached network afterwards
@@ -476,7 +482,7 @@ def get_whois_info(ip, local_cache, global_cache):
         # Cache the result globally
         global_cache[ip] = whois_info
         # store result
-        whois_cache_stats['lookups']+=1
+        webres6_whois_lookups.labels(type='cache-local').inc()
         return whois_info, 'local_cache_hit'
 
     # finally do a real whois lookup
@@ -486,11 +492,11 @@ def get_whois_info(ip, local_cache, global_cache):
         # Cache the result globally
         global_cache[ip] = whois_info
         # store result
-        whois_cache_stats['lookups']+=1
+        webres6_whois_lookups.labels(type='whois-success').inc()
         return whois_info, 'whois_lookup'
     else:
         # store result
-        whois_cache_stats['failed']+=1
+        webres6_whois_lookups.labels(type='whois-fail').inc()
         return None, 'whois_failed'
 
 
@@ -507,6 +513,8 @@ def expire_whois_cache():
         del whois_cache[ip]
     if debug_whois and expired_keys:
         print(f"Expired {len(expired_keys)} entries from whois cache.", file=sys.stderr)
+    # Update cache size metric
+    update_whois_cache_size()
     return len(expired_keys)
 
 
@@ -618,13 +626,13 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
         now = datetime.now()
         spent = (now - last_ts).total_seconds()
         timings[key] = spent
-        time_total_spent[key] += spent
+        webres6_time_spent.labels(phase=key).inc(spent)
         last_ts = now
 
     # init logging
     report_id = f"{int(ts.timestamp())}-{hash(url) % 2**sys.hash_info.width}-{report_node}"
     lp = f"res6 {report_id} "
-    check_results_total['tested'] += 1
+    webres6_tested_total.inc()
     print(f"{lp}testing {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
     print(f"{lp}options: wait={wait}s, timeout={timeout}s, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
     push_timing('init')
@@ -632,7 +640,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
     # initialize webdriver and crawl page
     driver = init_webdriver(headless=headless_selenium, log_prefix=lp, extension=ext)
     if not driver:
-        check_results_total['errors'] += 1
+        webres6_tested_results.labels(result='errors').inc()
         return jsonify({'error': 'Could not initialize selenium with the requested extension'}), 400
     crawl, err = crawl_page(url, driver, wait=wait, timeout=timeout, log_prefix=lp);
     push_timing('crawl')
@@ -646,7 +654,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
     if not crawl:
         print(f"{lp}ERROR: fetching page failed: {err.replace('\n', ' --- ')}", file=sys.stderr)
         cleanup_crawl(driver)
-        check_results_total['errors'] += 1
+        webres6_tested_results.labels(result='errors').inc()
         return gen_json(url, report_id=report_id, screenshot=screenshot, timestamp=ts, timings=timings, error=err)
 
     # collect host info and analyze
@@ -664,9 +672,9 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
 
     # report statistics
     if ipv6_only_ready is True:
-        check_results_total['ipv6_only_ready'] += 1
+        webres6_tested_results.labels(result='ipv6_only_ready').inc()
     else:
-        check_results_total['not_ipv6_only_ready'] += 1
+        webres6_tested_results.labels(result='not_ipv6_only_ready').inc()
 
     # send response
     return gen_json(url, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready,
@@ -700,7 +708,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
             print(f"{lp}sending cached result age={cache_age.total_seconds()}s {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
             print(f"{lp}options: wait={wait}s, timeout={timeout}s, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
             # update statistics
-            check_results_total['cached'] += 1
+            webres6_cache_hits_total.inc()
             return json_result
     except (redis.RedisError, json.JSONDecodeError) as e:
         print(f"WARNING: Redis cache lookup failed: {e}", file=sys.stderr)
@@ -732,46 +740,6 @@ def discover_extensions():
                 print(f"\t{ext} (packed)", file=sys.stderr)
     return extensions
 
-def render_metrics():
-    """ Renders collected timing metrics.
-    """
-
-    yield "# HELP webres6_tested_total Total number of checks performed\n"
-    yield "# TYPE webres6_tested_total counter\n"
-    yield f"webres6_tested_total {check_results_total['tested']}\n"
-
-    yield "# HELP webres6_tested_results Total number of results for checks performed\n"
-    yield "# TYPE webres6_tested_results counter\n"
-    yield f"webres6_tested_results{{result=\"ipv6_only_ready\"}} {check_results_total['ipv6_only_ready']}\n"
-    yield f"webres6_tested_results{{result=\"not_ipv6_only_ready\"}} {check_results_total['not_ipv6_only_ready']}\n"
-    yield f"webres6_tested_results{{result=\"errors\"}} {check_results_total['errors']}\n"
-
-    yield "# HELP webres6_cache_hits_total Total number of cache hits\n"
-    yield "# TYPE webres6_cache_hits_total counter\n"
-    yield f"webres6_cache_hits_total {check_results_total['cached']}\n"
-
-    yield "# HELP webres6_time_spent Time spent in different processing phases\n"
-    yield "# UNIT seconds\n"
-    yield "# TYPE webres6_time_spent counter\n"
-    for phase, seconds in time_total_spent.items():
-        yield f"webres6_time_spent{{phase=\"{phase}\"}} {seconds}\n"
-
-    yield "# HELP webres6_hostinfo_parsed_total Total number of hostinfo entries parsed\n"
-    yield "# TYPE webres6_hostinfo_parsed_total counter\n"
-    for key, count in hostinfo_parsed_total.items():
-        yield f"webres6_hostinfo_parsed{{type=\"{key}\"}} {count}\n"
-
-    yield "# HELP webres6_whois_lookups Successful whois lookups performed\n"
-    yield "# TYPE webres6_whois_lookups counter\n"
-    yield f"webres6_whois_lookups{{type=\"whois-success\"}} {whois_cache_stats['lookups']}\n"
-    yield f"webres6_whois_lookups{{type=\"whois-fail\"}} {whois_cache_stats['failed']}\n"
-    yield f"webres6_whois_lookups{{type=\"cache-local\"}} {whois_cache_stats['local_hits']}\n"
-    yield f"webres6_whois_lookups{{type=\"cache-global\"}} {whois_cache_stats['global_hits']}\n"
-
-    yield "# HELP webres6_whois_cache_size Number of entries in whois cache\n"
-    yield "# TYPE webres6_whois_cache_size gauge\n"
-    yield f"webres6_whois_cache_size {len(whois_cache)}\n"
-
 
 def check_auth(request):
     """ Check if the request is authorized.
@@ -800,6 +768,12 @@ def create_http_app():
 
     # whois enabled?
     print(f"whois lookups are {'enabled with TTL ' + str(whois_cache_ttl) + 's' if enable_whois else 'disabled'}.", file=sys.stderr)
+
+    # redis enabled?
+    if redis_client:
+        print(f"using redis cache at {redis_url} with TTL {redis_cache_ttl}s.", file=sys.stderr)
+    else:
+        print("redis cache is disabled.", file=sys.stderr)
 
     # Start a simple HTTP API server using Flask
     app = Flask(__name__, static_folder=app_home)
@@ -868,11 +842,11 @@ def create_http_app():
             resp.headers['WWW-Authenticate'] = 'Basic realm="webres6 admin"'
             return resp
 
-    print("\t/metrics             open telemetry compatible metrics", file=sys.stderr)
+    print("\t/metrics             Prometheus compatible metrics", file=sys.stderr)
     @app.route('/metrics', methods=['GET'])
     def metrics():
         if check_auth(request):
-            return app.response_class(render_metrics(), mimetype='application/openmetrics-text')
+            return app.response_class(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
         else:
             return app.response_class('Authentication required', mimetype='text/plain', status=401, headers={'WWW-Authenticate': 'Basic realm="webres6 admin"'})
 
