@@ -78,18 +78,18 @@ function createResultsDomContainer(url) {
 function renderData(data, domContainer, overview) {
   // Error (if present)
   if (data.error) {
-    const errStatus = $('#results-template .overview .status.error').clone()
+    const errStatus = $('#results-template .overview .status.error').clone();
     errStatus.find('.placeholder').text(data.error);
     overview.append(errStatus);
   }
   // Status
   let v6status;
-  if (data.ipv6_only_ready == true) {
-    v6status = $('#results-template .overview .status.ipv6only-ready').clone()
+  if (data.ipv6_only_ready === true) {
+    v6status = $('#results-template .overview .status.ipv6only-ready').clone();
   } else if (data.ipv6_only_ready === false) {
-    v6status = $('#results-template .overview .status.ipv6only-not-ready').clone()
+    v6status = $('#results-template .overview .status.ipv6only-not-ready').clone();
   } else {
-    v6status = $('#results-template .overview .status.ipv6only-unknown').clone()
+    v6status = $('#results-template .overview .status.ipv6only-unknown').clone();
   }
   overview.append(v6status);
   // Timestamp
@@ -131,11 +131,12 @@ function renderHostsTable(data, hostsContainer) {
     const hostsTable = hostsContainer.find('.hosts_table');
     let hasWhoisInfo = false;
     const sortedHosts = Object.keys(data.hosts).sort(function(a, b) {
-      if(data.hosts[a].domain_part===data.hosts[b].domain_part){
+      if(data.hosts[a].domain_part === data.hosts[b].domain_part){
         return data.hosts[a].local_part.localeCompare(data.hosts[b].local_part);
       } else {
         return data.hosts[a].domain_part.localeCompare(data.hosts[b].domain_part);
-      }});
+      }
+    });
     $.each(sortedHosts, function(idx, hostname) {
       // prepare host stuff
       const info = data.hosts[hostname];
@@ -159,7 +160,7 @@ function renderHostsTable(data, hostsContainer) {
         // prepare to render protocols as sub-rows
         let pr = info.ips[ip].transport.map(function(v, n, a) {
           return `<td class="protocol">${v.length>0?v[0]:'_'}</td>`+
-                  `<td class="protocol">${v.length>1?v[1]:'_'}</td>`
+                  `<td class="protocol">${v.length>1?v[1]:'_'}</td>`;
         });
         // render IP and whois cells
         const asnCell       = $(`<td rowspan="${pr.length}" class="as-number" />`);
@@ -188,22 +189,22 @@ function renderHostsTable(data, hostsContainer) {
         row.append(asnCell);
         row.append(asDescrCell);
         row.append(ipCell);
-        row.append(ipNetnameCell)
+        row.append(ipNetnameCell);
         appendRow();
         // costruct additional rows for additional protocols
         $.each(pr, function(pi, pe) {
           row.append(pr[0]);
           appendRow();
         });
-      })
+      });
       // render appendix with other per-host info
-      const hostInfoDiv = $('<div>')
+      const hostInfoDiv = $('<div>');
       row.addClass('host-info-block');
       row.addClass('hide');
       row.append($('<td colspan=8>').append(hostInfoDiv));
       if (info.urls && info.urls.length) {
         hostInfoDiv.append('<strong>URLs</strong>');
-        let urlList =$('<ul class="urls">');
+        let urlList = $('<ul class="urls">');
         $.each(info.urls, function(i, url) {
           urlList.append(`<li>${url}</li>`);
         });
@@ -234,7 +235,7 @@ function renderHostsTable(data, hostsContainer) {
 }
 
 /* Call API and fetch analysis */ 
-async function analyzeURL(url, wait, screenshot = 'none',  ext = null, whois = 'false') {
+async function analyzeURL(url, wait = 2, screenshot = 'none', ext = null, whois = 'false') {
   // Generate new container
   const [domContainer, overview, domContainerId] = createResultsDomContainer(url);
   $('#results-template .overview .status.status-loading').clone().appendTo(overview);
@@ -247,7 +248,7 @@ async function analyzeURL(url, wait, screenshot = 'none',  ext = null, whois = '
     const data = await response.json();
     renderData(data, domContainer, overview);
   } else {
-    const errStatus = $('#results-template .overview .status.error').clone()
+    const errStatus = $('#results-template .overview .status.error').clone();
     errStatus.find('.placeholder').text(response.statusText);
     overview.append(errStatus);
   }
