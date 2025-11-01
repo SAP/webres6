@@ -70,6 +70,8 @@ api:
 # Selenium hub configuration
 seleniumHub:
   url: "http://selenium-hub.default.svc.cluster.local:4444/wd/hub"
+  username: "admin"
+  password: "admin"
 
 # Prometheteus Operator configuration
 prometheus:

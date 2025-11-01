@@ -41,8 +41,18 @@ spec:
           env:
             - name: DEPLOYMENT
               value: {{ .Release.Name | quote }}
+            {{- if .Values.seleniumHub.url }}
             - name: SELENIUM_REMOTE_URL
               value: {{ .Values.seleniumHub.url | quote }}
+            {{- end }}
+            {{- if .Values.seleniumHub.username }}
+            - name: SELENIUM_USERNAME
+              value: {{ .Values.seleniumHub.username | quote }}
+            {{- end }}
+            {{- if .Values.seleniumHub.password }}
+            - name: SELENIUM_PASSWORD
+              value: {{ .Values.seleniumHub.password | quote }}
+            {{- end }}
             - name: ENABLE_WHOIS
               value: {{ .Values.api.whois.enabled | quote }}
             - name: WHOIS_TTL

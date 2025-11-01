@@ -17,6 +17,7 @@ from datetime import datetime
 from hashlib import sha256
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.client_config import ClientConfig
 from selenium.common.exceptions import WebDriverException
 from urllib.parse import urlparse
 from flask import Flask, redirect, request, jsonify, send_from_directory
@@ -30,6 +31,8 @@ debug_hostinfo   = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask      = 'flask'    in getenv("DEBUG", '').lower().split(',')
 admin_api_key    = getenv("ADMIN_API_KEY", None)
 selenium_remote  = getenv("SELENIUM_REMOTE_URL", None)
+selenium_username = getenv("SELENIUM_USERNAME", None)
+selenium_password = getenv("SELENIUM_PASSWORD", None)
 headless_selenium = getenv("HEADLESS_SELENIUM", False)
 redis_url        = getenv("REDIS_URL", None)
 redis_cache_ttl  = int(getenv("REDIS_CACHE_TTL", 900))  # Default 15min
@@ -63,6 +66,15 @@ url_blocklist_file = os.path.join(srvconfig_dir, 'url-blocklist')
 if os.path.exists(url_blocklist_file):
     with open(url_blocklist_file) as f:
         url_blocklist = f.read().splitlines()
+
+# initialize selenium auth if needed
+selenium_client_config = None
+if selenium_remote:
+    selenium_client_config = ClientConfig(
+        remote_server_addr=selenium_remote,
+        username=selenium_username if selenium_username else 'admin',
+        password=selenium_password if selenium_password else 'admin',
+    )
 
 # initialize redis client if redis url is set
 redis_client = None
@@ -182,7 +194,8 @@ def init_webdriver(headless=False, log_prefix='', implicit_wait=0.5, extension=N
     try:
         if selenium_remote:
             print(f"{log_prefix}connecting to remote Selenium server at {selenium_remote}", file=sys.stderr)
-            driver = webdriver.Remote(command_executor=selenium_remote, options=options)
+            client_config = ClientConfig
+            driver = webdriver.Remote(command_executor=selenium_remote, options=options, client_config=selenium_client_config)
         else:
             print(f"{log_prefix}starting local Selenium", file=sys.stderr)
             driver = webdriver.Chrome(options=options)
