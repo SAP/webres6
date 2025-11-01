@@ -379,29 +379,16 @@ def check_ipv6_only_ready(hosts):
             return False
     return True
 
+def get_whois_info(ip, local_cache, global_cache):
+    """ Fetches WHOIS information for the given IP address using local and global caches.
 
-def add_whois_info(hosts):
-    """Adds WHOIS information for each unique IP address in the hosts dictionary.
-    
     Args:
-        hosts (dict): Dictionary containing host information
-        
+        ip (ipaddress.IPv4Address or ipaddress.IPv6Address): The IP address to look up
+
     Returns:
-        tuple: A tuple containing statistics about the WHOIS lookups:
-            - global_cache_hits (int): Number of global cache hits
-            - local_cache_hits (int): Number of local cache hits
-            - whois_lookups (int): Number of actual WHOIS lookups performed
-            - whois_failed (int): Number of WHOIS lookups that failed
+        dict: The WHOIS information for the IP address, or None if not found.
     """
 
-    # Cache stats
-    local_cache_hits = 0
-    global_cache_hits = 0
-    whois_lookups = 0
-    whois_failed = 0
-
-    # Cache WHOIS lookups by network CIDR locally
-    local_cache = {4: {}, 6: {}}
     def push_to_local_cache(whois_info):
         try:
             for cidr in whois_info['network']['cidr'].split(','):
@@ -452,60 +439,37 @@ def add_whois_info(hosts):
             print(f"\tWARNING: whois lookup failed for {ip}: {e}", file=sys.stderr)
             return None
 
-    # Iterate over all hosts and their IPs to fetch WHOIS information
-    for hostname, info in hosts.items():
-        whois_data = {}
-        for ip_in in info.get('ips', []):
+    # Check global cache (exact ip match) first
+    if (whois_info := global_cache.get(ip, None)):
+        if debug_whois:
+            print(f"\twhois global cache hit for {ip}", file=sys.stderr)
+        # Cache the result locally
+        push_to_local_cache(global_cache[ip])
+        # store result
+        whois_cache_stats['global_hits']+=1
+        return whois_info, 'global_cache_hit'
 
-            # normalize IP address for lookup
-            if ip_in.version == 6 and ip_in.is_nat64():
-                ip = ip_in.nat64_extract_ipv4()
-            elif ip_in.version == 6 and ip_in.ipv4_mapped:
-                ip = ip_in.ipv4_mapped
-            else:
-                ip = ip_in
+    # Check if IP falls into any locally cached network afterwards
+    elif (whois_info := lookup_local_cache(ip)):
+        # Cache the result globally
+        global_cache[ip] = whois_info
+        # store result
+        whois_cache_stats['lookups']+=1
+        return whois_info, 'local_cache_hit'
 
-            if debug_whois:
-                print(f"\taquiring whois info for {ip_in} lookup {ip}", file=sys.stderr)
-
-            # Check global cache (exact ip match) first
-            if (whois_info := whois_cache.get(ip, None)):
-                global_cache_hits += 1
-                if debug_whois:
-                    print(f"\twhois global cache hit for {ip}", file=sys.stderr)
-                # Cache the result locally
-                push_to_local_cache(whois_cache[ip])
-                # store result
-                whois_data[ip_in] = whois_info
-            # Check if IP falls into any locally cached network afterwards
-            elif (whois_info := lookup_local_cache(ip)):
-                local_cache_hits += 1
-                # Cache the result globally
-                whois_cache[ip] = whois_info
-                # store result
-                whois_data[ip_in] = whois_info
-            # finally do a real whois lookup
-            elif (whois_info := lookup_whois(ip)):
-                whois_lookups += 1
-                # Cache the result locally using network CIDR
-                push_to_local_cache(whois_info)
-                # Cache the result globally
-                whois_cache[ip] = whois_info
-                # store result
-                whois_data[ip_in] = whois_info
-            else:
-                whois_failed += 1
-                # store result
-                whois_data[ip_in] = None
-
-        # Add WHOIS data to host info
-        info['whois'] = whois_data
-
-    whois_cache_stats['local_hits'] += local_cache_hits
-    whois_cache_stats['global_hits'] += global_cache_hits
-    whois_cache_stats['lookups'] += whois_lookups
-    whois_cache_stats['failed'] += whois_failed
-    return global_cache_hits, local_cache_hits, whois_lookups, whois_failed
+    # finally do a real whois lookup
+    elif (whois_info := lookup_whois(ip)):
+        # Cache the result locally using network CIDR
+        push_to_local_cache(whois_info)
+        # Cache the result globally
+        global_cache[ip] = whois_info
+        # store result
+        whois_cache_stats['lookups']+=1
+        return whois_info, 'whois_lookup'
+    else:
+        # store result
+        whois_cache_stats['failed']+=1
+        return None, 'whois_failed'
 
 
 def expire_whois_cache():
@@ -522,6 +486,52 @@ def expire_whois_cache():
     if debug_whois and expired_keys:
         print(f"Expired {len(expired_keys)} entries from whois cache.", file=sys.stderr)
     return len(expired_keys)
+
+
+def add_whois_info(hosts):
+    """Adds WHOIS information for each unique IP address in the hosts dictionary.
+
+    Args:
+        hosts (dict): Dictionary containing host information
+
+    Returns:
+        tuple: A tuple containing statistics about the WHOIS lookups:
+            - global_cache_hits (int): Number of global cache hits
+            - local_cache_hits (int): Number of local cache hits
+            - whois_lookups (int): Number of actual WHOIS lookups performed
+            - whois_failed (int): Number of WHOIS lookups that failed
+    """
+
+    # Cache stats
+    stats = {'global_cache_hit': 0, 'local_cache_hit': 0, 'whois_lookup': 0, 'whois_failed': 0}
+
+    # Cache WHOIS lookups by network CIDR locally
+    local_cache = {4: {}, 6: {}}
+
+    # Iterate over all hosts and their IPs to fetch WHOIS information
+    for hostname, info in hosts.items():
+        whois_data = {}
+        for ip_in in info.get('ips', []):
+
+            # normalize IP address for lookup
+            if ip_in.version == 6 and ip_in.is_nat64():
+                ip = ip_in.nat64_extract_ipv4()
+            elif ip_in.version == 6 and ip_in.ipv4_mapped:
+                ip = ip_in.ipv4_mapped
+            else:
+                ip = ip_in
+
+            if debug_whois:
+                print(f"\taquiring whois info for {ip_in} lookup {ip}", file=sys.stderr)
+
+            whois_info, source = get_whois_info(ip, local_cache, whois_cache)
+            whois_data[ip_in] = whois_info
+            stats[source] += 1
+
+        # Add WHOIS data to host info
+        info['whois'] = whois_data
+
+    return stats['global_cache_hit'], stats['local_cache_hit'], stats['whois_lookup'], stats['whois_failed']
 
 
 def gen_json(url, hosts={}, ipv6_only_ready=None, screenshot=None, report_id=None, timestamp=datetime.now(), timings=None, extension=None, error=None):

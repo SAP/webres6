@@ -162,10 +162,10 @@ function renderHostsTable(data, hostsContainer) {
                   `<td class="protocol">${v.length>1?v[1]:'_'}</td>`
         });
         // render IP and whois cells
-        const asnCell       = $(`<td rowspan="${pr.length + 1}" class="as-number" />`);
-        const asDescrCell   = $(`<td rowspan="${pr.length + 1}" class="as-descr" />`);
-        const ipCell        = $(`<td rowspan="${pr.length + 1}" class="ip-address ${info.ips[ip].address_family.toLowerCase()}" >${ip}</td>`);
-        const ipNetnameCell = $(`<td rowspan="${pr.length + 1}" class="ip-netname ${info.ips[ip].address_family.toLowerCase()}" />`);
+        const asnCell       = $(`<td rowspan="${pr.length}" class="as-number" />`);
+        const asDescrCell   = $(`<td rowspan="${pr.length}" class="as-descr" />`);
+        const ipCell        = $(`<td rowspan="${pr.length}" class="ip-address ${info.ips[ip].address_family.toLowerCase()}" >${ip}</td>`);
+        const ipNetnameCell = $(`<td rowspan="${pr.length}" class="ip-netname ${info.ips[ip].address_family.toLowerCase()}" />`);
         // add whois info if available
         if (info.ips[ip].whois) {
           hasWhoisInfo = true;
@@ -200,7 +200,7 @@ function renderHostsTable(data, hostsContainer) {
       const hostInfoDiv = $('<div>')
       row.addClass('host-info-block');
       row.addClass('hide');
-      row.append($('<td colspan=6>').append(hostInfoDiv));
+      row.append($('<td colspan=8>').append(hostInfoDiv));
       if (info.urls && info.urls.length) {
         hostInfoDiv.append('<strong>URLs</strong>');
         let urlList =$('<ul class="urls">');
