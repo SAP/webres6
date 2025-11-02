@@ -433,6 +433,30 @@ def get_whois_info(ip, local_cache, global_cache):
                 return cached_data
         return None
 
+    def lookup_redis_cache(ip):
+        if not redis_client:
+            return None
+        try:
+            cached_data = redis_client.get(f"webres6:whois:{ip}")
+            if cached_data:
+                whois_info = json.loads(cached_data)
+                if debug_whois:
+                    print(f"\twhois cache redis hit for {ip}: {whois_info}", file=sys.stderr)
+                return whois_info
+            else:
+                return None
+        except Exception as e:
+            print(f"\tWARNING: redis whois lookup failed for {ip}: {e}", file=sys.stderr)
+            return None
+
+    def push_to_redis_cache(ip, whois_info):
+        if not redis_client:
+            return
+        try:
+            redis_client.setex(f"webres6:whois:{ip}", whois_cache_ttl, json.dumps(whois_info, default=str))
+        except Exception as e:
+            print(f"\tWARNING: redis whois push failed for {ip}: {e}", file=sys.stderr)
+
     def lookup_whois(ip):
         # Perform WHOIS lookup using ipwhois library last
         try:
@@ -485,12 +509,24 @@ def get_whois_info(ip, local_cache, global_cache):
         webres6_whois_lookups.labels(type='cache-local').inc()
         return whois_info, 'local_cache_hit'
 
+    # Check Redis cache next
+    elif (whois_info := lookup_redis_cache(ip)):
+        # Cache the result locally using network CIDR
+        push_to_local_cache(whois_info)
+        # Cache the result globally
+        global_cache[ip] = whois_info
+        # store result
+        webres6_whois_lookups.labels(type='cache-redis').inc()
+        return whois_info, 'redis_cache_hit'
+
     # finally do a real whois lookup
     elif (whois_info := lookup_whois(ip)):
         # Cache the result locally using network CIDR
         push_to_local_cache(whois_info)
         # Cache the result globally
         global_cache[ip] = whois_info
+        # Cache the result in Redis
+        push_to_redis_cache(ip, whois_info)
         # store result
         webres6_whois_lookups.labels(type='whois-success').inc()
         return whois_info, 'whois_lookup'
