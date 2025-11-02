@@ -445,6 +445,8 @@ def get_whois_info(ip, local_cache, global_cache):
                     print(f"\twhois cache redis hit for {ip}: {whois_info}", file=sys.stderr)
                 return whois_info
             else:
+                if debug_whois:
+                    print(f"\twhois cache redis miss for {ip}", file=sys.stderr)
                 return None
         except Exception as e:
             print(f"\tWARNING: redis whois lookup failed for {ip}: {e}", file=sys.stderr)
@@ -570,7 +572,7 @@ def add_whois_info(hosts):
     """
 
     # Cache stats
-    stats = {'global_cache_hit': 0, 'local_cache_hit': 0, 'whois_lookup': 0, 'whois_failed': 0}
+    stats = {'global_cache_hit': 0, 'local_cache_hit': 0, 'redis_cache_hit': 0, 'whois_lookup': 0, 'whois_failed': 0}
 
     # Cache WHOIS lookups by network CIDR locally
     local_cache = {4: {}, 6: {}}
@@ -598,7 +600,7 @@ def add_whois_info(hosts):
         # Add WHOIS data to host info
         info['whois'] = whois_data
 
-    return stats['global_cache_hit'], stats['local_cache_hit'], stats['whois_lookup'], stats['whois_failed']
+    return stats['global_cache_hit'], stats['local_cache_hit'], stats['redis_cache_hit'], stats['whois_lookup'], stats['whois_failed']
 
 
 def gen_json(url, hosts={}, ipv6_only_ready=None, screenshot=None, report_id=None, timestamp=datetime.now(), timings=None, extension=None, error=None):
@@ -703,8 +705,8 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
     push_timing('extract')
 
     if lookup_whois:
-        gch, lch, qs, qf = add_whois_info(hosts)
-        print(f"{lp}whois lookups: {qs} successful, {qf} failed, {gch} global cache hits, {lch} local cache hits", file=sys.stderr)
+        gch, lch, rch, qs, qf = add_whois_info(hosts)
+        print(f"{lp}whois lookups: {qs} successful, {qf} failed, {gch} global cache hits, {lch} local cache hits, {rch} redis cache hits", file=sys.stderr)
         push_timing('whois')
 
     # report statistics
