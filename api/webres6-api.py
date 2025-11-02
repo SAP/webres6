@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 from flask import Flask, redirect, request, jsonify, send_from_directory
 from ipwhois import IPWhois
 import redis
-from prometheus_client import Counter, Gauge, disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 
 # config/flag variables
 webres6_version  = "0.8.0"
@@ -88,12 +88,13 @@ whois_cache = {}
 # Prometheus metrics
 disable_created_metrics()
 webres6_tested_total = Counter('webres6_tested_total', 'Total number of checks performed')
-webres6_tested_results = Counter('webres6_tested_results', 'Total number of results for checks performed', ['result'])
+webres6_tested_results = Counter('webres6_results_total', 'Total number of results for checks performed', ['result'])
 webres6_cache_hits_total = Counter('webres6_cache_hits_total', 'Total number of cache hits')
 webres6_time_spent = Counter('webres6_time_spent_seconds_total', 'Time spent in different processing phases', ['phase'])
+webres6_response_time = Histogram('webres6_response_time_seconds_total', 'Response time for checks performed', ['whois', 'screenshot'], buckets=(0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 90, 120, 150, 180))
 webres6_hostinfo_parsed = Counter('webres6_hostinfo_parsed_total', 'Total number of hostinfo entries parsed', ['type'])
 webres6_whois_lookups = Counter('webres6_whois_lookups_total', 'WHOIS lookups performed', ['type'])
-webres6_whois_cache_size = Gauge('webres6_whois_cache_size', 'Number of entries in whois cache')
+webres6_whois_cache_size = Gauge('webres6_whois_cache_size_total', 'Number of entries in whois cache')
 webres6_whois_cache_size.set_function(lambda: len(whois_cache))
 
 # patch ip address object to support NAT64 detection
@@ -838,6 +839,8 @@ def create_http_app():
     print("\t/res6/url(URL)       get JSON results for URL provided", file=sys.stderr)
     @app.route('/res6/url(<path:url>)', methods=['GET'])
     def res6_url(url):
+        ts = datetime.now()
+
         # parse url
         if not url:
             return jsonify({'error': 'URL parameter is required'}), 400
@@ -860,9 +863,11 @@ def create_http_app():
         if enable_whois and request.args.get('whois', 'false').lower() in ['1', 'true', 'yes', 'on']:
             lookup_whois = True
 
-        return jsonify(crawl_and_analyze_url_cached(url, wait=wait, timeout=timeout, ext=ext,
+        result = crawl_and_analyze_url_cached(url, wait=wait, timeout=timeout, ext=ext,
                                           screenshot_mode=screenshot_mode, lookup_whois=lookup_whois,
-                                          headless_selenium=headless_selenium, report_node=report_node)), 200
+                                          headless_selenium=headless_selenium, report_node=report_node)
+        webres6_response_time.labels(whois=str(lookup_whois), screenshot=str(screenshot_mode)).observe((datetime.now() - ts).total_seconds())
+        return jsonify(result), 200
 
     print("\t/adm/whois/expire    expire old whois cache entries", file=sys.stderr)
     @app.route('/adm/whois/expire', methods=['GET'])
