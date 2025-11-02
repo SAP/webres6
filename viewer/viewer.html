@@ -125,7 +125,11 @@ SPDX-License-Identifier: Apache-2.0
       </div>
       <p>This is the <i>IPv6 Web Resource Checker (webres6)</i>. It checks IPv6-only readiness of a Web page or app 
         by crawling a given URL using Selenium and analyzes whether all page resources have been loaded via IPv6.</p>
-      <p><strong>Limitations:</strong> The Selenium automation used is quite simple. 
+      <p><i>Webres6</i> was inspired by Paul Marks' <i><a href="https://github.com/pmarks-net/ipvfoo">IPvFoo</a></i> browser extension.
+        While <i>IPvFoo</i> is more flexible and interactive, <i>Webres6</i> can be run as a service and allows IPv6-only testing without installation or IPv6 on the users' client as well as automated analysis.</p>
+      <p>Further documentation can be found on the <a href="https://github.com/sap/webres6">IPv6 Web Resource Checker</a> project page on GitHub.</p>
+      <h3>Limitations</h3>
+      <p>The Selenium automation used is quite simple.
         It just loads the URL.
         As modern Web pages tend to be complex, this will most likely result in many resources not getting loaded/analyzed a normal browser would load.
         <ul>
@@ -135,10 +139,11 @@ SPDX-License-Identifier: Apache-2.0
           <li> Because we don't have long-term cookie state, we expect that some advertisements and analytics may not be loaded.</li>
           <li> No authentication/login takes place.</li>
         </ul>
+        </p>
+      <p>The tool ignores DNS aspects: Even if this tool reports green,
+         it is still necessary to check the whole DNS delegation chain of all hosts involved for IPv6-only realness. 
+         A tool for this is <a href="https://ready.chair6.net/">ready.chair6.net</a>.
       </p>
-      <p><i>Webres6</i> was inspired by Paul Marks' <i><a href="https://github.com/pmarks-net/ipvfoo">IPvFoo</a></i> browser extension.
-        While <i>IPvFoo</i> is more flexible and interactive, <i>Webres6</i> can be run as a service and allows IPv6-only testing without installation or IPv6 on the users' client as well as automated analysis.</p>
-      <p>Further documentation can be found on the <a href="https://github.com/sap/webres6">IPv6 Web Resource Checker</a> project page on GitHub.</p>
     </div>
     <div class="footer">
       <div id="privacy-policy"></div>

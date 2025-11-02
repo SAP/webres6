@@ -62,6 +62,9 @@ As modern Web pages tend to be complex, this will most likely result in many res
  - Because we don't have long-term cooke state, we [expect that some advertisements and analytics may not be loaded](https://doi.org/10.48550/arXiv.2506.11947).
  - No authentication/login takes place
 
+It ignores DNS aspects: Even if this tool reports green, it is still necessary to check the whole DNS delegation chain of all hosts involved for IPv6-only realness. A tool for this is [ready.chair6.net](/https://ready.chair6.net/).
+
+
 ## Requirements 
 
 ### API server (webres6-api)
