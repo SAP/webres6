@@ -52,6 +52,7 @@ async function loadSrvConfig() {
       // Whois switch
       if (srvconfig && srvconfig.whois) {
         $('#whoisSwitchContainer').removeClass('template');
+        $('#whoisLookup').attr('checked', 'true');
       }
       // Show input section
       $('#input').removeClass('template');

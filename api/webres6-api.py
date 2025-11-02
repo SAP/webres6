@@ -26,7 +26,7 @@ import redis
 from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 
 # config/flag variables
-webres6_version  = "0.8.0"
+webres6_version  = "0.9.5"
 debug_whois      = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo   = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask      = 'flask'    in getenv("DEBUG", '').lower().split(',')
