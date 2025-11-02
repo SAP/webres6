@@ -30,6 +30,8 @@
 The *IPv6 Web Resource Chceker (webres6)* is a small tool/api to checks IPv6-only readiness of a Web page or app.
 It loads a given URL using Selenium and displays the IP addresses and protocols of all hosts it fetches resources from and comes with a CLI and Web client.
 
+A pubic demo system is available at [webres6.dev.sap](https://webres6.dev.sap).
+
 The tool is inspired by Paul Marks' [IPvFoo](https://github.com/pmarks-net/ipvfoo) browser extension. While *IPvFoo* is more flexible and interactive, *Webres6* can be run as a service and allows IPv6-only testing without installation or IPv6 on the users' client as well as automated analysis.
 
 ### Features
