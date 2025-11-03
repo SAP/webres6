@@ -20,6 +20,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.client_config import ClientConfig
 from selenium.common.exceptions import WebDriverException
 from urllib.parse import urlparse
+import flask
 from flask import Flask, redirect, request, jsonify, send_from_directory
 from ipwhois import IPWhois
 import redis
@@ -156,6 +157,20 @@ def is_ip(address):
     """ Check if the given address is an IP address object (IPv4 or IPv6).
     """
     return isinstance(address, IPv4Address) or isinstance(address, IPv6Address)
+
+
+# Custom JSON encoders
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
+class FlaskJSONProvider(flask.json.provider.DefaultJSONProvider):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
 
 
 def init_webdriver(headless=False, log_prefix='', implicit_wait=0.5, extension=None):
@@ -441,6 +456,7 @@ def get_whois_info(ip, local_cache, global_cache):
             cached_data = redis_client.get(f"webres6:whois:{ip}")
             if cached_data:
                 whois_info = json.loads(cached_data)
+                whois_info['ts'] = datetime.fromisoformat(whois_info['ts'])
                 if debug_whois:
                     print(f"\twhois cache redis hit for {ip}: {whois_info}", file=sys.stderr)
                 return whois_info
@@ -456,7 +472,7 @@ def get_whois_info(ip, local_cache, global_cache):
         if not redis_client:
             return
         try:
-            redis_client.setex(f"webres6:whois:{ip}", whois_cache_ttl, json.dumps(whois_info, default=str))
+            redis_client.setex(f"webres6:whois:{ip}", whois_cache_ttl, json.dumps(whois_info, cls=DateTimeEncoder))
         except Exception as e:
             print(f"\tWARNING: redis whois push failed for {ip}: {e}", file=sys.stderr)
 
@@ -632,7 +648,7 @@ def gen_json(url, hosts={}, ipv6_only_ready=None, screenshot=None, report_id=Non
     return { 'ID': report_id,
              'url': url,
              'error': error, 
-             'ts': timestamp.isoformat(),
+             'ts': timestamp,
              'ipv6_only_ready': ipv6_only_ready,
              'extension': extension,
              'hosts': { k: {
@@ -817,6 +833,8 @@ def create_http_app():
     # Start a simple HTTP API server using Flask
     app = Flask(__name__, static_folder=app_home)
     app.config['RESTFUL_JSON'] = {'ensure_ascii': False}
+    app.json_provider_class = FlaskJSONProvider
+    app.json = app.json_provider_class(app)
 
     print("creating endpoints:", file=sys.stderr)
 
