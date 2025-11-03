@@ -13,7 +13,7 @@ import platform
 import time
 from os import getenv
 from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
-from datetime import datetime
+from datetime import datetime, timezone
 from hashlib import sha256
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -489,7 +489,7 @@ def get_whois_info(ip, local_cache, global_cache):
                 return None
 
             whois_info = {
-                'ts': datetime.now(),
+                'ts': datetime.now(timezone.utc),
                 'asn': result.get("asn"),
                 'asn_description': result.get("asn_description"),
                 'asn_country': result.get("asn_country_code"),
@@ -562,7 +562,7 @@ def expire_whois_cache():
         int: Number of expired entries
     """
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     expired_keys = [ip for ip, data in whois_cache.items() if (now - data['ts']).total_seconds() > whois_cache_ttl]
     for ip in expired_keys:
         del whois_cache[ip]
@@ -619,7 +619,7 @@ def add_whois_info(hosts):
     return stats['global_cache_hit'], stats['local_cache_hit'], stats['redis_cache_hit'], stats['whois_lookup'], stats['whois_failed']
 
 
-def gen_json(url, hosts={}, ipv6_only_ready=None, screenshot=None, report_id=None, timestamp=datetime.now(), timings=None, extension=None, error=None):
+def gen_json(url, hosts={}, ipv6_only_ready=None, screenshot=None, report_id=None, timestamp=datetime.now(timezone.utc), timings=None, extension=None, error=None):
     """ prepare the hosts dictionary to be dumped as a JSON object.
     """
 
@@ -759,7 +759,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
             ts = datetime.fromisoformat(json_result.get('ts'))
             report_id = f"{int(ts.timestamp())}-{hash(url) % 2**sys.hash_info.width}-{report_node}"
             lp = f"res6 {report_id} "
-            cache_age = datetime.now() - ts
+            cache_age = datetime.now(timezone.utc) - ts
             print(f"{lp}sending cached result age={cache_age.total_seconds()}s {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
             print(f"{lp}options: wait={wait}s, timeout={timeout}s, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
             # update statistics
@@ -841,7 +841,7 @@ def create_http_app():
     print("\t/ping                liveliness probe endpoint", file=sys.stderr)
     @app.route('/ping', methods=['GET'])
     def ping():
-        return jsonify({'status': 'ok', 'ts': datetime.now().isoformat()}), 200
+        return jsonify({'status': 'ok', 'ts': datetime.now(timezone.utc).isoformat()}), 200
 
     print("\t/res6/$metadata      get OData metadata document", file=sys.stderr)
     @app.route('/res6/$metadata', methods=['GET'])
@@ -894,7 +894,7 @@ def create_http_app():
     def expwhois():
         if check_auth(request):
             expired = expire_whois_cache()
-            print(f"{int(datetime.now().timestamp())}-whois/expire-{report_node} expired {expired} whois cache entries", file=sys.stderr)
+            print(f"{int(datetime.now(timezone.utc).timestamp())}-whois/expire-{report_node} expired {expired} whois cache entries", file=sys.stderr)
             return jsonify({'status': 'ok', 'expired': expired}), 200
         else:
             resp = jsonify({'status': 'unauthorized'})
