@@ -569,7 +569,6 @@ def expire_whois_cache():
     if debug_whois and expired_keys:
         print(f"Expired {len(expired_keys)} entries from whois cache.", file=sys.stderr)
     # Update cache size metric
-    update_whois_cache_size()
     return len(expired_keys)
 
 
@@ -673,19 +672,19 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
 
     # collect timing stats
     timings = {}
-    ts = datetime.now()
+    ts = datetime.now(timezone.utc)
     last_ts = ts
 
     def push_timing(key):
         nonlocal last_ts
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         spent = (now - last_ts).total_seconds()
         timings[key] = spent
         webres6_time_spent.labels(phase=key).inc(spent)
         last_ts = now
 
     # init logging
-    report_id = f"{int(ts.timestamp())}-{hash(url) % 2**sys.hash_info.width}-{report_node}"
+    report_id = f"{int(ts.timestamp())}-url(#{hash(url) % 2**sys.hash_info.width})-{report_node}"
     lp = f"res6 {report_id} "
     webres6_tested_total.inc()
     print(f"{lp}testing {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
@@ -757,7 +756,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
             json_result = json.loads(cached_result)
             # update logging
             ts = datetime.fromisoformat(json_result.get('ts'))
-            report_id = f"{int(ts.timestamp())}-{hash(url) % 2**sys.hash_info.width}-{report_node}"
+            report_id = f"{int(ts.timestamp())}-url(#{hash(url) % 2**sys.hash_info.width})-{report_node}"
             lp = f"res6 {report_id} "
             cache_age = datetime.now(timezone.utc) - ts
             print(f"{lp}sending cached result age={cache_age.total_seconds()}s {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
@@ -859,7 +858,7 @@ def create_http_app():
     print("\t/res6/url(URL)       get JSON results for URL provided", file=sys.stderr)
     @app.route('/res6/url(<path:url>)', methods=['GET'])
     def res6_url(url):
-        ts = datetime.now()
+        ts = datetime.now(timezone.utc)
 
         # parse url
         if not url:
@@ -886,7 +885,7 @@ def create_http_app():
         result = crawl_and_analyze_url_cached(url, wait=wait, timeout=timeout, ext=ext,
                                           screenshot_mode=screenshot_mode, lookup_whois=lookup_whois,
                                           headless_selenium=headless_selenium, report_node=report_node)
-        webres6_response_time.labels(whois=str(lookup_whois), screenshot=str(screenshot_mode)).observe((datetime.now() - ts).total_seconds())
+        webres6_response_time.labels(whois=str(lookup_whois), screenshot=str(screenshot_mode)).observe((datetime.now(timezone.utc) - ts).total_seconds())
         return jsonify(result), 200
 
     print("\t/adm/whois/expire    expire old whois cache entries", file=sys.stderr)
@@ -896,6 +895,21 @@ def create_http_app():
             expired = expire_whois_cache()
             print(f"{int(datetime.now(timezone.utc).timestamp())}-whois/expire-{report_node} expired {expired} whois cache entries", file=sys.stderr)
             return jsonify({'status': 'ok', 'expired': expired}), 200
+        else:
+            resp = jsonify({'status': 'unauthorized'})
+            resp.mimetype = 'text/json'
+            resp.status_code = 401
+            resp.headers['WWW-Authenticate'] = 'Basic realm="webres6 admin"'
+            return resp
+
+    print("\t/adm/whois/flush    expire old whois cache entries", file=sys.stderr)
+    @app.route('/adm/whois/flush', methods=['GET'])
+    def flushwhois():
+        if check_auth(request):
+            flushed = len(whois_cache)
+            whois_cache.clear()
+            print(f"{int(datetime.now(timezone.utc).timestamp())}-whois/flush-{report_node} flushed {flushed} whois cache entries", file=sys.stderr)
+            return jsonify({'status': 'ok', 'flushed': flushed}), 200
         else:
             resp = jsonify({'status': 'unauthorized'})
             resp.mimetype = 'text/json'
