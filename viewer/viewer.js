@@ -239,19 +239,72 @@ function renderHostsTable(data, hostsContainer) {
 async function analyzeURL(url, wait = 2, screenshot = 'none', ext = null, whois = 'false') {
   // Generate new container
   const [domContainer, overview, domContainerId] = createResultsDomContainer(url);
-  $('#results-template .overview .status.status-loading').clone().appendTo(overview);
-  // Load the JSON data from the server
+  const loadingStatus = $('#results-template .overview .status.status-loading').clone();
+  loadingStatus.appendTo(overview);
+  // Retry configuration for HTTP 202 responses
+  const maxRetries = 5;
+  const baseDelay = 10*1000; // 10 seconds base delay
+  // Build API URL
   let apiUrl = getAPIBase() + `/url(${encodeURIComponent(url)})?wait=${wait}&screenshot=${screenshot}&whois=${whois}`;
   if (ext && ext !== "(none)") apiUrl += `&ext=${encodeURIComponent(ext)}`;
-  const response = await fetch(apiUrl);
-  domContainer.find('.overview .status.status-loading').remove();
-  if (response.ok) {
-    const data = await response.json();
-    renderData(data, domContainer, overview);
-  } else {
-    const errStatus = $('#results-template .overview .status.error').clone();
-    errStatus.find('.placeholder').text(response.statusText);
-    overview.append(errStatus);
+  // Retry logic with exponential backoff
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(apiUrl);
+      if (response.status === 202) {
+        // HTTP 202 Accepted - request is still processing
+        if (attempt < maxRetries) {
+          const delay = baseDelay * attempt
+          console.log(`HTTP 202 received, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
+          // Update loading message to show retry status
+          loadingStatus.find('strong').text(`Processing request... Retry ${attempt + 1}/${maxRetries + 1} (${delay/1000}s)`);
+          // Wait before retrying
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue; // Retry the request
+        } else {
+          // Max retries reached
+          console.error(`Max retries (${maxRetries}) reached for HTTP 202 responses`);
+          domContainer.find('.overview .status.status-loading').remove();
+          const errStatus = $('#results-template .overview .status.error').clone();
+          errStatus.find('.placeholder').text(`Request timed out after ${maxRetries} retries. Server is still processing the request.`);
+          errStatus.removeClass('template');
+          overview.append(errStatus);
+          return;
+        }
+      } else if (response.ok) {
+        // Success - process the response
+        domContainer.find('.overview .status.status-loading').remove();
+        const data = await response.json();
+        renderData(data, domContainer, overview);
+        return; // Exit successfully
+      } else {
+        // Other HTTP error - don't retry
+        domContainer.find('.overview .status.status-loading').remove();
+        const errStatus = $('#results-template .overview .status.error').clone();
+        errStatus.find('.placeholder').text(`${response.status} ${response.statusText}`);
+        errStatus.removeClass('template');
+        overview.append(errStatus);
+        return;
+      }
+    } catch (error) {
+      // Network or other fetch error
+      console.error(`Fetch error on attempt ${attempt + 1}:`, error);
+      if (attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        console.log(`Network error, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
+        // Update loading message to show retry status
+        loadingStatus.find('strong').text(`Network error, retrying in ${delay/1000}s... (attempt ${attempt + 1}/${maxRetries + 1})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue; // Retry the request
+      } else {
+        // Max retries reached for network errors
+        domContainer.find('.overview .status.status-loading').remove();
+        const errStatus = $('#results-template .overview .status.error').clone();
+        errStatus.find('.placeholder').text(`Network error after ${maxRetries} retries: ${error.message}`);
+        overview.append(errStatus);
+        return;
+      }
+    }
   }
 }
 

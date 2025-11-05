@@ -793,6 +793,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
 
     # Cache the result in Redis if available
     try:
+        redis_client.delete(cache_key)  # remove sentinel
         redis_client.set(cache_key, json.dumps(json_result, ensure_ascii=False, default=str).encode('utf-8'), ex=redis_cache_ttl)
     except (redis.RedisError, NameError) as e:
         print(f"WARNING: Redis cache store failed: {e}", file=sys.stderr)
