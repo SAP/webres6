@@ -257,7 +257,7 @@ async function analyzeURL(url, wait = 2, screenshot = 'none', ext = null, whois 
           const delay = baseDelay * attempt
           console.log(`HTTP 202 received, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
           // Update loading message to show retry status
-          loadingStatus.find('strong').text(`Processing request... Retry ${attempt + 1}/${maxRetries + 1} (${delay/1000}s)`);
+          loadingStatus.find('strong').append(` … ${attempt}`);
           // Wait before retrying
           await new Promise(resolve => setTimeout(resolve, delay));
           continue; // Retry the request
