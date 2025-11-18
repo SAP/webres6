@@ -37,7 +37,8 @@ selenium_username = getenv("SELENIUM_USERNAME", None)
 selenium_password = getenv("SELENIUM_PASSWORD", None)
 headless_selenium = getenv("HEADLESS_SELENIUM", False)
 redis_url        = getenv("REDIS_URL", None)
-redis_cache_ttl  = int(getenv("REDIS_CACHE_TTL", 900))  # Default 15min
+result_cache_ttl = int(getenv("REDIS_CACHE_TTL", 900))  # Default 15min
+result_archive_ttl = int(getenv("REDIS_ARCHIVE_TTL", 3600*24*90))  # Default 3 month
 app_home         = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 extensions_dir   = os.path.join(app_home, 'extensions')
 viewer_dir       = os.path.join(app_home, '..', 'viewer')
@@ -91,6 +92,7 @@ disable_created_metrics()
 webres6_tested_total = Counter('webres6_tested_total', 'Total number of checks performed')
 webres6_tested_results = Counter('webres6_results_total', 'Total number of results for checks performed', ['result'])
 webres6_cache_hits_total = Counter('webres6_cache_hits_total', 'Total number of cache hits')
+webres6_archive_total = Counter('webres6_archive_hits_total', 'Total number of archive hits', ['result'])
 webres6_time_spent = Counter('webres6_time_spent_seconds_total', 'Time spent in different processing phases', ['phase'])
 webres6_response_time = Histogram('webres6_response_time_seconds_total', 'Response time for checks performed', ['whois', 'screenshot'], buckets=(0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 90, 120, 150, 180))
 webres6_hostinfo_parsed = Counter('webres6_hostinfo_parsed_total', 'Total number of hostinfo entries parsed', ['type'])
@@ -488,7 +490,7 @@ def get_whois_info(ip, local_cache, global_cache):
         try:
             obj = IPWhois(str(ip))
             result = obj.lookup_rdap(depth=1)
-            
+
             # Extract network CIDR
             network_cidr = result.get("network", {}).get("cidr")
             if not network_cidr:
@@ -672,6 +674,11 @@ def gen_json(url, hosts={}, ipv6_only_ready=None, http_score=None, screenshot=No
              'screenshot': screenshot,
              'timings': timings if timings else {} }
 
+def gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, report_node):
+    """ Generates a unique report ID based on the input parameters.
+    """
+    subject = sha256(f"{url}:{wait}:{timeout}:{ext}:{screenshot_mode}:{lookup_whois}".encode('ascii')).hexdigest()
+    return f"{int(ts.timestamp()):x}-{subject}-{report_node}"
 
 def crawl_and_analyze_url(url, wait=2, timeout=10,
                           ext=None, screenshot_mode=None, headless_selenium=False,
@@ -694,8 +701,8 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
 
     # init logging
     if not report_id:
-        report_id = f"{int(ts.timestamp())}-{hash(url) % 2**sys.hash_info.width}-{report_node}"
-    lp = f"res6 {report_id} "
+        report_id = gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, report_node)
+    lp = f"res6 {report_id:.25} "
     webres6_tested_total.inc()
     print(f"{lp}testing {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
     print(f"{lp}options: wait={wait}s, timeout={timeout}s, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
@@ -745,6 +752,34 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
                             screenshot=screenshot, timestamp=ts, extension=ext, timings=timings), 200
 
 
+def get_archived_report(report_id):
+    """ Retrieves a cached report from Redis if available.
+    """
+
+    if not redis_client:
+        # Redis is not configured, skip cache lookup
+        return jsonify({ 'error': 'Archive links are not supported in this deployment', 'report_id': report_id }), 200
+
+    lp = f"res6 {report_id:.25} "
+    try:
+        archive_key = 'webres6:report:' + report_id
+        archive_result = redis_client.get(archive_key)
+        if archive_result:
+            report = json.loads(archive_result)
+            print(f"{lp}sending archived report {report_id}", file=sys.stderr)
+            webres6_archive_total.labels(result='success').inc()
+            return jsonify(report), 200
+        else:
+            print(f"{lp}WARNING: cached report {report_id} not found in archive", file=sys.stderr)
+            webres6_archive_total.labels(result='not_found').inc()
+            return jsonify({ 'error': 'Report not found in archive', 'report_id': report_id }), 404
+
+    except (redis.RedisError, json.JSONDecodeError) as e:
+        print(f"{lp}WARNING: Redis archive lookup failed: {e}", file=sys.stderr)
+        webres6_archive_total.labels(result='error').inc()
+        return jsonify({ 'error': 'Error retrieving report from archive', 'report_id': report_id }), 550
+
+
 def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
                                  ext=None, screenshot_mode=None, headless_selenium=False,
                                  lookup_whois=False, report_node='unknown'):
@@ -762,6 +797,8 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
     try:
         cached_result = redis_client.get(cache_key)
         if cached_result:
+            # update statistics
+            webres6_cache_hits_total.inc()
             # load cached result
             json_result = json.loads(cached_result)
             # understand why this may be a list
@@ -770,26 +807,34 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
                 json_result = json_result[0]
             # update logging
             ts = datetime.fromisoformat(json_result.get('ts'))
-            report_id = json_result.get('ID', 'unknown')
-            lp = f"res6 {report_id} "
+            report_id = json_result.get('report_id', 'unknown')
+            lp = f"res6 {report_id:.25} "
             cache_age = datetime.now(timezone.utc) - ts
-            print(f"{lp}sending cached result age={cache_age.total_seconds()}s {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
+            type = json_result.get('type', None)
+            data = json_result.get('data', None)
+            print(f"{lp}sending cached {type} age={cache_age.total_seconds()}s {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
             print(f"{lp}options: wait={wait}s, timeout={timeout}s, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
-            # update statistics
-            webres6_cache_hits_total.inc()
-            return json_result, json_result.get('error_code', 500)
+            if type == 'sentinel':
+                response = jsonify({ 'error': 'Crawl in progress - please come back later', 'report_id': report_id })
+                response.headers['Refresh'] = '15'
+                return response, 202
+            elif type == 'report':
+                return get_archived_report(report_id)
+            else:
+                print(f"{lp}WARNING: unknown cached result type {type}", file=sys.stderr)
+
     except (redis.RedisError, json.JSONDecodeError) as e:
         print(f"WARNING: Redis cache lookup failed: {e}", file=sys.stderr)
 
     # generate report id for logging
     ts = datetime.now(timezone.utc)
-    report_id = f"{int(ts.timestamp())}-{hash(url) % 2**sys.hash_info.width}-{report_node}"
+    report_id = gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, report_node)
     lp = f"res6 {report_id} "
 
     # Put a sentinel entry into the cache to avoid multiple concurrent crawls for the same URL
     try:
-        sentinel = gen_json(url, report_id=report_id, extension=ext, screenshot=screenshot_mode,
-                            error="crawl in progress - please come back later", error_code=202),
+        sentinel = { 'type': 'sentinel', 'ts': ts, 'report_id': report_id,
+                        'data': "crawl in progress - please come back later"}
         redis_client.set(cache_key, json.dumps(sentinel, ensure_ascii=False, default=str).encode('utf-8'), ex=max_timeout, nx=True)
     except (redis.RedisError, NameError) as e:
         print(f"WARNING: Redis cache store failed: {e}", file=sys.stderr)
@@ -797,17 +842,26 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
     # Perform actual crawl and cache the result
     json_result, error_code = crawl_and_analyze_url(url, wait=wait, timeout=timeout, ext=ext,
                                    screenshot_mode=screenshot_mode, headless_selenium=headless_selenium,
-                                   lookup_whois=lookup_whois, report_node=report_node)
+                                   lookup_whois=lookup_whois, report_id=report_id, report_node=report_node)
 
-    # Cache the result in Redis if available
+    # Archive the result in Redis
+    archive_key = 'webres6:report:' + report_id
     try:
+        redis_client.set(archive_key, json.dumps(json_result, ensure_ascii=False, default=str).encode('utf-8'), ex=result_archive_ttl)
+    except (redis.RedisError, NameError) as e:
+        print(f"WARNING: Redis archive store failed: {e}", file=sys.stderr)
+
+    # Cache the result in Redis
+    try:
+        cache_line = { 'type': 'report', 'ts': ts, 'report_id': report_id,
+                        'data': "./reports/" + report_id }
         redis_client.delete(cache_key)  # remove sentinel
-        redis_client.set(cache_key, json.dumps(json_result, ensure_ascii=False, default=str).encode('utf-8'), ex=redis_cache_ttl)
+        redis_client.set(cache_key, json.dumps(cache_line, ensure_ascii=False, default=str).encode('utf-8'), ex=result_cache_ttl)
     except (redis.RedisError, NameError) as e:
         print(f"WARNING: Redis cache store failed: {e}", file=sys.stderr)
 
     # return the result
-    return json_result, error_code
+    return jsonify(json_result), error_code
 
 
 def discover_extensions():
@@ -846,14 +900,14 @@ def create_http_app():
     extensions = discover_extensions()
 
     # get nodename for report id
-    report_node = platform.node()
+    report_node = platform.node().replace('.-@;', ' ').split()[0]
 
     # whois enabled?
     print(f"whois lookups are {'enabled with TTL ' + str(whois_cache_ttl) + 's' if enable_whois else 'disabled'}.", file=sys.stderr)
 
     # redis enabled?
     if redis_client:
-        print(f"using redis cache at {redis_url} with TTL {redis_cache_ttl}s.", file=sys.stderr)
+        print(f"using redis cache at {redis_url} with cache TTL {result_cache_ttl}s and archive TTL {result_archive_ttl}s.", file=sys.stderr)
     else:
         print("redis cache is disabled.", file=sys.stderr)
 
@@ -878,10 +932,11 @@ def create_http_app():
     print("\t/res6/serverconfig   list available extensions, screenshot-modes, whois support, ...", file=sys.stderr)
     @app.route('/res6/serverconfig', methods=['GET'])
     def res6_serverconfig():
-        return jsonify({'version': webres6_version, 
+        return jsonify({'version': webres6_version,
                         'message': srv_message, 'privacy_policy': privacy_policy,
                         'max_wait': max_wait, 'extensions': extensions,
-                        'whois': enable_whois, 'screenshot_modes': screenshot_modes}), 200
+                        'whois': enable_whois, 'screenshot_modes': screenshot_modes},
+                        'archive': redis_client is not None), 200
 
     print("\t/res6/url(URL)       get JSON results for URL provided", file=sys.stderr)
     @app.route('/res6/url(<path:url>)', methods=['GET'])
@@ -910,11 +965,19 @@ def create_http_app():
         if enable_whois and request.args.get('whois', 'false').lower() in ['1', 'true', 'yes', 'on']:
             lookup_whois = True
 
-        result, error_code = crawl_and_analyze_url_cached(url, wait=wait, timeout=timeout, ext=ext,
+        response, error_code = crawl_and_analyze_url_cached(url, wait=wait, timeout=timeout, ext=ext,
                                           screenshot_mode=screenshot_mode, lookup_whois=lookup_whois,
                                           headless_selenium=headless_selenium, report_node=report_node)
         webres6_response_time.labels(whois=str(lookup_whois), screenshot=str(screenshot_mode)).observe((datetime.now(timezone.utc) - ts).total_seconds())
-        return jsonify(result), error_code
+        return response, error_code
+
+    print("\t/res6/report/ID      get archived JSON results for report ID provided", file=sys.stderr)
+    @app.route('/res6/report/<string:report_id>', methods=['GET'])
+    def res6_report(report_id):
+        # check record id - only allow alphanumeric characters and hyphens
+        if not report_id.replace('-', '').isalnum():
+            return jsonify({'error': 'Invalid report ID.'}), 400
+        return get_archived_report(report_id)
 
     print("\t/adm/whois/expire    expire old whois cache entries", file=sys.stderr)
     @app.route('/adm/whois/expire', methods=['GET'])

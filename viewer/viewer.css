@@ -277,9 +277,15 @@ td.ip-netname {
   color: gray;
   float: left;
 }
+.archivelink {
+  font-size: small;
+  float: right;
+  padding-left: 1em;
+}
 .rawdata {
   font-size: small;
   float: right;
+  padding-left: 1em;
 }
 @media (prefers-color-scheme: dark) {
   body {

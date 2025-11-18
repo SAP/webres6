@@ -12,6 +12,7 @@ function getAPIBase() {
 /* Load server config
  * this loads and renders messages, browser extensions in remote Selenium, screenshot modes, whois support and more
  */
+var srvSupportsArchiveLinks = false;
 async function loadSrvConfig() {
   // load config
   try {
@@ -53,6 +54,10 @@ async function loadSrvConfig() {
       if (srvconfig && srvconfig.whois) {
         $('#whoisSwitchContainer').removeClass('template');
         $('#whoisLookup').attr('checked', 'true');
+      }
+      // Archive link support
+      if (srvconfig && srvconfig.archive) {
+        srvSupportsArchiveLinks = true;
       }
       // Show input section
       $('#input').removeClass('template');
@@ -127,6 +132,11 @@ function renderData(data, domContainer, overview) {
       $.map(['crawl', 'screenshot', 'extract', 'whois'], function(label) { return data.timings[label] ? `${label}: ${data.timings[label].toFixed(2)}s` : null; }).join(', ')
     );
     timingContainer.removeClass('template');
+  }
+  if (srvSupportsArchiveLinks && data.ID) {
+    const archivelinkContainer = footer.find('.archivelink');
+    archivelinkContainer.find('a').attr('href', `#report:${data.ID}`);
+    archivelinkContainer.removeClass('template');
   }
   const rawdataContainer = footer.find('.rawdata');
   rawdataContainer.find('a').attr('href', `data:text/json;charset=utf-8;base64, ${btoa(JSON.stringify(data, null, 2))}`);
@@ -315,6 +325,38 @@ async function analyzeURL(url, wait = 2, screenshot = 'none', ext = null, whois 
   }
 }
 
+async function analyzeReport(report) {
+  // Generate new container
+  const [domContainer, overview, domContainerId] = createResultsDomContainer(report.substring(0, 25));
+  const loadingStatus = $('#results-template .overview .status.status-loading').clone();
+  loadingStatus.appendTo(overview);
+  // Fetch report data
+  reportUrl = getAPIBase() + `/report/${encodeURIComponent(report)}`;
+  try {
+    const response = await fetch(reportUrl);
+    if (response.ok) {
+      // Success - process the response
+      domContainer.find('.overview .status.status-loading').remove();
+      const data = await response.json();
+      renderData(data, domContainer, overview);
+    } else {
+      // HTTP error
+      domContainer.find('.overview .status.status-loading').remove();
+      const errStatus = $('#results-template .overview .status.error').clone();
+      errStatus.find('.placeholder').text(`${response.status} ${response.statusText}`);
+      errStatus.removeClass('template');
+      overview.append(errStatus);
+    }
+  } catch (error) {
+      domContainer.find('.overview .status.status-loading').remove();
+      const errStatus = $('#results-template .overview .status.error').clone();
+      errStatus.find('.placeholder').text(`${response.status} ${response.statusText}`);
+      errStatus.removeClass('template');
+      overview.append(errStatus);
+  }
+}
+
+
 /* Allow to load saved json dumps of previous analysis by dropping them somewhere on the browser window */
 function handleJsonDrop(event) {
   $.each(event.dataTransfer.files, function(i, file) {
@@ -343,10 +385,16 @@ $(document).ready(function() {
   // Load server config (messages, browser extensions in remote Selenium, screenshot modes, whois support)
   loadSrvConfig();
   // Check for URL anchor and analyze it if present
-  const anchorUrl = document.URL.split('#')[1];
-  if (anchorUrl) {
-    $('#input').hide();
-    analyzeURL(anchorUrl);
+  const anchor = document.URL.split('#')[1];
+  if (anchor) {
+    const [verb, target] = anchor.split(':');
+    if (verb.toLowerCase() === 'url' && target) {
+      $('#input').hide();
+      analyzeURL(decodeURIComponent(target));
+    } else if (verb.toLowerCase() === 'report' && target) {
+      $('#input').hide();
+      analyzeReport(target)
+    }
   }
   // Add form submit handler
   $('#urlForm').on('submit', function(e) {
