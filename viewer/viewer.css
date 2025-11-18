@@ -111,6 +111,13 @@ h1 {
   background: lightgray;
   color: #501030;
 }
+.overview-item progress {
+  accent-color: #1a7a1a;
+  width: 60%;
+  height: 2ex;
+  vertical-align: middle;
+  margin-right: 8px;
+}
 table {
   border-collapse: collapse;
   width: 100%;
@@ -324,6 +331,9 @@ td.ip-netname {
     background: darkgray;
     color: #501030;
   }
+  .overview-item progress {
+    accent-color: lightseagreen;
+  }
   td.protocol {
     color: #666
   }
@@ -352,6 +362,9 @@ td.ip-netname {
   }
   .contents-container {
     padding: 16px 16px 12px 16px;
+  }
+  .overview-item progress {
+    width: 30%;
   }
   td.protocol, th.protocol {
     visibility: collapse;

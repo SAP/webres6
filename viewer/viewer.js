@@ -83,6 +83,13 @@ function renderData(data, domContainer, overview) {
     errStatus.find('.placeholder').text(data.error);
     overview.append(errStatus);
   }
+  // IPv6-Only HTTP Score
+  if (data.ipv6_only_http_score !== undefined) {
+    const httpScoreStatus = $('#results-template .overview .status.ipv6only-http-score').clone();
+    httpScoreStatus.find('progress').attr('value', (data.ipv6_only_http_score));
+    httpScoreStatus.find('.percentage').text((data.ipv6_only_http_score * 100).toFixed(1));
+    overview.append(httpScoreStatus);
+  }
   // Status
   let v6status;
   if (data.ipv6_only_ready === true) {

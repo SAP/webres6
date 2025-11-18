@@ -214,6 +214,9 @@ def display_results(res, args):
     if res.get('url'):
         print(f"URL: {res['url']}")
 
+    if http_score := res.get('ipv6_only_http_score'): 
+        print(f"IPv6-Only HTTP score: {http_score*100:.1f}%")
+
     # generate output
     output_lines = gen_fancy_hostlist(res.get('hosts', {}), original_host=urlparse(args.url).hostname,
                                     show_proto=not(args.hide_proto), show_prfxinfo = args.show_network,

@@ -405,23 +405,30 @@ def cleanup_crawl(driver, log_prefix=''):
         print(f"{log_prefix}ERROR: failed quitting WebDriver: {e.msg}", file=sys.stderr)
     return
 
-def check_ipv6_only_ready(hosts):
+def get_ipv6_only_http_score(hosts):
     """ Checks if any host in the dictionary has an IPv4 address.
     """
 
     if not hosts or len(hosts) == 0:
-        return None
+        return None, None
 
+    ipv6_only_ready = True
+    resources_total = 0
+    resources_ipv6 = 0
     for hostname, info in hosts.items():
         has_ipv6 = False
+        resources_total += len(info.get('urls', []))
         for ip in info.get('ips', []):
             if not is_ip(ip):
                 pass # ignore non-ip addresses
             elif ip.version == 6 and not ip.is_nat64() and not ip.ipv4_mapped:
                 has_ipv6 = True
         if not has_ipv6:
-            return False
-    return True
+            ipv6_only_ready = False
+        else:
+            resources_ipv6 += len(info.get('urls', []))
+
+    return resources_ipv6 / resources_total if resources_total > 0 else None, ipv6_only_ready
 
 def get_whois_info(ip, local_cache, global_cache):
     """ Fetches WHOIS information for the given IP address using local and global caches.
@@ -618,7 +625,7 @@ def add_whois_info(hosts):
     return stats['global_cache_hit'], stats['local_cache_hit'], stats['redis_cache_hit'], stats['whois_lookup'], stats['whois_failed']
 
 
-def gen_json(url, hosts={}, ipv6_only_ready=None, screenshot=None, report_id=None, timestamp=datetime.now(timezone.utc), timings=None, extension=None, error=None, error_code=200):
+def gen_json(url, hosts={}, ipv6_only_ready=None, http_score=None, screenshot=None, report_id=None, timestamp=datetime.now(timezone.utc), timings=None, extension=None, error=None, error_code=200):
     """ prepare the hosts dictionary to be dumped as a JSON object.
     """
 
@@ -649,6 +656,7 @@ def gen_json(url, hosts={}, ipv6_only_ready=None, screenshot=None, report_id=Non
              'error': error,
              'error_code': error_code,
              'ts': timestamp,
+             'ipv6_only_http_score': http_score,
              'ipv6_only_ready': ipv6_only_ready,
              'extension': extension,
              'hosts': { k: {
@@ -686,7 +694,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
 
     # init logging
     if not report_id:
-        report_id = f"{int(ts.timestamp())}-url(#{hash(url) % 2**sys.hash_info.width})-{report_node}"
+        report_id = f"{int(ts.timestamp())}-{hash(url) % 2**sys.hash_info.width}-{report_node}"
     lp = f"res6 {report_id} "
     webres6_tested_total.inc()
     print(f"{lp}testing {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
@@ -717,8 +725,8 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
     hosts = get_hostinfo(driver, log_prefix=lp)
     print(f"{lp}found {len(hosts)} hosts", file=sys.stderr)
     cleanup_crawl(driver)
-    ipv6_only_ready = check_ipv6_only_ready(hosts)
-    print(f"{lp}website is {'' if ipv6_only_ready else 'NOT '}ipv6-only ready", file=sys.stderr)
+    http_score, ipv6_only_ready = get_ipv6_only_http_score(hosts)
+    print(f"{lp}website is {'' if ipv6_only_ready else 'NOT '}ipv6-only ready (score={http_score*100:.1f}%)", file=sys.stderr)
     push_timing('extract')
 
     if lookup_whois:
@@ -733,7 +741,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
         webres6_tested_results.labels(result='not_ipv6_only_ready').inc()
 
     # send response
-    return gen_json(url, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready,
+    return gen_json(url, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready, http_score=http_score,
                             screenshot=screenshot, timestamp=ts, extension=ext, timings=timings), 200
 
 
@@ -775,7 +783,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
 
     # generate report id for logging
     ts = datetime.now(timezone.utc)
-    report_id = f"{int(ts.timestamp())}-url(#{hash(url) % 2**sys.hash_info.width})-{report_node}"
+    report_id = f"{int(ts.timestamp())}-{hash(url) % 2**sys.hash_info.width}-{report_node}"
     lp = f"res6 {report_id} "
 
     # Put a sentinel entry into the cache to avoid multiple concurrent crawls for the same URL
