@@ -81,7 +81,7 @@ function createResultsDomContainer(url) {
 }
 
 /* Render JSON dump of IPv6 Web Resource Checker dump */
-function renderData(data, domContainer, overview) {
+function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
   // Error (if present)
   if (data.error) {
     const errStatus = $('#results-template .overview .status.error').clone();
@@ -89,7 +89,7 @@ function renderData(data, domContainer, overview) {
     overview.append(errStatus);
   }
   // IPv6-Only HTTP Score
-  if (data.ipv6_only_http_score !== undefined) {
+  if (data.ipv6_only_http_score !== null) {
     const httpScoreStatus = $('#results-template .overview .status.ipv6only-http-score').clone();
     httpScoreStatus.find('progress').attr('value', (data.ipv6_only_http_score));
     httpScoreStatus.find('.percentage').text((data.ipv6_only_http_score * 100).toFixed(1));
@@ -133,13 +133,17 @@ function renderData(data, domContainer, overview) {
     );
     timingContainer.removeClass('template');
   }
-  if (srvSupportsArchiveLinks && data.ID) {
+  if (apiBase && srvSupportsArchiveLinks && data.ID) {
     const archivelinkContainer = footer.find('.archivelink');
     archivelinkContainer.find('a').attr('href', `#report:${data.ID}`);
     archivelinkContainer.removeClass('template');
   }
   const rawdataContainer = footer.find('.rawdata');
-  rawdataContainer.find('a').attr('href', `data:text/json;charset=utf-8;base64, ${btoa(JSON.stringify(data, null, 2))}`);
+  if (apiBase && srvSupportsArchiveLinks && data.ID) {
+    rawdataContainer.find('a').attr('href', `${getAPIBase()}/report/${data.ID}`);
+  } else {
+    rawdataContainer.find('a').attr('href', `data:text/json;charset=utf-8;base64, ${btoa(JSON.stringify(data, null, 2))}`);
+  }
   rawdataContainer.removeClass('template');
 }
 
@@ -368,7 +372,7 @@ function handleJsonDrop(event) {
         try {
           jsonData = JSON.parse(data);
           const [domContainer, overview, domContainerId] = createResultsDomContainer('Dropped URL');
-          renderData(jsonData, domContainer, overview);
+          renderData(jsonData, domContainer, overview, null);
         } catch (e) {
           alert('Invalid JSON data dropped. Only IPv6 Web Resource Checker JSON dumps can be rendered!');
         }

@@ -1,4 +1,7 @@
-*/.venv/
+.github/
 .vscode/
-pyvenv.cfg
+*/.venv/
+*/__pycache__/
 deploy/*-secret.yaml
+local_cache/
+pyvenv.cfg

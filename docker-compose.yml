@@ -22,10 +22,11 @@ services:
       - "6400:6400"
     environment:
       - SELENIUM_REMOTE_URL=http://selenium:4444/wd/hub
-      - REDIS_URL=redis://webres6-redis:6379/0
-      - REDIS_CACHE_TTL=90
       - ENABLE_WHOIS=true
-      - WHOIS_TTL=3600
+      - REDIS_URL=redis://webres6-redis:6379/0
+      - WHOIS_CACHE_TTL=3600
+      - RESULT_CACHE_TTL=90
+      - RESULT_ARCHIVE_TTL=3600
     depends_on:
       - selenium
       - redis

@@ -53,16 +53,20 @@ spec:
             - name: SELENIUM_PASSWORD
               value: {{ .Values.seleniumHub.password | quote }}
             {{- end }}
-            - name: ENABLE_WHOIS
-              value: {{ .Values.api.whois.enabled | quote }}
-            - name: WHOIS_TTL
-              value: {{ .Values.api.whois.cacheTTL | quote }}
+            {{- if .Values.api.redis.url }}
             - name: REDIS_URL
-              value: {{ .Values.api.redisCache.url | quote }}
-            - name: REDIS_CACHE_TTL
-              value: {{ .Values.api.redisCache.cacheTTL | quote }}
+              value: {{ .Values.api.redis.url | quote }}
+            {{- end }}
+            - name: ENABLE_WHOIS
+              value: {{ .Values.api.whois.enabled | quote | default "true" }}
+            - name: WHOIS_CACHE_TTL
+              value: {{ .Values.api.whois.cacheTTL | quote }}
+            - name: RESULT_CACHE_TTL
+              value: {{ .Values.api.results.cacheTTL | quote }}
+            - name: RESULT_ARCHIVE_TTL
+              value: {{ .Values.api.results.archiveTTL | quote }}
             - name: TIMEOUT
-              value: {{ .Values.requestTimeout | quote }}
+              value: {{ .Values.api.timeout | quote }}
             - name: PORT
               value: {{ .Values.api.port | quote }}
             - name: GUNICORN_CMD_ARGS
@@ -96,36 +100,6 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-        {{- if .Values.api.whois.enabled }}
-        - name: webres6-whois-cache-expire
-          image: "{{ .Values.curl.image.repository | default "curlimages/curl" }}:{{ .Values.curl.image.tag | default "latest" }}"
-          imagePullPolicy: {{ .Values.curl.image.pullPolicy }}
-          env: 
-            - name: SLEEP_INTERVAL
-              value: {{ .Values.api.whois.cacheExpire | default "3600" | quote }}
-            - name: ADMIN_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.adminSecret.name | default (include "webres6.fullname" .) }}
-                  key: admin-key
-          command: ['/bin/sh']
-          args:
-            - -ec
-            - "while sleep $SLEEP_INTERVAL; do curl --no-progress-meter --request GET 'http://localhost:6400/adm/whois/expire?key='${ADMIN_KEY} ; done"
-          {{- with .Values.curl.securityContext }}
-          securityContext:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{ with .Values.curl.resources}}
-          resources:
-            requests:
-              memory: {{ .requests.memory | default "64Mi" }}
-              cpu: {{ .requests.cpu | default "100m" }}
-            limits:
-              memory: {{ .limits.memory | default "128Mi" }}
-              cpu: {{ .limits.cpu | default "200m" }}
-          {{- end }}
-        {{- end }}
       volumes:
         - name: serverconfig
           configMap:

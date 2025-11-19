@@ -43,11 +43,12 @@ api:
   podLabels: {}
   whois:
     enabled: true
-    cacheTTL: 86400
-    cacheExpire: 1800
-  redisCache:
+    cacheTTL: "86400"
+  redis:
     url: ""
-    cacheTTL: 900
+  results:
+    cacheTTL: "180"
+    archiveTTL: "7776000"
   resources:
     requests:
       cpu: "500m"
@@ -143,9 +144,6 @@ autoscaling:
   minReplicas: 1
   maxReplicas: 10
   targetCPUUtilizationPercentage: 80
-
-
-  # fsGroup: 2000
 
 securityContext: {}
 #  capabilities:

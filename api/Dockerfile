@@ -10,7 +10,7 @@ WORKDIR /app
 RUN apk add --no-cache bash
 
 # Copy application code
-COPY api/requirements.txt api/docker-entrypoint api/webres6-api.py api/webres6-api-metadata.xml ./
+COPY api/requirements.txt api/docker-entrypoint api/webres6-api.py api/webres6_storage.py api/webres6-api-metadata.xml ./
 
 # Install python dependencies
 RUN pip install --no-cache-dir -r requirements.txt; \

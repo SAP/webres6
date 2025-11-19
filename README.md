@@ -120,14 +120,16 @@ Options:
   --debug                     Enable debugging output
 
 Environment variables:
-  SELENIUM_REMOTE_URL         Use remote Selenium server instead of starting selenium for each request
-  NAT64_PREFIXES              Comma-separated list of NAT64 prefixes
   ADMIN_API_KEY               API Key to call privileged functions
   TIMEOUT                     Maximum timeout value in seconds
-  ENABLE_WHOIS                Enable clients to request whois lookups
-  WHOIS_TTL                   Expiry time for internal whois cache
+  NAT64_PREFIXES              Comma-separated list of NAT64 prefixes
+  SELENIUM_REMOTE_URL         Use remote Selenium server instead of starting selenium for each request
   REDIS_URL                   URL for optional REDIS cache
-  REDIS_CACHE_TTL             Expiry time for REDIS results cache
+  LOCAL_CACHE_DIR             DIR for optional LOCAL filesystem-based cache
+  ENABLE_WHOIS                Enable clients to request whois lookups
+  WHOIS_CACHE_TTL             Expiry time for whois cache
+  RESULT_CACHE_TTL            Expiry time for result cache
+  RESULT_ARCHIVE_TTL          Expiry time for result archive
 
 API endpoints:
   /ping                       liveness probe endpoint
