@@ -752,7 +752,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
                                       lookup_whois=lookup_whois, report_node=report_node)
 
     # Try to lookup in Redis cache first if available
-    cache_key = sha256(f"{url}:{wait}:{timeout}:{ext}:{screenshot_mode}:{lookup_whois}".encode('ascii')).hexdigest()
+    cache_key = sha256(f"{url}:{wait}:{timeout}:{ext}:{screenshot_mode}:{lookup_whois}".encode('utf-8')).hexdigest()
     json_result = storage_manager.get_result_cacheline(cache_key)
     if json_result:
         # update statistics
