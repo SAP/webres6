@@ -62,7 +62,9 @@ As modern Web pages tend to be complex, this will most likely result in many res
  - Because we don't have long-term cooke state, we [expect that some advertisements and analytics may not be loaded](https://doi.org/10.48550/arXiv.2506.11947).
  - No authentication/login takes place
 
-It ignores DNS aspects: Even if this tool reports green, it is still necessary to check the whole DNS delegation chain of all hosts involved for IPv6-only realness. A tool for this is [ready.chair6.net](/https://ready.chair6.net/).
+Without *dnsprobe*, it ignores DNS aspects: Even if this tool reports green, it is still necessary to check the whole DNS delegation chain of all hosts involved for IPv6-only realness.
+With the *dnsprobe* microservice included in the project, DNS testing is a little fragile, especially in containerized environments.
+A tool for more thorough DNS IPv6-only testing is [ready.chair6.net](/https://ready.chair6.net/).
 
 
 ## Requirements 
@@ -85,6 +87,12 @@ It ignores DNS aspects: Even if this tool reports green, it is still necessary t
 
 - jquery-3.7.1
 - 72 web font
+
+### DNS probe
+
+- libunbound with python bindings
+- Flask 3.1.2+
+- A dual-stack or IPv6-only host with clean outbound DNS connectivity / no DNS mingling
 
 ## Setup (development):
 
@@ -124,6 +132,7 @@ Environment variables:
   TIMEOUT                     Maximum timeout value in seconds
   NAT64_PREFIXES              Comma-separated list of NAT64 prefixes
   SELENIUM_REMOTE_URL         Use remote Selenium server instead of starting selenium for each request
+  DNSPROBE_API_URL            Enable DNS checking using specified dns probe service
   REDIS_URL                   URL for optional REDIS cache
   LOCAL_CACHE_DIR             DIR for optional LOCAL filesystem-based cache
   ENABLE_WHOIS                Enable clients to request whois lookups

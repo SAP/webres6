@@ -7,11 +7,10 @@ FROM debian:trixie-slim
 WORKDIR /app
 
 # Install non-python dependencies
-RUN  apt update \
-  && apt install -y --no-install-recommends bash python3 unbound-anchor python3-unbound python3-flask gunicorn python3-gunicorn\
+RUN  apt update --yes\
+  && apt install --yes bash python3 python3-unbound python3-flask gunicorn python3-gunicorn\
   && apt clean \
   && rm -rf /var/lib/apt/lists/*
-RUN unbound-anchor -a "/var/lib/unbound/root.key"
 
 # Copy application code
 COPY dnsprobe/docker-entrypoint dnsprobe/dnsprobe.py dnsprobe/unbound.v6only.conf ./

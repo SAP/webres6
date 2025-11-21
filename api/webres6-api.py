@@ -11,6 +11,7 @@ import json
 import os
 import platform
 import time
+import requests
 from os import getenv
 from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 from datetime import datetime, timezone, timedelta
@@ -27,7 +28,7 @@ from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics
 from webres6_storage import StorageManager, LocalStorageManager, RedisStorageManager 
 
 # config/flag variables
-webres6_version  = "0.1.0"
+webres6_version  = "1.0.0"
 debug_whois      = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo   = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask      = 'flask'    in getenv("DEBUG", '').lower().split(',')
@@ -36,6 +37,7 @@ selenium_remote  = getenv("SELENIUM_REMOTE_URL", None)
 selenium_username = getenv("SELENIUM_USERNAME", None)
 selenium_password = getenv("SELENIUM_PASSWORD", None)
 headless_selenium = getenv("HEADLESS_SELENIUM", False)
+dnsprobe_api_url = getenv("DNSPROBE_API_URL", None)
 redis_url        = getenv("REDIS_URL", None)
 result_cache_ttl = int(getenv("RESULT_CACHE_TTL", 900))  # Default 15min
 result_archive_ttl = int(getenv("RESULT_ARCHIVE_TTL", 3600*24*90))  # Default 3 month
@@ -413,6 +415,7 @@ def get_hostinfo(driver, log_prefix=''):
 
     return hosts
 
+
 def cleanup_crawl(driver, log_prefix=''):
     """Cleans up the Selenium WebDriver instance by safely quitting it.
 
@@ -430,7 +433,43 @@ def cleanup_crawl(driver, log_prefix=''):
         print(f"{log_prefix}ERROR: failed quitting WebDriver: {e.msg}", file=sys.stderr)
     return
 
-def get_ipv6_only_http_score(hosts):
+
+def add_dnsprobe_info(hosts):
+    """ Adds DNSProbe information for each unique IP address in the hosts dictionary.
+    """
+
+    total = 0
+    success = 0
+    noerror = 0
+    servfail = 0
+
+    for hostname, info in hosts.items():
+        dnsprobe_data = {}
+        try:
+            response = requests.get(f"{dnsprobe_api_url}/resolve6only({hostname})", timeout=10)
+            if response.status_code == 200:
+                dnsprobe_data = response.json()
+            total += 1
+            if dnsprobe_data.get('success', False):
+                success += 1
+                dnsprobe_data['ipv6_only_ready'] = True
+            elif dnsprobe_data.get('rcode', '') == 'no error':
+                noerror += 1
+                dnsprobe_data['ipv6_only_ready'] = True
+            elif dnsprobe_data.get('rcode', '') == 'serv fail':
+                servfail += 1
+                dnsprobe_data['ipv6_only_ready'] = False
+        except requests.RequestException as e:
+            print(f"\tWARNING: DNSProbe lookup failed for {hostname}: {e}", file=sys.stderr)
+            dnsprobe_data = None
+
+        # Add DNSProbe data to host info
+        info['dns'] = dnsprobe_data
+    
+    return total, success, noerror, servfail
+
+
+def get_ipv6_only_score(hosts):
     """ Checks if any host in the dictionary has an IPv4 address.
     """
 
@@ -439,10 +478,14 @@ def get_ipv6_only_http_score(hosts):
 
     ipv6_only_ready = True
     resources_total = 0
-    resources_ipv6 = 0
+    resources_ipv6_http = 0
+    resources_ipv6_dns = 0
+    has_dnsinfo = True
     for hostname, info in hosts.items():
+        # calculate http score
         has_ipv6 = False
-        resources_total += len(info.get('urls', []))
+        resources = len(info.get('urls', []))
+        resources_total += resources
         for ip in info.get('ips', []):
             if not is_ip(ip):
                 pass # ignore non-ip addresses
@@ -451,9 +494,20 @@ def get_ipv6_only_http_score(hosts):
         if not has_ipv6:
             ipv6_only_ready = False
         else:
-            resources_ipv6 += len(info.get('urls', []))
+            resources_ipv6_http += resources
+        # calculate dns score
+        if 'dns' in info and 'ipv6_only_ready' in info['dns']:
+            if info['dns'].get('ipv6_only_ready'):
+                resources_ipv6_dns += resources
+            else:
+                ipv6_only_ready = False
+        elif 'dns' not in info:
+            has_dnsinfo = False
 
-    return resources_ipv6 / resources_total if resources_total > 0 else None, ipv6_only_ready
+    http_score = resources_ipv6_http / resources_total if resources_total > 0 else None
+    dns_score = resources_ipv6_dns / resources_total if resources_total > 0 and has_dnsinfo else None
+
+    return http_score, dns_score, ipv6_only_ready
 
 def get_whois_info(ip, local_cache):
     """ Fetches WHOIS information for the given IP address using local and global caches.
@@ -594,7 +648,7 @@ def add_whois_info(hosts):
     return stats['global_cache_hit'], stats['local_cache_hit'], stats['whois_lookup'], stats['whois_failed']
 
 
-def gen_json(url, hosts={}, ipv6_only_ready=None, http_score=None, screenshot=None, report_id=None, timestamp=datetime.now(timezone.utc), timings=None, extension=None, error=None, error_code=200):
+def gen_json(url, hosts={}, ipv6_only_ready=None, http_score=None, dns_score=None, screenshot=None, report_id=None, timestamp=datetime.now(timezone.utc), timings=None, extension=None, error=None, error_code=200):
     """ prepare the hosts dictionary to be dumped as a JSON object.
     """
 
@@ -626,6 +680,7 @@ def gen_json(url, hosts={}, ipv6_only_ready=None, http_score=None, screenshot=No
              'error_code': error_code,
              'ts': timestamp,
              'ipv6_only_http_score': http_score,
+             'ipv6_only_dns_score': dns_score,
              'ipv6_only_ready': ipv6_only_ready,
              'extension': extension,
              'hosts': { k: {
@@ -635,6 +690,7 @@ def gen_json(url, hosts={}, ipv6_only_ready=None, http_score=None, screenshot=No
                  'ips': {
                      str(ip): gen_json_ips(ip, v) for ip in v['ips']
                  },
+                 'dns': v.get('dns', None),
                  'subject_alt_names': sorted(v['subject_alt_names'])
                  } for k, v in hosts.items()
              },
@@ -699,9 +755,16 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
     hosts = get_hostinfo(driver, log_prefix=lp)
     print(f"{lp}found {len(hosts)} hosts", file=sys.stderr)
     cleanup_crawl(driver)
-    http_score, ipv6_only_ready = get_ipv6_only_http_score(hosts)
-    print(f"{lp}website is {'' if ipv6_only_ready else 'NOT '}ipv6-only ready (score={http_score*100:.1f}%)", file=sys.stderr)
     push_timing('extract')
+
+    # add dnsprobe info if configured
+    if dnsprobe_api_url:
+        total, success, noerror, servfail = add_dnsprobe_info(hosts)
+        print(f"{lp}dnsprobe lookups completed: {total} total, {noerror} no error, {success} success, {servfail} servfail", file=sys.stderr)
+        push_timing('dnsprobe')
+
+    http_score, dns_score, ipv6_only_ready = get_ipv6_only_score(hosts)
+    print(f"{lp}website is {'' if ipv6_only_ready else 'NOT '}ipv6-only ready (http={http_score*100:.1f}%, dns={f"{dns_score*100:.1f}%" if dns_score is not None else 'N/A'})", file=sys.stderr)
 
     if lookup_whois:
         gch, lch, qs, qf = add_whois_info(hosts)
@@ -715,8 +778,9 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
         webres6_tested_results.labels(result='not_ipv6_only_ready').inc()
 
     # send response
-    return gen_json(url, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready, http_score=http_score,
-                            screenshot=screenshot, timestamp=ts, extension=ext, timings=timings), 200
+    return gen_json(url, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready, 
+                    http_score=http_score, dns_score=dns_score,
+                    screenshot=screenshot, timestamp=ts, extension=ext, timings=timings), 200
 
 
 def get_archived_report(report_id):

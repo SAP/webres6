@@ -24,7 +24,8 @@ unbound_v6_conf  = getenv("UNBOUND_V6ONLY_CONF", os.path.join(app_home, "unbound
 
 # unbound context
 unbound_v6ctx = unbound.ub_ctx()
-unbound_v6ctx.debuglevel(2)
+if debug_unbound:
+    unbound_v6ctx.debuglevel(2)
 unbound_v6ctx.config(unbound_v6_conf)
 
 # custom json provider
@@ -65,6 +66,7 @@ def res_v6only(hostname):
         'hostname': hostname,
         'success': bool(status==0 and result.havedata),
         'rcode': result.rcode_str,
+        'nxdomain': bool(result.nxdomain),
         'time_elapsed': elapsed,
         'ts': ts,
     }

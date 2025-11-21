@@ -95,6 +95,13 @@ function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
     httpScoreStatus.find('.percentage').text((data.ipv6_only_http_score * 100).toFixed(1));
     overview.append(httpScoreStatus);
   }
+  // IPv6-Only DNS Score
+  if (data.ipv6_only_dns_score !== null) {
+    const dnsScoreStatus = $('#results-template .overview .status.ipv6only-dns-score').clone();
+    dnsScoreStatus.find('progress').attr('value', (data.ipv6_only_dns_score));
+    dnsScoreStatus.find('.percentage').text((data.ipv6_only_dns_score * 100).toFixed(1));
+    overview.append(dnsScoreStatus);
+  }
   // Status
   let v6status;
   if (data.ipv6_only_ready === true) {
