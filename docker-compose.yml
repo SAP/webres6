@@ -49,6 +49,20 @@ services:
     depends_on:
       - webres6-api
 
+  dnsprobe:
+    build:
+      context: .
+      dockerfile: dnsprobe/Dockerfile
+      x-bake:
+        platforms:
+          - linux/amd64
+          - linux/arm64
+    container_name: webres6-dnsprobe
+    networks:
+      - webres6-network
+    ports:
+      - "6453:6453"
+
   selenium:
     image: selenium/standalone-chromium:latest
     networks:

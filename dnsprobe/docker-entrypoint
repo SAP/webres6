@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#
+# SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+
+if [ -z "$PORT" ]; then
+  PORT=6453
+fi
+if [ -z "$TIMEOUT" ]; then
+  TIMEOUT=30
+fi
+export PORT TIMEOUT
+
+# Set locale
+export LANG='en_US.UTF-8'
+export LC_ALL='en_US.UTF-8'
+
+printenv
+
+set -e
+
+gunicorn --bind "[::]:${PORT}" --timeout ${TIMEOUT} $@ 'dnsprobe:create_http_app()'
