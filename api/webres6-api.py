@@ -11,7 +11,6 @@ import json
 import os
 import platform
 import time
-import requests
 from os import getenv
 from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 from datetime import datetime, timezone, timedelta
@@ -21,6 +20,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.client_config import ClientConfig
 from selenium.common.exceptions import WebDriverException
 from urllib.parse import urlparse
+import urllib3
 import flask
 from flask import Flask, redirect, request, jsonify, send_from_directory
 from ipwhois import IPWhois
@@ -106,6 +106,15 @@ if os.path.exists(extensions_dir):
 
 # define storage manager - initialize later
 storage_manager = None
+
+# create connection pool for dnsprobe if needed
+dnsprobe = None
+if dnsprobe_api_url:
+    print(f"DNSProbe API URL is set to {dnsprobe_api_url}.", file=sys.stderr)
+    dnsprobe = urllib3.PoolManager(
+        maxsize=10, block=True,
+        timeout=urllib3.Timeout(connect=5.0, total=15.0), retries=False,
+    )
 
 # whois enabled?
 print(f"whois lookups are {'enabled with TTL ' + str(whois_cache_ttl) + 's' if enable_whois else 'disabled'}.", file=sys.stderr)
@@ -446,9 +455,10 @@ def add_dnsprobe_info(hosts):
     for hostname, info in hosts.items():
         dnsprobe_data = {}
         try:
-            response = requests.get(f"{dnsprobe_api_url}/resolve6only({hostname})", timeout=10)
-            if response.status_code == 200:
+            response = dnsprobe.request('GET', f"{dnsprobe_api_url}/resolve6only({hostname})", timeout=10)
+            if response.status == 200:
                 dnsprobe_data = response.json()
+                dnsprobe_data['ts'] = datetime.fromisoformat(dnsprobe_data['ts'])
             total += 1
             if dnsprobe_data.get('success', False):
                 success += 1
@@ -459,7 +469,7 @@ def add_dnsprobe_info(hosts):
             elif dnsprobe_data.get('rcode', '') == 'serv fail':
                 servfail += 1
                 dnsprobe_data['ipv6_only_ready'] = False
-        except requests.RequestException as e:
+        except Exception as e:
             print(f"\tWARNING: DNSProbe lookup failed for {hostname}: {e}", file=sys.stderr)
             dnsprobe_data = None
 
@@ -496,12 +506,12 @@ def get_ipv6_only_score(hosts):
         else:
             resources_ipv6_http += resources
         # calculate dns score
-        if 'dns' in info and 'ipv6_only_ready' in info['dns']:
+        if info.get('dns', None) and 'ipv6_only_ready' in info['dns']:
             if info['dns'].get('ipv6_only_ready'):
                 resources_ipv6_dns += resources
             else:
                 ipv6_only_ready = False
-        elif 'dns' not in info:
+        else:
             has_dnsinfo = False
 
     http_score = resources_ipv6_http / resources_total if resources_total > 0 else None
@@ -758,7 +768,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
     push_timing('extract')
 
     # add dnsprobe info if configured
-    if dnsprobe_api_url:
+    if dnsprobe:
         total, success, noerror, servfail = add_dnsprobe_info(hosts)
         print(f"{lp}dnsprobe lookups completed: {total} total, {noerror} no error, {success} success, {servfail} servfail", file=sys.stderr)
         push_timing('dnsprobe')

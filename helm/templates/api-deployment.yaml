@@ -53,6 +53,10 @@ spec:
             - name: SELENIUM_PASSWORD
               value: {{ .Values.seleniumHub.password | quote }}
             {{- end }}
+            {{- if .Values.dnsProbe.url }}
+            - name: DNSPROBE_API_URL
+              value: {{ .Values.dnsProbe.url | quote }}
+            {{- end }}
             {{- if .Values.api.redis.url }}
             - name: REDIS_URL
               value: {{ .Values.api.redis.url | quote }}

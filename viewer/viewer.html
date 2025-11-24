@@ -87,6 +87,7 @@ SPDX-License-Identifier: Apache-2.0
           <colgroup>
             <col/>
             <col/>
+            <col/>
           </colgroup>
           <colgroup>
             <col/>
@@ -101,6 +102,7 @@ SPDX-License-Identifier: Apache-2.0
           <thead>
             <tr>
               <th colspan="2" class="hostname">Hostname</th>
+              <th class="dns-status">DNS</th>
               <th colspan="2" class="protocol">Protocols</th>
               <th class="as-number">ASN</th>
               <th class="as-descr">AS Description</th>
@@ -134,6 +136,7 @@ SPDX-License-Identifier: Apache-2.0
       </div>
       <p>This is the <i>IPv6 Web Resource Checker (webres6)</i>. It checks IPv6-only readiness of a Web page or app 
         by crawling a given URL using Selenium and analyzes whether all page resources have been loaded via IPv6.</p>
+      <p>The IPv6-only Scores show the proportion of resources that could successfully be loaded via IPv6 only based on HTTP and DNS transactions.</p>
       <p><i>Webres6</i> was inspired by Paul Marks' <i><a href="https://github.com/pmarks-net/ipvfoo">IPvFoo</a></i> browser extension.
         While <i>IPvFoo</i> is more flexible and interactive, <i>Webres6</i> can be run as a service and allows IPv6-only testing without installation or IPv6 on the users' client as well as automated analysis.</p>
       <p>Further documentation can be found on the <a href="https://github.com/sap/webres6">IPv6 Web Resource Checker</a> project page on GitHub.</p>
@@ -149,9 +152,9 @@ SPDX-License-Identifier: Apache-2.0
           <li> No authentication/login takes place.</li>
         </ul>
         </p>
-      <p>The tool ignores DNS aspects: Even if this tool reports green,
-         it is still necessary to check the whole DNS delegation chain of all hosts involved for IPv6-only realness. 
-         A tool for this is <a href="https://ready.chair6.net/">ready.chair6.net</a>.
+      <p>The DNS checks performed by webres6 are a little fragile; They only check whether the hostname can be resolved from a recursive IPv6-only resolver.
+         To get a complete picture, it is necessary to take a closer look at whole DNS delegation chain of all hosts involved for IPv6-only realness. 
+         You may want to try <a href="https://ready.chair6.net/">ready.chair6.net</a> or running <i>dig +trace</i> from an IPv6-only host for that.</p>
       </p>
     </div>
     <div class="footer">

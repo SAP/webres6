@@ -156,7 +156,8 @@ input[type="text"] {
 }
 td.protocol {
   color: gray;
-  width: 10%;
+  width: 7%;
+  max-width: 8em;
   text-wrap-mode: nowrap;
 }
 .protocol ul {
@@ -175,6 +176,19 @@ td.host-dompart {
   padding-left: 0.1em;
   overflow-wrap: break-word;
 }
+td.dns-status, th.dns-status {
+  max-width: 3em;
+  text-align: center;
+}
+th.dns-status {
+  font-stretch: condensed;
+}
+.dns-status-not-ipv6-only-ready {
+  color: Red;
+}
+.dns-status-ipv6-only-ready {
+  color: Darkgreen;
+}
 td.as-number {
   color: gray;
   max-width: 10%;
@@ -191,7 +205,6 @@ td.ip-address, th.ip-address {
 }
 td.ip-address {
   font-family: '72Mono', monospace;
-  letter-spacing: 0.05ex;
 }
 td.ip-netname {
   text-align: left;
@@ -345,6 +358,12 @@ td.ip-netname {
   }
   .host-localpart {
     color: #666
+  }
+  .dns-status-not-ipv6-only-ready {
+    color: red
+  }
+  .dns-status-ipv6-only-ready {
+    color: lightseagreen
   }
   .ipv4 {
     color: red

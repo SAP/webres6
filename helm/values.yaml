@@ -74,6 +74,10 @@ seleniumHub:
   username: "admin"
   password: "admin"
 
+# DNS Probe configuration
+dnsProbe:
+  url: "http://webres6-dnsprobe.default.svc.cluster.local:6453/dnsprobe"
+
 # Prometheteus Operator configuration
 prometheus:
   enabled: true

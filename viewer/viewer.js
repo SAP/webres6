@@ -158,6 +158,7 @@ function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
 function renderHostsTable(data, hostsContainer) {
   if (data.hosts && Object.keys(data.hosts).length > 0) {
     const hostsTable = hostsContainer.find('.hosts_table');
+    let hasDNSInfo = false;
     let hasWhoisInfo = false;
     const sortedHosts = Object.keys(data.hosts).sort(function(a, b) {
       if(data.hosts[a].domain_part === data.hosts[b].domain_part){
@@ -167,13 +168,31 @@ function renderHostsTable(data, hostsContainer) {
       }
     });
     $.each(sortedHosts, function(idx, hostname) {
+      let row = $('<tr>');
+      let numRows = 1;
       // prepare host stuff
       const info = data.hosts[hostname];
       const ips = info.ips ? Object.keys(info.ips).sort() : [];
       const hostsTableBlock = $('<tbody>').addClass('host-block');
-      const hostsTableBlockHead = $(`<td rowspan=1 class="hostname host-localpart">${info.local_part}</td><td rowspan=1 class="hostname host-dompart">${info.domain_part}</td>`);
-      let row = $('<tr>').append(hostsTableBlockHead);
-      let numRows = 1;
+      const hostCells = $(`<td rowspan=1 class="hostname host-localpart">${info.local_part}</td><td rowspan=1 class="hostname host-dompart">${info.domain_part}</td>`);
+      row.append(hostCells);
+      const dnsCell = $('<td rowspan=1 class="dns-status"></td>'); 
+      row.append(dnsCell);
+      const hostsTableBlockHead = row.find('td');
+      // set DNS status
+      if (info.dns && info.dns.ipv6_only_ready !== undefined) {
+        hasDNSInfo = true;
+        if (info.dns.ipv6_only_ready === true) {
+          dnsCell.addClass('dns-status-ipv6-only-ready');
+          dnsCell.text('✔');
+          dnsCell.attr('title', 'Hostname can be resolved from an IPv6-only resolver');
+        } else {
+          dnsCell.addClass('dns-status-not-ipv6-only-ready');
+          dnsCell.text('✘');
+          dnsCell.attr('title', 'Hostname cannot be resolved from an IPv6-only resolver');
+        }
+      }
+      // contruct rows for IPs
       function appendRow() {
         hostsTableBlockHead.attr('rowspan', numRows);
         hostsTableBlock.append(row);
@@ -254,6 +273,8 @@ function renderHostsTable(data, hostsContainer) {
       // add block to the table
       hostsTable.append(hostsTableBlock);
     });
+    // Show/hide DNS info based on availability and default
+    hostsTable.find('.dns-status').toggleClass('hide', !hasDNSInfo);
     // Show/hide whois info based on availability and default
     hostsTable.find('.as-number').toggleClass('hide', !hasWhoisInfo);
     hostsTable.find('.as-descr').addClass('hide');
