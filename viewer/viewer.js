@@ -88,6 +88,26 @@ function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
     errStatus.find('.placeholder').text(data.error);
     overview.append(errStatus);
   }
+  // Status
+  let v6status;
+  if (data.ipv6_only_ready === true) {
+    v6status = $('#results-template .overview .status.ipv6only-ready').clone();
+  } else if (data.ipv6_only_ready === false) {
+    v6status = $('#results-template .overview .status.ipv6only-not-ready').clone();
+  } else {
+    v6status = $('#results-template .overview .status.ipv6only-unknown').clone();
+  }
+  overview.append(v6status);
+  // IPv6-Only HTTP Score
+  if (data.ipv6_only_score !== null) {
+    const scoreStatus = $('#results-template .overview .status.ipv6only-score').clone();
+    scoreStatus.find('progress').attr('value', (data.ipv6_only_score));
+    scoreStatus.find('.percentage').text((data.ipv6_only_score * 100).toFixed(1));
+    scoreStatus.on('click', function() {
+      $('.hidden-score').toggleClass('hide');
+    });
+    overview.append(scoreStatus);
+  }
   // IPv6-Only HTTP Score
   if (data.ipv6_only_http_score !== null) {
     const httpScoreStatus = $('#results-template .overview .status.ipv6only-http-score').clone();
@@ -102,16 +122,6 @@ function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
     dnsScoreStatus.find('.percentage').text((data.ipv6_only_dns_score * 100).toFixed(1));
     overview.append(dnsScoreStatus);
   }
-  // Status
-  let v6status;
-  if (data.ipv6_only_ready === true) {
-    v6status = $('#results-template .overview .status.ipv6only-ready').clone();
-  } else if (data.ipv6_only_ready === false) {
-    v6status = $('#results-template .overview .status.ipv6only-not-ready').clone();
-  } else {
-    v6status = $('#results-template .overview .status.ipv6only-unknown').clone();
-  }
-  overview.append(v6status);
   // Timestamp
   if (data.ts) {
     const date = new Date(data.ts);
@@ -136,7 +146,7 @@ function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
   if (data.timings) {
     const timingContainer = footer.find('.timings');
     timingContainer.find('.placeholder').text(
-      $.map(['crawl', 'screenshot', 'extract', 'whois'], function(label) { return data.timings[label] ? `${label}: ${data.timings[label].toFixed(2)}s` : null; }).join(', ')
+      $.map(['crawl', 'screenshot', 'extract', 'dnsprobe', 'whois'], function(label) { return data.timings[label] ? `${label}: ${data.timings[label].toFixed(2)}s` : null; }).join(', ')
     );
     timingContainer.removeClass('template');
   }

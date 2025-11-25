@@ -180,9 +180,6 @@ td.dns-status, th.dns-status {
   max-width: 3em;
   text-align: center;
 }
-th.dns-status {
-  font-stretch: condensed;
-}
 .dns-status-not-ipv6-only-ready {
   color: Red;
 }

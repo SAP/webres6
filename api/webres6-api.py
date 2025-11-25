@@ -490,6 +490,7 @@ def get_ipv6_only_score(hosts):
     resources_total = 0
     resources_ipv6_http = 0
     resources_ipv6_dns = 0
+    resources_ipv6_overall = 0
     has_dnsinfo = True
     for hostname, info in hosts.items():
         # calculate http score
@@ -511,13 +512,18 @@ def get_ipv6_only_score(hosts):
                 resources_ipv6_dns += resources
             else:
                 ipv6_only_ready = False
+                has_ipv6 = False
         else:
             has_dnsinfo = False
+        # calculate overall score
+        if has_ipv6:
+            resources_ipv6_overall += resources
 
+    overall_score = resources_ipv6_overall / resources_total if resources_total > 0 else None
     http_score = resources_ipv6_http / resources_total if resources_total > 0 else None
     dns_score = resources_ipv6_dns / resources_total if resources_total > 0 and has_dnsinfo else None
 
-    return http_score, dns_score, ipv6_only_ready
+    return overall_score, http_score, dns_score, ipv6_only_ready
 
 def get_whois_info(ip, local_cache):
     """ Fetches WHOIS information for the given IP address using local and global caches.
@@ -658,7 +664,7 @@ def add_whois_info(hosts):
     return stats['global_cache_hit'], stats['local_cache_hit'], stats['whois_lookup'], stats['whois_failed']
 
 
-def gen_json(url, hosts={}, ipv6_only_ready=None, http_score=None, dns_score=None, screenshot=None, report_id=None, timestamp=datetime.now(timezone.utc), timings=None, extension=None, error=None, error_code=200):
+def gen_json(url, hosts={}, ipv6_only_ready=None, score=None, http_score=None, dns_score=None, screenshot=None, report_id=None, timestamp=datetime.now(timezone.utc), timings=None, extension=None, error=None, error_code=200):
     """ prepare the hosts dictionary to be dumped as a JSON object.
     """
 
@@ -689,6 +695,7 @@ def gen_json(url, hosts={}, ipv6_only_ready=None, http_score=None, dns_score=Non
              'error': error,
              'error_code': error_code,
              'ts': timestamp,
+             'ipv6_only_score': score,
              'ipv6_only_http_score': http_score,
              'ipv6_only_dns_score': dns_score,
              'ipv6_only_ready': ipv6_only_ready,
@@ -773,7 +780,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
         print(f"{lp}dnsprobe lookups completed: {total} total, {noerror} no error, {success} success, {servfail} servfail", file=sys.stderr)
         push_timing('dnsprobe')
 
-    http_score, dns_score, ipv6_only_ready = get_ipv6_only_score(hosts)
+    score, http_score, dns_score, ipv6_only_ready = get_ipv6_only_score(hosts)
     print(f"{lp}website is {'' if ipv6_only_ready else 'NOT '}ipv6-only ready (http={http_score*100:.1f}%, dns={f"{dns_score*100:.1f}%" if dns_score is not None else 'N/A'})", file=sys.stderr)
 
     if lookup_whois:
@@ -789,7 +796,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
 
     # send response
     return gen_json(url, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready, 
-                    http_score=http_score, dns_score=dns_score,
+                    score=score, http_score=http_score, dns_score=dns_score,
                     screenshot=screenshot, timestamp=ts, extension=ext, timings=timings), 200
 
 

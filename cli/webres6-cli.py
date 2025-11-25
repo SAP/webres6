@@ -21,6 +21,8 @@ color = {
     'reset': "\033[0m",
     'local_part': "\033[90m",        # dark gray
     'domain_part': "\033[0m",        # reset
+    'dns_ok': "\033[32m",            # green
+    'dns_not_ok': "\033[31m",        # red
     'proto': "\033[90m",             # dark gray
     'highlight_local': "\033[36m",   # dark cyan
     'highlight_domain': "\033[96m",  # bright cyan
@@ -88,6 +90,7 @@ def gen_fancy_hostlist(hosts, original_host=None, show_proto=False,
     max_ip_length = 24
     max_domain_length = 12
     max_local_length = 12
+    max_dns_length = 0
     max_tp_length = 0
     max_sp_length = 0
     max_asn_length = 6 if show_asn else 0
@@ -101,6 +104,16 @@ def gen_fancy_hostlist(hosts, original_host=None, show_proto=False,
         max_domain_length = max(max_domain_length, len(domain_part))
         local_part = info.get('local_part')
         max_local_length = max(max_local_length, len(local_part))
+        dns_status = info.get('dns', {}).get('ipv6_only_ready', None)
+        dns_part = ''
+        if dns_status is not None:
+            max_dns_length = 4
+            if dns_status:
+                dns_part = '️✔'  
+                dns_color = color['dns_ok']
+            else:
+                dns_part = ' ✘'
+                dns_color = color['dns_not_ok']
         # format IPs
         for ip in sorted(info.get('ips').keys()):
             ip_str = str(ip)
@@ -126,7 +139,7 @@ def gen_fancy_hostlist(hosts, original_host=None, show_proto=False,
                     sp = "/"+sp if sp else ""
                     max_tp_length = max(max_tp_length, len(tp))
                     max_sp_length = max(max_sp_length, len(sp))
-                    lines.append((hostname, local_part, domain_part, tp, sp, asn, asd, ip_str, ip_prfx, ip_color))
+                    lines.append((hostname, local_part, domain_part, dns_part, dns_color, tp, sp, asn, asd, ip_str, ip_prfx, ip_color))
                     # Clear same parts to make the table clearer
                     local_part = ""
                     domain_part = ""
@@ -135,22 +148,23 @@ def gen_fancy_hostlist(hosts, original_host=None, show_proto=False,
                     ip_str = ""
                     ip_prfx = ""
             else:
-                lines.append((hostname, local_part, domain_part, "", "", asn, asd, ip_str, ip_prfx, ip_color))
+                lines.append((hostname, local_part, domain_part, dns_part, dns_color, "", "", asn, asd, ip_str, ip_prfx, ip_color))
                 # Clear same parts to make the table clearer
                 local_part = ""
                 domain_part = ""
 
-    rule_length = max_local_length + max_domain_length + max_tp_length + max_sp_length + max_asn_length + max_asd_length + max_ip_length + 2
+    rule_length = max_local_length + max_domain_length + max_dns_length + max_tp_length + max_sp_length + max_asn_length + max_asd_length + max_ip_length + 2
     max_proto_length = max_tp_length + max_sp_length
     max_asx_length = max_asn_length + max_asd_length
     yield(rule_length)
     yield("-" * rule_length)
-    yield(f"{'Hostname':<{max_local_length+max_domain_length}} {'Proto':<{max_proto_length}.{max_proto_length}} {'AS':<{max_asx_length}.{max_asx_length}}{'IP Address':<{max_ip_length}}")
+    yield(f"{'Hostname':<{max_local_length+max_domain_length}} {'DNS':<{max_dns_length}.{max_dns_length}}{'Proto':<{max_proto_length}.{max_proto_length}} {'AS':<{max_asx_length}.{max_asx_length}}{'IP Address':<{max_ip_length}}")
     yield("-" * rule_length)
-    for hostname, local_part, domain_part, tp, sp, asn, asd, ip, prfx, ip_color in lines:
+    for hostname, local_part, domain_part, dns_part, dns_color, tp, sp, asn, asd, ip, prfx, ip_color in lines:
         # Format for length
         local_part  = f"{local_part:>{max_local_length}}"
         domain_part = f"{domain_part:<{max_domain_length}}"
+        dns_part    = f"{dns_part:<{max_dns_length}.{max_dns_length}}"
         tp          = f"{tp:>{max_tp_length}}"
         sp          = f"{sp:<{max_sp_length}}"
         asn         = f"{asn:>{max_asn_length}}"
@@ -158,12 +172,14 @@ def gen_fancy_hostlist(hosts, original_host=None, show_proto=False,
         if hostname == original_host:
             yield(f"{color['highlight_local']}{local_part}{color['reset']}"
                   f"{color['highlight_domain']}{domain_part}{color['reset']} "
+                  f"{dns_color}{dns_part}{color['reset']}"
                   f"{color['proto']}{tp}{sp}{color['reset']} "
                   f"{color['asn']}{asn}{asd}{color['reset']}"
                   f"{ip_color}{ip}{color['asn']}{prfx}{color['reset']}")
         else:
             yield(f"{color['local_part']}{local_part}{color['reset']}"
                   f"{color['domain_part']}{domain_part}{color['reset']} "
+                  f"{dns_color}{dns_part}{color['reset']}"
                   f"{color['proto']}{tp}{sp}{color['reset']} "
                   f"{color['asn']}{asn}{asd}{color['reset']}"
                   f"{ip_color}{ip}{color['asn']}{prfx}{color['reset']}")
@@ -214,8 +230,10 @@ def display_results(res, args):
     if res.get('url'):
         print(f"URL: {res['url']}")
 
-    if http_score := res.get('ipv6_only_http_score'): 
-        print(f"IPv6-Only HTTP score: {http_score*100:.1f}%")
+    if score := res.get('ipv6_only_score'): 
+        http_score = f"HTTP: {res.get('ipv6_only_http_score')*100:.1f}%" if res.get('ipv6_only_http_score') else None
+        dns_score = f"DNS: {res.get('ipv6_only_dns_score')*100:.1f}%" if res.get('ipv6_only_dns_score') else None
+        print(f"IPv6-Only score: {score*100:.1f}% ({', '.join(filter(None, [http_score, dns_score]))})")
 
     # generate output
     output_lines = gen_fancy_hostlist(res.get('hosts', {}), original_host=urlparse(args.url).hostname,
