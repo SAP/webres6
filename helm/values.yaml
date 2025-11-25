@@ -74,10 +74,6 @@ seleniumHub:
   username: "admin"
   password: "admin"
 
-# DNS Probe configuration
-dnsProbe:
-  url: "http://webres6-dnsprobe.default.svc.cluster.local:6453/dnsprobe"
-
 # Prometheteus Operator configuration
 prometheus:
   enabled: true
@@ -117,6 +113,38 @@ viewer:
     targetCPUUtilizationPercentage: 80
   securityContext: {}
   podSecurityContext: {}
+
+# DNS Probe configuration
+dnsprobe:
+  enabled: true
+  # external URL to dnsprobe service, if empty internal dnsprobe service will be used
+  url: ""
+  # image configuration
+  image:
+    # Overrides the image repository whose default is "" – needs to end with a slash if name is set
+    repository: ""
+    # Overrides the image name whose default is "webres6-dnsprobe"
+    name: webres6-dnsprobe
+    # Overrides the image tag whose default is "latest"
+    tag: ""
+    # This sets the pull policy for images.
+    pullPolicy: Always
+  port: 6453
+  service:
+    type: ClusterIP
+    port: 80
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  securityContext: {}
+  podSecurityContext: {}
+
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:

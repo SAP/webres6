@@ -2,12 +2,16 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Use official alpine based Python image
-FROM python:3.13-alpine
+# Use official debian trixie based Python image as base
+FROM python:3.14-slim-trixie
 WORKDIR /app
 
 # Install non-python dependencies
-RUN apk add --no-cache bash
+RUN apt update --yes \
+  && apt install --no-install-recommends --yes -o DPkg::options::="--force-overwrite" -o Dpkg::Options::="--force-confdef" \
+                  bash curl \
+  && apt clean \
+  && rm -rf /var/lib/apt/lists/*
 
 # Copy application code
 COPY api/requirements.txt api/docker-entrypoint api/webres6-api.py api/webres6_storage.py api/webres6-api-metadata.xml ./
@@ -16,7 +20,7 @@ COPY api/requirements.txt api/docker-entrypoint api/webres6-api.py api/webres6_s
 RUN pip install --no-cache-dir -r requirements.txt; \
     pip install --no-cache-dir gunicorn[gthread]
 
-# Copy viewer files - disabled in API image
+# Don't copy viewer files into api image, viewer is served separately
 # COPY viewer ./viewer/
 
 # create empty extensions folder

@@ -1,0 +1,23 @@
+{{if .Values.dnsprobe.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  # SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+  # SPDX-License-Identifier: Apache-2.0
+  name: {{ include "webres6.fullname" . }}-dnsprobe
+  labels:
+    {{- include "webres6.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.dnsprobe.service.type }}
+  ports:
+    - port: {{ .Values.dnsprobe.service.port }}
+      targetPort: {{ .Values.dnsprobe.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "webres6.selectorLabels" . | nindent 4 }}
+    {{- with .Values.dnsprobe.podLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    app: webres6-dnsprobe
+{{- end }}

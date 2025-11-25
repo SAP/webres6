@@ -53,9 +53,12 @@ spec:
             - name: SELENIUM_PASSWORD
               value: {{ .Values.seleniumHub.password | quote }}
             {{- end }}
-            {{- if .Values.dnsProbe.url }}
+            {{- if .Values.dnsprobe.url }}
             - name: DNSPROBE_API_URL
-              value: {{ .Values.dnsProbe.url | quote }}
+              value: {{ .Values.dnsprobe.url | quote }}
+            {{- else if .Values.dnsprobe.enabled }}
+            - name: DNSPROBE_API_URL
+              value: "http://{{ include "webres6.fullname" . }}-dnsprobe:{{ .Values.dnsprobe.service.port }}/dnsprobe"
             {{- end }}
             {{- if .Values.api.redis.url }}
             - name: REDIS_URL

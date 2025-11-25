@@ -101,8 +101,13 @@ available as a service and have ```SELENIUM_REMOTE_URL``` environment variable p
 
 Run the following script to build virtualenvs for API and CLI: ```bash create-virtualenvs.sh ```
 
-The *api* and *cli* code can be found in the respective folders.
-Don't forget to run ```bash source .venv/bin/activate``` within the respective folder before trying to execute the python code.
+The *api*, *cli*, *viewer* and *dnsprobe* code can be found in the respective folders.
+
+For *api* and *cli*, run ```bash source .venv/bin/activate``` within the respective folder before trying to execute the python code.
+The *viewer* is also served from the *api* development environment. 
+
+The *dnsprobe* is a little more tricky, it is strongly recommend running it in docker or a debian based VM with *Debian Trixie* and Debian managed python. 
+Please see the Dockerfile in the dnsprobe folder for the package dependencies.
 
 ## Setup (docker compose):
 
