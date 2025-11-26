@@ -82,6 +82,19 @@ function createResultsDomContainer(url) {
 
 /* Render JSON dump of IPv6 Web Resource Checker dump */
 function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
+  // Timestamp
+  if (data.ts) {
+    const date = new Date(data.ts);
+    domContainer.find('.timestamp').html(date.toLocaleString('en-UK', { timeZoneName: 'short', hour12: false }));
+  }
+  // URL
+  if(data.url) {
+    domContainer.find('.url').html(data.url);
+  }
+  // set report anchor link
+  if (data.ID) {
+    domContainer.find('.report-anchor').attr('id', `report:${data.ID}`);
+  }
   // Error (if present)
   if (data.error) {
     const errStatus = $('#results-template .overview .status.error').clone();
@@ -121,15 +134,6 @@ function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
     dnsScoreStatus.find('progress').attr('value', (data.ipv6_only_dns_score));
     dnsScoreStatus.find('.percentage').text((data.ipv6_only_dns_score * 100).toFixed(1));
     overview.append(dnsScoreStatus);
-  }
-  // Timestamp
-  if (data.ts) {
-    const date = new Date(data.ts);
-    domContainer.find('.timestamp').html(date.toLocaleString('en-UK', { timeZoneName: 'short', hour12: false }));
-  }
-  // URL
-  if(data.url) {
-    domContainer.find('.url').html(data.url);
   }
   // add screenshot if present
   if (data.screenshot) {
@@ -398,6 +402,50 @@ async function analyzeReport(report) {
   }
 }
 
+async function prepareScoreboard() {
+  // prepare scoreboard container references
+  const scoreboardContainer = $('#scoreboard');
+  const scoreboardTableBody = scoreboardContainer.find('.scoreboard-table tbody');
+  // Fetch scoreboard data
+  const scoreboardUrl = getAPIBase() + `/scoreboard`;
+  try {
+    const response = await fetch(scoreboardUrl);
+    if (response.ok) {
+      // parse data
+      const data = await response.json();
+      $.each(data, function(idx, entry) {
+        entry.ts = new Date(entry.ts);
+      });
+      // Sort data by score (descending - highest scores first)
+      data.sort(function(a, b) {
+        const scoreA = ((a.ipv6_only_score || 0) * (1<<24)) + (a.ts || 0);
+        const scoreB = ((b.ipv6_only_score || 0) * (1<<24)) + (b.ts || 0);
+        return scoreB - scoreA;
+      });
+      // show scoreboard
+      scoreboardContainer.removeClass('template');
+      //render scoreboard entries
+      $.each(data, function(idx, entry) {
+        const row = scoreboardTableBody.find('tr.template').clone();
+        row.removeClass('template');
+        // Use ipv6_only_score instead of score
+        const score = entry.ipv6_only_score;
+        row.find('.scoreboard-ipv6only-score .percentage').text((score * 100).toFixed(1));
+        row.find('.scoreboard-ipv6only-score progress').val(score);
+        const resultLink = row.find('.scoreboard-target a');
+        resultLink.attr('href', `#report:${entry.report_id}`);
+        resultLink.text(entry.url);
+        resultLink.on('click', async function(e) { e.preventDefault(); await analyzeReport(entry.report_id); window.location.hash = `report:${entry.report_id}`; });
+        row.find('.scoreboard-timestamp').text(new Date(entry.ts).toLocaleString('en-UK', { timeZoneName: 'short', hour12: false }));
+        scoreboardTableBody.append(row);
+      });  
+    } else {
+      console.error('Failed to fetch scoreboard:', response.status, response.statusText);
+    }
+  } catch (error) {
+    console.error('Error loading scoreboard:', error);
+  }
+}
 
 /* Allow to load saved json dumps of previous analysis by dropping them somewhere on the browser window */
 function handleJsonDrop(event) {
@@ -436,6 +484,8 @@ $(document).ready(function() {
     } else if (verb.toLowerCase() === 'report' && target) {
       $('#input').hide();
       analyzeReport(target)
+    } else if (verb.toLowerCase() === 'scoreboard') {
+      prepareScoreboard();
     }
   }
   // Add form submit handler

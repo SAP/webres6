@@ -27,6 +27,9 @@ class StorageManager:
     def can_archive(self):
         pass
 
+    def can_persist(self):
+        pass
+    
     def archive_result(self, report_id, data):
         pass
 
@@ -51,6 +54,12 @@ class StorageManager:
     def whois_cache_size(self):
         pass
 
+    def put_scorecard(self, scorecard):
+        pass
+
+    def get_scorecards(self, max_entries=23):
+        pass
+
 
 # Local storage manager for file based cache/archive
 class LocalStorageManager(StorageManager):
@@ -58,8 +67,10 @@ class LocalStorageManager(StorageManager):
     whois_cache = {}
     result_cache = {}
     local_cache_dir = None
+    max_scorecards = 0
+    scorecards = []
 
-    def __init__(self, whois_cache_ttl, result_archive_ttl, cache_dir=None):
+    def __init__(self, whois_cache_ttl, result_archive_ttl, cache_dir=None, max_scorecards=128):
         self.whois_cache_ttl = whois_cache_ttl
         self.result_archive_ttl = result_archive_ttl
         if cache_dir and os.path.isdir(cache_dir):
@@ -68,7 +79,8 @@ class LocalStorageManager(StorageManager):
             self._load()
         else:
             print(f"local cache dir \"{cache_dir}\" does not exist\ndeactivating result archive and cache-persist", file=sys.stderr)
-        # warn that local storage manager is not suitable for production use
+        self.max_scorecards = max_scorecards
+        # warn about limitations
         print("WARNING: LocalStorageManager is not suitable for production use!", file=sys.stderr)
         print("         - No multi-instance synchronization", file=sys.stderr)
         print("         - Use /admin/persist to manually persists cache", file=sys.stderr)
@@ -145,6 +157,18 @@ class LocalStorageManager(StorageManager):
     def whois_cache_size(self):
         return len(self.whois_cache)
 
+    def put_scorecard(self, scorecard):
+        self.scorecards.append(scorecard)
+        # keep only the latest max_scorecards entries
+        if len(self.scorecards) > self.max_scorecards:
+            self.scorecards.pop(0)
+        return True
+
+    def get_scorecards(self, max_entries=None):
+        if max_entries is None or max_entries >= len(self.scorecards):
+            return self.scorecards
+        return self.scorecards[-max_entries:]
+
     def can_persist(self):
         """ check if local cache persistence is enabled """
         return self.local_cache_dir is not None
@@ -165,7 +189,11 @@ class LocalStorageManager(StorageManager):
             with open(file, 'w', encoding='utf-8') as f:
                 json.dump(self.result_cache, f, cls=DateTimeEncoder, ensure_ascii=False)
                 f.close()
-            return True
+            file = os.path.join(self.local_cache_dir, f"scorecards.json")
+            with open(file, 'w', encoding='utf-8') as f:
+                json.dump(self.scorecards, f, cls=DateTimeEncoder, ensure_ascii=False)
+                f.close()
+            return True 
         except Exception as e:
             print(f"WARNING: failed persisting whois cache to local storage: {e}", file=sys.stderr)
             return False
@@ -213,6 +241,16 @@ class LocalStorageManager(StorageManager):
                 for key in self.result_cache:
                     self.result_cache[key]['ts'] = datetime.fromisoformat(self.result_cache[key]['ts'])
                     self.result_cache[key]['expiry'] = datetime.fromisoformat(self.result_cache[key]['expiry'])
+            # read scorecards
+            file = os.path.join(self.local_cache_dir, f"scorecards.json")
+            if os.path.exists(file):
+                with open(file, 'r', encoding='utf-8') as f:
+                    self.scorecards = json.load(f)
+                    f.close()
+                print(f"read {len(self.scorecards)} scorecards from local storage", file=sys.stderr)
+                # fix timestamps in scorecards
+                for scorecard in self.scorecards:
+                    scorecard['ts'] = datetime.fromisoformat(scorecard['ts'])
             return True
         except Exception as e:
             print(f"WARNING: failed loading whois cache from local storage: {e}", file=sys.stderr)
@@ -226,10 +264,11 @@ class RedisStorageManager(StorageManager):
     whois_mem_cache = {}
     whois_mem_cache_size_max = 0
 
-    def __init__(self, whois_cache_ttl, result_archive_ttl, redis_url, whois_mem_cache_size_max=2048):
+    def __init__(self, whois_cache_ttl, result_archive_ttl, redis_url, whois_mem_cache_size_max=2048, scoreboard_size=4096):
         self.whois_cache_ttl = whois_cache_ttl
         self.result_archive_ttl = result_archive_ttl
         self.whois_mem_cache_size_max = whois_mem_cache_size_max
+        self.scoreboard_size = scoreboard_size
         # initialize redis client if redis url is set
         if redis_url and redis_url.strip() != '':
             self.redis_client = redis.from_url(redis_url, decode_responses=False)
@@ -341,3 +380,24 @@ class RedisStorageManager(StorageManager):
     def whois_cache_size(self):
         return len(self.whois_mem_cache)
     
+    def put_scorecard(self, scorecard):
+        try:
+            self.redis_client.lpush("webres6:scorecards", json.dumps(scorecard, cls=DateTimeEncoder).encode('utf-8'))
+            self.redis_client.ltrim("webres6:scorecards", 0, self.scoreboard_size)
+            return True
+        except Exception as e:
+            print(f"WARNING: failed putting scorecard to redis: {e}", file=sys.stderr)
+            return False
+        
+    def get_scorecards(self, max_entries=23):
+        try:
+            raw_scorecards = self.redis_client.lrange("webres6:scorecards", 0, max_entries - 1)
+            scorecards = []
+            for raw in raw_scorecards:
+                scorecard = json.loads(raw)
+                scorecard['ts'] = datetime.fromisoformat(scorecard['ts'])
+                scorecards.append(scorecard)
+            return scorecards
+        except Exception as e:
+            print(f"WARNING: failed getting scorecards from redis: {e}", file=sys.stderr)
+            return []

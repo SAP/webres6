@@ -26,6 +26,7 @@ from flask import Flask, redirect, request, jsonify, send_from_directory
 from ipwhois import IPWhois
 from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 from webres6_storage import StorageManager, LocalStorageManager, RedisStorageManager 
+from webres6_scoreboard import Scoreboard
 
 # config/flag variables
 webres6_version  = "1.0.0"
@@ -106,6 +107,9 @@ if os.path.exists(extensions_dir):
 
 # define storage manager - initialize later
 storage_manager = None
+
+# define scoreboard - initialize later
+scoreboard = None
 
 # create connection pool for dnsprobe if needed
 dnsprobe = None
@@ -794,10 +798,17 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
     else:
         webres6_tested_results.labels(result='not_ipv6_only_ready').inc()
 
-    # send response
-    return gen_json(url, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready, 
+    # generate final report
+    report = gen_json(url, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready,
                     score=score, http_score=http_score, dns_score=dns_score,
-                    screenshot=screenshot, timestamp=ts, extension=ext, timings=timings), 200
+                    screenshot=screenshot, timestamp=ts, extension=ext, timings=timings)
+
+    # enter scoreboard entry
+    if scoreboard:
+        scoreboard.enter(report)
+
+    # send response
+    return report, 200
 
 
 def get_archived_report(report_id):
@@ -912,6 +923,10 @@ def create_http_app():
         print("Redis client not configured, using LocalStorageManager", file=sys.stderr)
         storage_manager = LocalStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, cache_dir=local_cache_dir)
 
+    # initialize scoreboard if enabled
+    global scoreboard
+    scoreboard = Scoreboard(storage_manager=storage_manager)
+    
     # Start a simple HTTP API server using Flask
     app = Flask(__name__, static_folder=app_home)
     app.config['RESTFUL_JSON'] = {'ensure_ascii': False}
@@ -979,6 +994,12 @@ def create_http_app():
         if not report_id.replace('-', '').isalnum():
             return jsonify({'error': 'Invalid report ID.'}), 400
         return get_archived_report(report_id)
+
+    if scoreboard:
+        print("\t/res6/scoreboard     get current scoreboard entries", file=sys.stderr)
+        @app.route('/res6/scoreboard', methods=['GET'])
+        def res6_scoreboard():
+            return jsonify(scoreboard.get_entries()), 200
 
     print("\t/metrics             get Prometheus compatible metrics", file=sys.stderr)
     @app.route('/metrics', methods=['GET'])
