@@ -408,7 +408,7 @@ async function analyzeReport(report) {
   }
 }
 
-async function prepareScoreboard(resultsLimit=12) {
+async function renderScoreboard(resultsLimit=12) {
   // Check if scoreboard is supported
   if (!srvSupportsScoreboard) {
     return;
@@ -446,8 +446,13 @@ async function prepareScoreboard(resultsLimit=12) {
         resultLink.on('click', async function(e) { e.preventDefault(); await analyzeReport(entry.report_id); window.location.hash = `report:${entry.report_id}`; });
         row.find('.scoreboard-timestamp').text(new Date(entry.ts).toLocaleString('en-UK', timeFormatOptions));
         scoreboardTableBody.append(row);
-      });  
-      return scoreboardContainer;
+      });
+      if (data.length > 0) {
+        console.log('Scoreboard loaded with', data.length, 'entries');
+        scoreboardContainer.removeClass('template');
+      } else {
+        console.log('No scoreboard entries available');
+      }
     } else {
       console.error('Failed to fetch scoreboard:', response.status, response.statusText);
     }
@@ -493,8 +498,7 @@ $(document).ready( async function() {
       analyzeReport(target)
     } else if (verb.toLowerCase() === 'scoreboard') {
       if (await loadSrvConfig()) {
-        const scoreboard = await prepareScoreboard(parseInt(target) || 12);
-        scoreboard.removeClass('template');
+        renderScoreboard(parseInt(target) || 12);
       }
     }
   } else {
@@ -502,8 +506,7 @@ $(document).ready( async function() {
     s = await loadSrvConfig();
     if (!s) { return; }
     // enable scoreboard
-    const scoreboard = await prepareScoreboard(12);
-    scoreboard.removeClass('template');
+    renderScoreboard(12);
     // show input form and add handlers
     $('#input').removeClass('template');
     $('#urlForm').on('submit', function(e) {

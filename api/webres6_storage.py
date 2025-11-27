@@ -211,6 +211,11 @@ class LocalStorageManager(StorageManager):
         for key in [key for key in self.whois_cache.keys() if self.whois_cache[key]['ts'] < threshold]:
             del self.whois_cache[key]
             expired_count += 1
+        # expire old scorecards
+        deadline = now - timedelta(seconds=self.result_archive_ttl)
+        for scorecard in [scorecard for scorecard in self.scorecards if scorecard['ts'] < deadline]:
+            self.scorecards.remove(scorecard)
+            expired_count += 1
         return expired_count
 
     def _load(self):
@@ -389,7 +394,7 @@ class RedisStorageManager(StorageManager):
             return False
         
     def get_scorecards(self, max_entries=23):
-        deadline = datetime.now(timezone.utc) - timedelta(self.result_archive_ttl)
+        deadline = datetime.now(timezone.utc) - timedelta(seconds=self.result_archive_ttl)
         try:
             raw_scorecards = self.redis_client.lrange("webres6:scorecards", 0, max_entries - 1)
             scorecards = []
@@ -406,7 +411,7 @@ class RedisStorageManager(StorageManager):
 
     def _expire_scorecards(self):
         try:
-            deadline = datetime.now(timezone.utc) - timedelta(self.result_archive_ttl)
+            deadline = datetime.now(timezone.utc) - timedelta(seconds=self.result_archive_ttl)
             len = self.redis_client.llen("webres6:scorecards")
             idx = len // 2
             while len > 1:
@@ -426,13 +431,15 @@ class RedisStorageManager(StorageManager):
                 else:
                     print(f"WARNING: failed getting scorecard at index {idx} from redis during expiry", file=sys.stderr)
                     break
+            return len-idx
         except Exception as e:
             print(f"WARNING: failed expiring scorecards from redis: {e}", file=sys.stderr)
+            return None
 
     def expire(self):
         # Redis handles expiration automatically via TTLs
         # only need to clear old scorecards
-        self._expire_scorecards()
+        return self._expire_scorecards()
 
 
 # Scoreboard management

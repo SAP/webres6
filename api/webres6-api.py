@@ -1035,6 +1035,7 @@ def create_http_app():
         def admin_expire():
             if check_auth(request):
                 result = storage_manager.expire()
+                print(f"Expired {result} cache entries", file=sys.stderr)
                 return jsonify({'status': 'ok', 'message': f'Expired {result} cache entries'}), 200
             else:
                 return app.response_class('Authentication required', mimetype='text/plain', status=401, headers={'WWW-Authenticate': 'Basic realm="webres6 admin"'})

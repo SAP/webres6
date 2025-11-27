@@ -407,6 +407,10 @@ td.ip-netname {
   .overview-item progress {
     width: 30%;
   }
+  td.scoreboard-timestamp, th.scoreboard-timestamp {
+    visibility: collapse;
+    display: none;
+  }
   td.protocol, th.protocol {
     visibility: collapse;
     display: none;
