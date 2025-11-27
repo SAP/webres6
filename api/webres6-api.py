@@ -25,8 +25,7 @@ import flask
 from flask import Flask, redirect, request, jsonify, send_from_directory
 from ipwhois import IPWhois
 from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
-from webres6_storage import StorageManager, LocalStorageManager, RedisStorageManager 
-from webres6_scoreboard import Scoreboard
+from webres6_storage import StorageManager, LocalStorageManager, RedisStorageManager, Scoreboard
 
 # config/flag variables
 webres6_version  = "1.0.0"
@@ -51,6 +50,8 @@ max_timeout      = int(getenv("TIMEOUT", 180))//2
 max_wait         = max_timeout//3
 enable_whois     = getenv("ENABLE_WHOIS", 'true').lower() in ['true', '1', 'yes']
 whois_cache_ttl  = int(getenv("WHOIS_CACHE_TTL", 270000)) # seconds
+enable_scoreboard = getenv("ENABLE_SCOREBOARD", 'true').lower() in ['true', '1', 'yes']
+scoreboard_request_limit = int(getenv("SCOREBOARD_REQUEST_LIMIT", 1024))
 screenshot_modes = ['none', 'small', 'medium', 'full']
 
 # get nodename for report id
@@ -209,8 +210,6 @@ class FlaskJSONProvider(flask.json.provider.DefaultJSONProvider):
         if isinstance(obj, datetime):
             return obj.isoformat()
         return super().default(obj)
-
-
 
 
 def init_webdriver(headless=False, log_prefix='', implicit_wait=0.5, extension=None):
@@ -925,7 +924,8 @@ def create_http_app():
 
     # initialize scoreboard if enabled
     global scoreboard
-    scoreboard = Scoreboard(storage_manager=storage_manager)
+    if storage_manager.can_archive() and enable_scoreboard:
+        scoreboard = Scoreboard(storage_manager=storage_manager)
     
     # Start a simple HTTP API server using Flask
     app = Flask(__name__, static_folder=app_home)
@@ -952,7 +952,9 @@ def create_http_app():
                         'message': srv_message, 'privacy_policy': privacy_policy,
                         'max_wait': max_wait, 'extensions': extensions,
                         'whois': enable_whois, 'screenshot_modes': screenshot_modes,
-                        'archive': storage_manager.can_archive()}), 200
+                        'archive': storage_manager.can_archive(),
+                        'scoreboard': scoreboard is not None,
+                        }), 200
 
     print("\t/res6/url(URL)       get JSON results for URL provided", file=sys.stderr)
     @app.route('/res6/url(<path:url>)', methods=['GET'])
@@ -999,7 +1001,10 @@ def create_http_app():
         print("\t/res6/scoreboard     get current scoreboard entries", file=sys.stderr)
         @app.route('/res6/scoreboard', methods=['GET'])
         def res6_scoreboard():
-            return jsonify(scoreboard.get_entries()), 200
+            limit = int(request.args.get('limit')) if request.args.get('limit') else 12
+            if limit > scoreboard_request_limit:
+                limit = scoreboard_request_limit
+            return jsonify(scoreboard.get_entries(limit=limit)), 200
 
     print("\t/metrics             get Prometheus compatible metrics", file=sys.stderr)
     @app.route('/metrics', methods=['GET'])

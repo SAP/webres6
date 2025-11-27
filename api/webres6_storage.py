@@ -6,6 +6,7 @@
 #
 
 import json
+import math
 import os
 import sys
 from datetime import datetime, timezone, timedelta
@@ -264,11 +265,10 @@ class RedisStorageManager(StorageManager):
     whois_mem_cache = {}
     whois_mem_cache_size_max = 0
 
-    def __init__(self, whois_cache_ttl, result_archive_ttl, redis_url, whois_mem_cache_size_max=2048, scoreboard_size=4096):
+    def __init__(self, whois_cache_ttl, result_archive_ttl, redis_url, whois_mem_cache_size_max=2048):
         self.whois_cache_ttl = whois_cache_ttl
         self.result_archive_ttl = result_archive_ttl
         self.whois_mem_cache_size_max = whois_mem_cache_size_max
-        self.scoreboard_size = scoreboard_size
         # initialize redis client if redis url is set
         if redis_url and redis_url.strip() != '':
             self.redis_client = redis.from_url(redis_url, decode_responses=False)
@@ -383,21 +383,84 @@ class RedisStorageManager(StorageManager):
     def put_scorecard(self, scorecard):
         try:
             self.redis_client.lpush("webres6:scorecards", json.dumps(scorecard, cls=DateTimeEncoder).encode('utf-8'))
-            self.redis_client.ltrim("webres6:scorecards", 0, self.scoreboard_size)
             return True
         except Exception as e:
             print(f"WARNING: failed putting scorecard to redis: {e}", file=sys.stderr)
             return False
         
     def get_scorecards(self, max_entries=23):
+        deadline = datetime.now(timezone.utc) - timedelta(self.result_archive_ttl)
         try:
             raw_scorecards = self.redis_client.lrange("webres6:scorecards", 0, max_entries - 1)
             scorecards = []
             for raw in raw_scorecards:
                 scorecard = json.loads(raw)
                 scorecard['ts'] = datetime.fromisoformat(scorecard['ts'])
+                
                 scorecards.append(scorecard)
             return scorecards
         except Exception as e:
             print(f"WARNING: failed getting scorecards from redis: {e}", file=sys.stderr)
             return []
+
+    def _expire_scorecards(self):
+        try:
+            deadline = datetime.now(timezone.utc) - timedelta(self.result_archive_ttl)
+            len = self.redis_client.llen("webres6:scorecards")
+            idx = len // 2
+            while len > 8:
+                if item := self.redis_client.lindex("webres6:scorecards", idx):
+                    scorecard = json.loads(item)
+                    scorecard_ts = datetime.fromisoformat(scorecard['ts'])
+                    if scorecard_ts < deadline:
+                        # remove this and all older entries
+                        self.redis_client.ltrim("webres6:scorecards", idx, - 1)
+                        # continue binary search in left half
+                        len = len//2
+                        idx -= len//2
+                    else:
+                        # move to right half
+                        len = len//2
+                        idx += len//2
+                else:
+                    print(f"WARNING: failed getting scorecard at index {idx} from redis during expiry", file=sys.stderr)
+                    break
+        except Exception as e:
+            print(f"WARNING: failed expiring scorecards from redis: {e}", file=sys.stderr)
+
+    def expire(self):
+        # Redis handles expiration automatically via TTLs
+        # only need to clear old scorecards
+        self._expire_scorecards()
+
+
+# Scoreboard management
+class Scoreboard:
+    def __init__(self, storage_manager=None):
+        self.storage_manager = storage_manager
+
+    def enter(self, report):
+        """ Enter a new report into the scoreboard.
+            If the scoreboard exceeds max_entries, remove the oldest entry.
+        """
+
+        if report.get('error', None) is not None:
+            return  # do not enter errored reports
+
+        scorecard = {
+            'report_id': report.get('ID', None),
+            'ts': report.get('ts', None),
+            'url': report.get('url', None),
+            'domain': report.get('domain', None),
+            'ipv6_only_score': report.get('ipv6_only_score', 0),
+            'ipv6_only_dns_score': report.get('ipv6_only_dns_score', 0),
+            'ipv6_only_http_score': report.get('ipv6_only_http_score', 0),
+            'ipv6_only_ready': report.get('ipv6_only_ready', False),
+        }
+
+        return self.storage_manager.put_scorecard(scorecard)
+
+    def get_entries(self, limit=12):
+        """ Return the current scoreboard entries.
+        """
+        return self.storage_manager.get_scorecards(max_entries=limit)
