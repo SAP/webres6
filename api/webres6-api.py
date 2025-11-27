@@ -55,7 +55,9 @@ scoreboard_request_limit = int(getenv("SCOREBOARD_REQUEST_LIMIT", 1024))
 screenshot_modes = ['none', 'small', 'medium', 'full']
 
 # get nodename for report id
-report_node = platform.node().replace('.-@;', ' ').split()[0]
+report_node = platform.node().split('.')[0]
+if len(report_node) >12 or '-' in report_node:
+    report_node = sha256(report_node.encode()).hexdigest()[:12]
 print(f"report node is set to '{report_node}'.", file=sys.stderr)
 
 # load NAT64 prefixes
@@ -786,7 +788,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
     score, http_score, dns_score, ipv6_only_ready = get_ipv6_only_score(hosts)
     print(f"{lp}website is {'' if ipv6_only_ready else 'NOT '}ipv6-only ready (http={http_score*100:.1f}%, dns={f"{dns_score*100:.1f}%" if dns_score is not None else 'N/A'})", file=sys.stderr)
 
-    if lookup_whois:
+    if lookup_whois and enable_whois:
         gch, lch, qs, qf = add_whois_info(hosts)
         print(f"{lp}whois lookups: {qs} successful, {qf} failed, {gch} global cache hits, {lch} local cache hits", file=sys.stderr)
         push_timing('whois')

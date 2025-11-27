@@ -396,8 +396,9 @@ class RedisStorageManager(StorageManager):
             for raw in raw_scorecards:
                 scorecard = json.loads(raw)
                 scorecard['ts'] = datetime.fromisoformat(scorecard['ts'])
-                
-                scorecards.append(scorecard)
+                # only include non-expired scorecards
+                if scorecard['ts'] > deadline:
+                    scorecards.append(scorecard)
             return scorecards
         except Exception as e:
             print(f"WARNING: failed getting scorecards from redis: {e}", file=sys.stderr)
@@ -408,7 +409,7 @@ class RedisStorageManager(StorageManager):
             deadline = datetime.now(timezone.utc) - timedelta(self.result_archive_ttl)
             len = self.redis_client.llen("webres6:scorecards")
             idx = len // 2
-            while len > 8:
+            while len > 1:
                 if item := self.redis_client.lindex("webres6:scorecards", idx):
                     scorecard = json.loads(item)
                     scorecard_ts = datetime.fromisoformat(scorecard['ts'])
