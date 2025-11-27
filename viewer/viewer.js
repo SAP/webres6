@@ -131,14 +131,14 @@ function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
   if (data.ipv6_only_http_score !== null) {
     const httpScoreStatus = $('#results-template .overview .status.ipv6only-http-score').clone();
     httpScoreStatus.find('progress').attr('value', (data.ipv6_only_http_score));
-    httpScoreStatus.find('.percentage').text((data.ipv6_only_http_score * 100).toFixed(1));
+    httpScoreStatus.find('.percentage').text(`${(data.ipv6_only_http_score * 100).toFixed(1)}%`);
     overview.append(httpScoreStatus);
   }
   // IPv6-Only DNS Score
   if (data.ipv6_only_dns_score !== null) {
     const dnsScoreStatus = $('#results-template .overview .status.ipv6only-dns-score').clone();
     dnsScoreStatus.find('progress').attr('value', (data.ipv6_only_dns_score));
-    dnsScoreStatus.find('.percentage').text((data.ipv6_only_dns_score * 100).toFixed(1));
+    dnsScoreStatus.find('.percentage').text(`${(data.ipv6_only_dns_score * 100).toFixed(1)}%`);
     overview.append(dnsScoreStatus);
   }
   // add screenshot if present
@@ -428,9 +428,11 @@ async function renderScoreboard(resultsLimit=12) {
       });
       // Sort data by score (descending - highest scores first)
       data.sort(function(a, b) {
-        const scoreA = Math.floor((a.ipv6_only_score || 0) * (1<<24)) + Math.floor(a.ts.getTime() || 0);
-        const scoreB = Math.floor((b.ipv6_only_score || 0) * (1<<24)) + Math.floor(b.ts.getTime() || 0);
-        return scoreB - scoreA;
+        if (a.ipv6_only_score < b.ipv6_only_score) return 1;
+        if (a.ipv6_only_score > b.ipv6_only_score) return -1;
+        if (a.ts < b.ts) return 1;
+        if (a.ts > b.ts) return -1;
+        return 0;
       });
       //render scoreboard entries
       $.each(data, function(idx, entry) {
