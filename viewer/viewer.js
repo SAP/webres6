@@ -51,7 +51,12 @@ async function loadSrvConfig() {
           );
         });
         $('#screenshotSelectContainer').removeClass('template');
-      } 
+      }
+      // Scoreboard switch
+      if (srvconfig && srvconfig.scoreboard) {
+        $('#scoreboardSwitchContainer').removeClass('template');
+        $('#scoreboard').attr('checked', 'true');
+      }
       // Whois switch
       if (srvconfig && srvconfig.whois) {
         $('#whoisSwitchContainer').removeClass('template');
@@ -305,7 +310,7 @@ function renderHostsTable(data, hostsContainer) {
 }
 
 /* Call API and fetch analysis */ 
-async function analyzeURL(url, wait = 2, screenshot = 'none', ext = null, whois = 'true') {
+async function analyzeURL(url, wait = 2, scoreboard_entry = false, screenshot = 'none', ext = null, whois = 'true') {
   // Generate new container
   const [domContainer, overview, domContainerId] = createResultsDomContainer(url);
   const loadingStatus = $('#results-template .overview .status.status-loading').clone();
@@ -314,7 +319,7 @@ async function analyzeURL(url, wait = 2, screenshot = 'none', ext = null, whois 
   const maxRetries = 5;
   const baseDelay = 10*1000; // 10 seconds base delay
   // Build API URL
-  let apiUrl = getAPIBase() + `/url(${encodeURIComponent(url)})?wait=${wait}&screenshot=${screenshot}&whois=${whois}`;
+  let apiUrl = getAPIBase() + `/url(${encodeURIComponent(url)})?wait=${wait}&scoreboard=${scoreboard_entry}&screenshot=${screenshot}&whois=${whois}`;
   if (ext && ext !== "(none)") apiUrl += `&ext=${encodeURIComponent(ext)}`;
   // Retry logic with exponential backoff
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -513,7 +518,7 @@ $(document).ready( async function() {
     $('#input').removeClass('template');
     $('#urlForm').on('submit', function(e) {
       e.preventDefault();
-      analyzeURL($('#urlInput').val(), parseFloat($('#waitTime').val()), $('#screenshotSelect').val(), $('#extensionSelect').val(), $('#whoisLookup').is(':checked'));
+      analyzeURL($('#urlInput').val(), parseFloat($('#waitTime').val()), $('#scoreboardSwitch').is(':checked'), $('#screenshotSelect').val(), $('#extensionSelect').val(), $('#whoisLookup').is(':checked'));
       $('#urlInput').val('');
       $('#scoreboard').addClass('hide');
     });

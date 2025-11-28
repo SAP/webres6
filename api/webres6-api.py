@@ -725,7 +725,7 @@ def gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, re
     subject = sha256(f"{url}:{wait}:{timeout}:{ext}:{screenshot_mode}:{lookup_whois}".encode('ascii')).hexdigest()
     return f"{int(ts.timestamp()):x}-{subject}-{report_node}"
 
-def crawl_and_analyze_url(url, wait=2, timeout=10,
+def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
                           ext=None, screenshot_mode=None, headless_selenium=False,
                           lookup_whois=False, report_id = None, report_node='unknown'):
     """ Crawls and analyzes the given URL, returning the results as a JSON object.
@@ -750,7 +750,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
     lp = f"res6 {report_id:.25} "
     webres6_tested_total.inc()
     print(f"{lp}testing {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
-    print(f"{lp}options: wait={wait}s, timeout={timeout}s, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
+    print(f"{lp}options: wait={wait}s, timeout={timeout}s, scoreboard={scoreboard_entry}, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
     push_timing('init')
 
     # initialize webdriver and crawl page
@@ -804,10 +804,6 @@ def crawl_and_analyze_url(url, wait=2, timeout=10,
                     score=score, http_score=http_score, dns_score=dns_score,
                     screenshot=screenshot, timestamp=ts, extension=ext, timings=timings)
 
-    # enter scoreboard entry
-    if scoreboard:
-        scoreboard.enter(report)
-
     # send response
     return report, 200
 
@@ -832,7 +828,7 @@ def get_archived_report(report_id):
         return jsonify({ 'error': 'Report not found in archive', 'report_id': report_id }), 404
 
 
-def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
+def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
                                  ext=None, screenshot_mode=None, headless_selenium=False,
                                  lookup_whois=False, report_node='unknown'):
     """ Crawls and analyzes the given URL, using cached results if available.
@@ -840,7 +836,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
 
     if not storage_manager:
         # Redis is not configured, skip cache lookup
-        return crawl_and_analyze_url(url, wait=wait, timeout=timeout, ext=ext,
+        return crawl_and_analyze_url(url, wait=wait, timeout=timeout, ext=ext, scoreboard_entry=scoreboard_entry,
                                       screenshot_mode=screenshot_mode, headless_selenium=headless_selenium,
                                       lookup_whois=lookup_whois, report_node=report_node)
 
@@ -879,7 +875,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
     storage_manager.put_result_cacheline(cache_key, sentinel, max_timeout, False)
 
     # Perform actual crawl and cache the result
-    json_result, error_code = crawl_and_analyze_url(url, wait=wait, timeout=timeout, ext=ext,
+    json_result, error_code = crawl_and_analyze_url(url, wait=wait, timeout=timeout, ext=ext, scoreboard_entry=scoreboard_entry,
                                    screenshot_mode=screenshot_mode, headless_selenium=headless_selenium,
                                    lookup_whois=lookup_whois, report_id=report_id, report_node=report_node)
 
@@ -892,6 +888,10 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10,
         cache_line = { 'type': 'report', 'ts': ts, 'report_id': report_id,
                         'data': "./reports/" + report_id }
         storage_manager.put_result_cacheline(cache_key, cache_line, result_cache_ttl, True)
+
+    # enter scoreboard entry
+    if scoreboard and scoreboard_entry and json_result.get('error', None) is None:
+        scoreboard.enter(json_result)
 
     # return the result
     return jsonify(json_result), error_code
@@ -975,6 +975,7 @@ def create_http_app():
         timeout = float(request.args.get('timeout')) if request.args.get('timeout') else 3*wait
         if timeout > max_timeout:
             timeout = max_timeout
+        scoreboard_entry = request.args.get('scoreboard', 'false').lower() in ['1', 'true', 'yes', 'on']
         ext = request.args.get('ext')
         if ext and ext not in extensions:
             return jsonify({'error': f'Extension {ext} not found.'}), 400
@@ -985,8 +986,8 @@ def create_http_app():
         if enable_whois and request.args.get('whois', 'false').lower() in ['1', 'true', 'yes', 'on']:
             lookup_whois = True
 
-        response, error_code = crawl_and_analyze_url_cached(url, wait=wait, timeout=timeout, ext=ext,
-                                          screenshot_mode=screenshot_mode, lookup_whois=lookup_whois,
+        response, error_code = crawl_and_analyze_url_cached(url, wait=wait, timeout=timeout, scoreboard_entry=scoreboard_entry,
+                                          ext=ext, screenshot_mode=screenshot_mode, lookup_whois=lookup_whois,
                                           headless_selenium=headless_selenium, report_node=report_node)
         webres6_response_time.labels(whois=str(lookup_whois), screenshot=str(screenshot_mode)).observe((datetime.now(timezone.utc) - ts).total_seconds())
         return response, error_code
