@@ -77,8 +77,6 @@ seleniumHub:
 # Prometheteus Operator configuration
 prometheus:
   enabled: true
-  additionalLabels: 
-    Release: prometheus
 
 # Viewer (static content) configuration
 viewer:

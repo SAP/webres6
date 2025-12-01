@@ -785,15 +785,14 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
         print(f"{lp}dnsprobe lookups completed: {total} total, {noerror} no error, {success} success, {servfail} servfail", file=sys.stderr)
         push_timing('dnsprobe')
 
-    score, http_score, dns_score, ipv6_only_ready = get_ipv6_only_score(hosts)
-    print(f"{lp}website is {'' if ipv6_only_ready else 'NOT '}ipv6-only ready (http={http_score*100:.1f}%, dns={f"{dns_score*100:.1f}%" if dns_score is not None else 'N/A'})", file=sys.stderr)
-
     if lookup_whois and enable_whois:
         gch, lch, qs, qf = add_whois_info(hosts)
         print(f"{lp}whois lookups: {qs} successful, {qf} failed, {gch} global cache hits, {lch} local cache hits", file=sys.stderr)
         push_timing('whois')
 
     # report statistics
+    score, http_score, dns_score, ipv6_only_ready = get_ipv6_only_score(hosts)
+    print(f"{lp}website is {'' if ipv6_only_ready else 'NOT '}ipv6-only ready (http={http_score*100:.1f}%, dns={f"{dns_score*100:.1f}%" if dns_score is not None else 'N/A'})", file=sys.stderr)
     if ipv6_only_ready is True:
         webres6_tested_results.labels(result='ipv6_only_ready').inc()
     else:
@@ -803,6 +802,10 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     report = gen_json(url, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready,
                     score=score, http_score=http_score, dns_score=dns_score,
                     screenshot=screenshot, timestamp=ts, extension=ext, timings=timings)
+
+    push_timing('finalize')
+    print(f"{lp}time spent: total={sum(timings.values()):.2f}s " +
+          ' '.join([f"{k}={v:.3f}s" for k, v in timings.items()]), file=sys.stderr)
 
     # send response
     return report, 200

@@ -15,10 +15,15 @@ spec:
       {{- include "webres6.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.api.podAnnotations }}
       annotations:
+        {{- with .Values.api.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
+        {{- if .Values.prometheus.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "{{ .Values.api.port | default 6400 }}"
+        {{- end }}
       labels:
         {{- include "webres6.labels" . | nindent 8 }}
         {{- with .Values.api.podLabels }}
