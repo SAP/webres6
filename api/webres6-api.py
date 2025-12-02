@@ -130,11 +130,13 @@ print(f"whois lookups are {'enabled with TTL ' + str(whois_cache_ttl) + 's' if e
 disable_created_metrics()
 webres6_tested_total = Counter('webres6_tested_total', 'Total number of checks performed')
 webres6_tested_results = Counter('webres6_results_total', 'Total number of results for checks performed', ['result'])
+webres6_scores_total = Histogram('webres6_scores_total', 'Histogram of scores results ', ['score_type'], buckets=(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100))
 webres6_cache_hits_total = Counter('webres6_cache_hits_total', 'Total number of cache hits')
 webres6_archive_total = Counter('webres6_archive_hits_total', 'Total number of archive hits', ['result'])
 webres6_time_spent = Counter('webres6_time_spent_seconds_total', 'Time spent in different processing phases', ['phase'])
 webres6_response_time = Histogram('webres6_response_time_seconds_total', 'Response time for checks performed', ['whois', 'screenshot'], buckets=(0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 90, 120, 150, 180))
 webres6_hostinfo_parsed = Counter('webres6_hostinfo_parsed_total', 'Total number of hostinfo entries parsed', ['type'])
+webres6_resources_total = Counter('webres6_resources_total', 'Total number of resources per protocol', ['protocol'])
 webres6_whois_lookups = Counter('webres6_whois_lookups_total', 'WHOIS lookups performed', ['type'])
 webres6_whois_cache_size = Gauge('webres6_whois_cache_size_total', 'Number of entries in whois cache')
 webres6_whois_cache_size.set_function(lambda: storage_manager.whois_cache_size() if storage_manager else 0)
@@ -377,6 +379,18 @@ def get_hostinfo(driver, log_prefix=''):
             webres6_hostinfo_parsed.labels(type='invalid_ip').inc()
             print(f"{log_prefix}WARNING: Error parsing IP address: {remote_ip} - {e}", file=sys.stderr)
             ip = None
+        # add resource statistics
+        match ip.version:
+            case 4:
+                webres6_resources_total.labels(protocol='IPv4').inc()
+            case 6 if ip.is_nat64():
+                webres6_resources_total.labels(protocol='NAT64').inc()
+            case 6 if ip.ipv4_mapped:
+                webres6_resources_total.labels(protocol='IPv4_Mapped').inc()
+            case 6:
+                webres6_resources_total.labels(protocol='IPv6').inc()
+            case _:
+                webres6_resources_total.labels(protocol='Unknown').inc()
 
         # Extract remainder of the response details
         url = urlparse(response.get('url'))
@@ -797,6 +811,13 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
         webres6_tested_results.labels(result='ipv6_only_ready').inc()
     else:
         webres6_tested_results.labels(result='not_ipv6_only_ready').inc()
+
+    if http_score is not None:
+        webres6_scores_total.labels(score_type='http').observe(http_score)
+    if dns_score is not None:
+        webres6_scores_total.labels(score_type='dns').observe(dns_score)
+    if score is not None:
+        webres6_scores_total.labels(score_type='overall').observe(score)
 
     # generate final report
     report = gen_json(url, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready,
