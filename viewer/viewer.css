@@ -166,7 +166,6 @@ td.scoreboard-ipv6only-score span.percentage {
 }
 th.scoreboard-target, td.scoreboard-target {
   overflow: hidden;
-  white-space: nowrap;
   text-overflow: ellipsis;
 }
 th.scoreboard-timestamp, td.scoreboard-timestamp {
