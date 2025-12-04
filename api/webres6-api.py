@@ -130,7 +130,7 @@ print(f"whois lookups are {'enabled with TTL ' + str(whois_cache_ttl) + 's' if e
 disable_created_metrics()
 webres6_tested_total = Counter('webres6_tested_total', 'Total number of checks performed')
 webres6_tested_results = Counter('webres6_results_total', 'Total number of results for checks performed', ['result'])
-webres6_scores_total = Histogram('webres6_scores_total', 'Histogram of scores results ', ['score_type'], buckets=(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100))
+webres6_scores_total = Histogram('webres6_scores_total', 'Histogram of scores results ', ['score_type'], buckets=(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0))
 webres6_cache_hits_total = Counter('webres6_cache_hits_total', 'Total number of cache hits')
 webres6_archive_total = Counter('webres6_archive_hits_total', 'Total number of archive hits', ['result'])
 webres6_time_spent = Counter('webres6_time_spent_seconds_total', 'Time spent in different processing phases', ['phase'])
