@@ -6,19 +6,16 @@
   - [About this project](#about-this-project)
     - [Features](#features)
     - [Known limitations](#known-limitations)
-  - [Requirements and Setup](#requirements-and-setup)
-    - [REST API server (webres6-server.py)](#rest-api-server-webres6-serverpy)
-      - [Requirements:](#requirements)
-      - [Setup (development):](#setup-development)
-      - [Setup (docker compose):](#setup-docker-compose)
+  - [Requirements](#requirements)
+    - [API server (webres6-api)](#api-server-webres6-api)
     - [CLI Client](#cli-client)
-      - [Requirements](#requirements-1)
-      - [Setup (development):](#setup-development-1)
     - [Web App](#web-app)
-      - [Requirements](#requirements-2)
-      - [Setup](#setup)
+    - [DNS probe](#dns-probe)
+  - [Setup (development):](#setup-development)
+  - [Setup (docker compose):](#setup-docker-compose)
+  - [Setup (kubernetes):](#setup-kubernetes)
   - [Usage](#usage)
-    - [REST API server](#rest-api-server)
+    - [API server](#api-server)
     - [CLI Client](#cli-client-1)
   - [Support, Feedback, Contributing](#support-feedback-contributing)
   - [Security / Disclosure](#security--disclosure)
@@ -27,8 +24,9 @@
 
 ## About this project
 
-The *IPv6 Web Resource Chceker (webres6)* is a small tool/api to checks IPv6-only readiness of a Web page or app.
-It loads a given URL using Selenium and displays the IP addresses and protocols of all hosts it fetches resources from and comes with a CLI and Web client.
+The *IPv6 Web Resource Chceker (webres6)* is a small tool to check IPv6-only readiness of a Web page or app.
+It loads a given URL using Selenium and displays the IP addresses of all hosts it fetches resources from.
+It comes with a CLI and Web app.
 
 A pubic demo system is available at [webres6.dev.sap](https://webres6.dev.sap).
 
@@ -43,13 +41,15 @@ The tool is inspired by Paul Marks' [IPvFoo](https://github.com/pmarks-net/ipvfo
 - Can load Chrome extensions to manage cookie consent
 - Can handle NAT64 on the API server side.
 - Exports data using a REST API as JSON for further analysis.
+- Allows caching and archiving of results in Redis or flat files.
+- Calculates scores based on the share of resources available for IPv6-only clients and keeps a score-board of the results.
 
 The tool can be accessed using a [CLI Client](#cli) and a built-in [Web app](#web-app).
 
 ### Known limitations
 
 Only works if Selenium is running on a dual-stack hosts (or on an IPv6-only host with NAT64).
-  - If the host is IPv4-only, everything will be reported in red even if the web sites are IPv6 ready – This limitation is going to stay.
+  - If the host is IPv4-only, everything will be reported in red even if the Web pages are IPv6 ready – This limitation is going to stay.
   - If the host is IPv6-only without NAT64, all IPv4-only resources are missed out. 
 
 No auto-detection of NAT64 prefixes - prefixes other than the well-known prefix `64:ff9b::/96` need to be statically configured.
@@ -58,12 +58,12 @@ The Selenium automation is quite simple and just loads the URL.
 As modern Web pages tend to be complex, this will most likely result in many resources not getting loaded/analyzed a normal browser would load.
  - No efforts are taken to hide this being a robot
  - No delayed on-scroll content loading takes place
- - Limited Cookie consent interactions are supported through plugins -  use an extension like consent-o-matic for that.
+ - Limited Cookie consent interactions are supported through plugins. This does not work well in practice though.
  - Because we don't have long-term cooke state, we [expect that some advertisements and analytics may not be loaded](https://doi.org/10.48550/arXiv.2506.11947).
  - No authentication/login takes place
 
 Without *dnsprobe*, it ignores DNS aspects: Even if this tool reports green, it is still necessary to check the whole DNS delegation chain of all hosts involved for IPv6-only realness.
-With the *dnsprobe* microservice included in the project, DNS testing is a little fragile, especially in containerized environments.
+With the *dnsprobe* microservice included in the project, DNS testing can be little fragile, especially in containerized environments.
 A tool for more thorough DNS IPv6-only testing is [ready.chair6.net](/https://ready.chair6.net/).
 
 
@@ -107,7 +107,7 @@ For *api* and *cli*, run ```bash source .venv/bin/activate``` within the respect
 The *viewer* is also served from the *api* development environment. 
 
 The *dnsprobe* is a little more tricky, it is strongly recommend running it in docker or a debian based VM with *Debian Trixie* and Debian managed python. 
-Please see the Dockerfile in the dnsprobe folder for the package dependencies.
+Please see the Dockerfile in the *dnsprobe* folder for the package dependencies.
 
 ## Setup (docker compose):
 
