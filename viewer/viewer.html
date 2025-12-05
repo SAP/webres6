@@ -69,18 +69,18 @@ SPDX-License-Identifier: Apache-2.0
         </colgroup>
         <thead>
           <tr>
-            <th class="scoreboard-ipv6only-score">Score</th>
-            <th class="scoreboard-url">URL</th>
-            <th class="scoreboard-timestamp">Last Tested</th>
+            <th class="scoreboard-ipv6only-score sortable" data-sort="ipv6_only_score" style="cursor: pointer;">Score</th>
+            <th class="scoreboard-url sortable" data-sort="url" style="cursor: pointer;">URL</th>
+            <th class="scoreboard-timestamp sortable" data-sort="ts" style="cursor: pointer;">Last Tested</th>
           </tr>
         </thead>
-        <tdbody>
+        <tbody>
           <tr class="scoreboard-entry template">
             <td class="scoreboard-ipv6only-score"><progress class="ipv6only-score" max="1"></progress> <span class="percentage"></span></td>
             <td class="scoreboard-target"><a></a></td>
             <td class="scoreboard-timestamp"></td>
           </tr>
-        </tdbody>
+        </tbody>
       </table>
     </div>
     <div class="contents-container results template" id="results-template">

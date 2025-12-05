@@ -382,6 +382,7 @@ async function analyzeURL(url, wait = 2, scoreboard_entry = false, screenshot = 
   }
 }
 
+/* Call API and fetch analysis report by report ID */
 async function analyzeReport(report) {
   // Generate new container
   const [domContainer, overview, domContainerId] = createResultsDomContainer(report.substring(0, 25));
@@ -413,14 +414,12 @@ async function analyzeReport(report) {
   }
 }
 
-async function renderScoreboard(resultsLimit=12) {
+/* Load and render scoreboard */
+async function loadScoreboard(resultsLimit=12) {
   // Check if scoreboard is supported
   if (!srvSupportsScoreboard) {
     return;
   }
-  // prepare scoreboard container references
-  const scoreboardContainer = $('#scoreboard');
-  const scoreboardTableBody = scoreboardContainer.find('.scoreboard-table tbody');
   // Fetch scoreboard data
   const scoreboardUrl = getAPIBase() + `/scoreboard?limit=${resultsLimit}`;
   try {
@@ -431,32 +430,37 @@ async function renderScoreboard(resultsLimit=12) {
       $.each(data, function(idx, entry) {
         entry.ts = new Date(entry.ts);
       });
-      // Sort data by score (descending - highest scores first)
-      data.sort(function(a, b) {
-        if (a.ipv6_only_score < b.ipv6_only_score) return 1;
-        if (a.ipv6_only_score > b.ipv6_only_score) return -1;
-        if (a.ts < b.ts) return 1;
-        if (a.ts > b.ts) return -1;
-        return 0;
-      });
-      //render scoreboard entries
-      $.each(data, function(idx, entry) {
-        const row = scoreboardTableBody.find('tr.template').clone();
-        row.removeClass('template');
-        // Use ipv6_only_score instead of score
-        const score = entry.ipv6_only_score;
-        row.find('.scoreboard-ipv6only-score .percentage').text(`${(score * 100).toFixed(1)}%`);
-        row.find('.scoreboard-ipv6only-score progress').attr('value', score);
-        const resultLink = row.find('.scoreboard-target a');
-        resultLink.attr('href', `#report:${entry.report_id}`);
-        resultLink.text(entry.url);
-        resultLink.on('click', async function(e) { e.preventDefault(); await analyzeReport(entry.report_id); window.location.hash = `report:${entry.report_id}`; });
-        row.find('.scoreboard-timestamp').text(new Date(entry.ts).toLocaleString('en-UK', timeFormatOptions));
-        scoreboardTableBody.append(row);
-      });
       if (data.length > 0) {
         console.log('Scoreboard loaded with', data.length, 'entries');
-        scoreboardContainer.removeClass('template');
+        // Sort data by score (descending - highest scores first)
+        data.sort(function(a, b) {
+          var score = -compareScoreboardEntries(a, b, 'ipv6_only_score');
+          if (score !== 0) return score;
+          var score = compareScoreboardEntries(a, b, 'url');
+          if (score !== 0) return score;
+          var score = -compareScoreboardEntries(a, b, 'ts');
+          if (score !== 0) return score;
+          return 0;
+        });
+        // Render scoreboard
+        renderScoreboard(data);
+        // Add sorting functionality to table headers
+        $('#scoreboard th.sortable').on('click', function() {
+          const column = $(this).data('sort');
+          const reverse = $(this).hasClass('sorted-ascending');
+          $('#scoreboard th.sortable').removeClass('sorted-ascending sorted-descending');
+          if (reverse) {
+            $(this).addClass('sorted-descending');
+          } else {
+            $(this).addClass('sorted-ascending');
+          }
+          data.sort(function(a, b) {
+            var score = compareScoreboardEntries(a, b, column);
+            if (reverse) return -score;
+            return score;
+          });
+          renderScoreboard(data);
+        });
       } else {
         console.log('No scoreboard entries available');
       }
@@ -466,6 +470,49 @@ async function renderScoreboard(resultsLimit=12) {
   } catch (error) {
     console.error('Error loading scoreboard:', error);
   }
+}
+
+/* Compare two scoreboard entries by given column */
+function compareScoreboardEntries(a, b, column) {
+    switch(column) {
+        case 'ipv6_only_score':
+            if (a.ipv6_only_score < b.ipv6_only_score) return -1;
+            if (a.ipv6_only_score > b.ipv6_only_score) return 1;
+            // fallthrough
+        case 'url':
+            if (a.url < b.url) return -1;
+            if (a.url > b.url) return 1;
+            // fallthrough
+        case 'ts':
+            if (a.ts < b.ts) return -1;
+            if (a.ts > b.ts) return 1;
+            // fallthrough
+    }
+    return 0;
+}
+
+/* Render scoreboard data into the DOM */
+function renderScoreboard(data) {
+  // prepare scoreboard container references
+  const scoreboardContainer = $('#scoreboard');
+  const scoreboardTableBody = scoreboardContainer.find('.scoreboard-table tbody');
+  scoreboardTableBody.children('tr:not(.template)').remove();
+  //render scoreboard entries
+  $.each(data, function(idx, entry) {
+    const row = scoreboardTableBody.find('tr.template').clone();
+    row.removeClass('template');
+    // Use ipv6_only_score instead of score
+    const score = entry.ipv6_only_score;
+    row.find('.scoreboard-ipv6only-score .percentage').text(`${(score * 100).toFixed(1)}%`);
+    row.find('.scoreboard-ipv6only-score progress').attr('value', score);
+    const resultLink = row.find('.scoreboard-target a');
+    resultLink.attr('href', `#report:${entry.report_id}`);
+    resultLink.text(entry.url);
+    resultLink.on('click', async function(e) { e.preventDefault(); await analyzeReport(entry.report_id); window.location.hash = `report:${entry.report_id}`; });
+    row.find('.scoreboard-timestamp').text(new Date(entry.ts).toLocaleString('en-UK', timeFormatOptions));
+    scoreboardTableBody.append(row);
+  });
+  scoreboardContainer.removeClass('template');
 }
 
 /* Allow to load saved json dumps of previous analysis by dropping them somewhere on the browser window */
@@ -505,7 +552,7 @@ $(document).ready( async function() {
       analyzeReport(target)
     } else if (verb.toLowerCase() === 'scoreboard') {
       if (await loadSrvConfig()) {
-        renderScoreboard(parseInt(target) || 12);
+        loadScoreboard(parseInt(target) || 12);
       }
     }
   } else {
@@ -513,7 +560,7 @@ $(document).ready( async function() {
     s = await loadSrvConfig();
     if (!s) { return; }
     // enable scoreboard
-    renderScoreboard(12);
+    loadScoreboard(12);
     // show input form and add handlers
     $('#input').removeClass('template');
     $('#urlForm').on('submit', function(e) {
