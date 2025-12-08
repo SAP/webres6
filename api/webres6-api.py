@@ -108,6 +108,17 @@ if os.path.exists(extensions_dir):
             extensions.append(ext)
             print(f"\t{ext} (packed)", file=sys.stderr)
 
+# read public suffix list
+public_suffixes = None
+if os.path.exists(os.path.join(app_home, 'public_suffix_list.dat')):
+    with open(os.path.join(app_home, 'public_suffix_list.dat')) as f:
+        public_suffixes = set()
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('//'):
+                public_suffixes.add(line)
+    print(f"loaded {len(public_suffixes)} public suffixes.", file=sys.stderr)
+
 # define storage manager - initialize later
 storage_manager = None
 
@@ -328,6 +339,23 @@ def take_screenshot(driver, mode='full', log_prefix=''):
         print(f"{log_prefix}ERROR: failed acquiring screenshot: {e.msg}", file=sys.stderr)
         return None
 
+def split_hostname(hostname):
+    """ Splits the hostname into local part and domain part.
+    """
+
+    if public_suffixes is None:
+        parts = hostname.rsplit('.', 2)
+        domain_part = '.'.join(parts[-2:]) if len(parts) > 1 else hostname
+        local_part = (parts[0] + '.') if len(parts) > 2 else ''
+    else:
+        parts = hostname.split('.')
+        for i in range(1, len(parts)):
+            domain_part = '.'.join(parts[-i:])
+            local_part  = '.'.join(parts[:-i]) + ('.' if i > 0 else '')
+            if domain_part not in public_suffixes:
+                break
+
+    return local_part, domain_part
 
 def get_hostinfo(driver, log_prefix=''):
     """ extracts host information using Selenium/Chromium network performance logs.
@@ -419,10 +447,10 @@ def get_hostinfo(driver, log_prefix=''):
 
         # Create a new host entry if it does not exist yet
         if url.hostname not in hosts:
-            parts = url.hostname.rsplit('.', 2)
+            local_part, domain_part = split_hostname(url.hostname)
             hosts[url.hostname] = {
-                'domain_part': '.'.join(parts[-2:]) if len(parts) > 1 else url.hostname,
-                'local_part': (parts[0] + '.') if len(parts) > 2 else '',
+                'domain_part': domain_part,
+                'local_part': local_part,
                 'urls': set(),
                 'ips': set(),
                 'protocols': {},

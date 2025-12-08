@@ -26,6 +26,9 @@ RUN pip install --no-cache-dir -r requirements.txt; \
 # create empty extensions folder
 RUN mkdir ./extensions
 
+# get public suffix list
+RUN curl -O https://publicsuffix.org/list/public_suffix_list.dat
+
 # Start the app with Gunicorn
 ENV GUNICORN_CMD_ARGS="--threads 32"
 EXPOSE 6400
