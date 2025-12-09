@@ -8,6 +8,7 @@ WORKDIR /app
 
 # Install non-python dependencies
 RUN apt update --yes \
+  && apt upgrade --yes \
   && apt install --no-install-recommends --yes -o DPkg::options::="--force-overwrite" -o Dpkg::Options::="--force-confdef" \
                   bash curl \
   && apt clean \

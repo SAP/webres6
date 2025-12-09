@@ -64,7 +64,7 @@ As modern Web pages tend to be complex, this will most likely result in many res
 
 Without *dnsprobe*, it ignores DNS aspects: Even if this tool reports green, it is still necessary to check the whole DNS delegation chain of all hosts involved for IPv6-only realness.
 With the *dnsprobe* microservice included in the project, DNS testing can be little fragile, especially in containerized environments.
-A tool for more thorough DNS IPv6-only testing is [ready.chair6.net](/https://ready.chair6.net/).
+If the tool reports a problem, a more thorough DNS IPv6-only analysis with a tool like [ready.chair6.net](/https://ready.chair6.net/) is recommended.
 
 
 ## Requirements 

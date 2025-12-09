@@ -28,7 +28,7 @@ from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics
 from webres6_storage import StorageManager, LocalStorageManager, RedisStorageManager, Scoreboard
 
 # config/flag variables
-webres6_version  = "1.0.0"
+webres6_version  = "1.1.0"
 debug_whois      = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo   = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask      = 'flask'    in getenv("DEBUG", '').lower().split(',')
@@ -118,6 +118,8 @@ if os.path.exists(os.path.join(app_home, 'public_suffix_list.dat')):
             if line and not line.startswith('//'):
                 public_suffixes.add(line)
     print(f"loaded {len(public_suffixes)} public suffixes.", file=sys.stderr)
+else:
+    print(f"WARNING: public suffix list not found, domain part extraction will always use the 2nd level domain.", file=sys.stderr)
 
 # define storage manager - initialize later
 storage_manager = None
@@ -711,7 +713,9 @@ def add_whois_info(hosts):
     return stats['global_cache_hit'], stats['local_cache_hit'], stats['whois_lookup'], stats['whois_failed']
 
 
-def gen_json(url, hosts={}, ipv6_only_ready=None, score=None, http_score=None, dns_score=None, screenshot=None, report_id=None, timestamp=datetime.now(timezone.utc), timings=None, extension=None, error=None, error_code=200):
+def gen_json(url, hosts={}, ipv6_only_ready=None, score=None, http_score=None, dns_score=None, screenshot=None,
+             report_id=None, timestamp=datetime.now(timezone.utc), timings=None, extension=None, scoreboard_entry=False,
+             error=None, error_code=200):
     """ prepare the hosts dictionary to be dumped as a JSON object.
     """
 
@@ -738,15 +742,15 @@ def gen_json(url, hosts={}, ipv6_only_ready=None, score=None, http_score=None, d
         }
 
     return { 'ID': report_id,
-             'url': url,
+             'webres6_version': webres6_version,
              'error': error,
              'error_code': error_code,
              'ts': timestamp,
+             'url': url,
+             'ipv6_only_ready': ipv6_only_ready,
              'ipv6_only_score': score,
              'ipv6_only_http_score': http_score,
              'ipv6_only_dns_score': dns_score,
-             'ipv6_only_ready': ipv6_only_ready,
-             'extension': extension,
              'hosts': { k: {
                  'local_part': str(v['local_part']),
                  'domain_part': str(v['domain_part']),
@@ -759,13 +763,17 @@ def gen_json(url, hosts={}, ipv6_only_ready=None, score=None, http_score=None, d
                  } for k, v in hosts.items()
              },
              'screenshot': screenshot,
+             'extension': extension,
+             'scoreboard_entry': bool(scoreboard_entry),
              'timings': timings if timings else {} }
+
 
 def gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, report_node):
     """ Generates a unique report ID based on the input parameters.
     """
     subject = sha256(f"{url}:{wait}:{timeout}:{ext}:{screenshot_mode}:{lookup_whois}".encode('ascii')).hexdigest()
     return f"{int(ts.timestamp()):x}-{subject}-{report_node}"
+
 
 def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
                           ext=None, screenshot_mode=None, headless_selenium=False,
@@ -850,7 +858,11 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     # generate final report
     report = gen_json(url, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready,
                     score=score, http_score=http_score, dns_score=dns_score,
-                    screenshot=screenshot, timestamp=ts, extension=ext, timings=timings)
+                    screenshot=screenshot, timestamp=ts, extension=ext, scoreboard_entry=scoreboard_entry, timings=timings)
+    # remove None values from report
+    for key in list(report.keys()):
+        if report[key] is None:
+            del report[key]
 
     push_timing('finalize')
     print(f"{lp}time spent: total={sum(timings.values()):.2f}s " +
