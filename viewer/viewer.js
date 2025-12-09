@@ -356,6 +356,14 @@ async function analyzeURL(url, wait = 2, scoreboard_entry = false, screenshot = 
         domContainer.find('.overview .status.status-loading').remove();
         const errStatus = $('#results-template .overview .status.error').clone();
         errStatus.find('.placeholder').text(`${response.status} ${response.statusText}`);
+        try {
+          const errorData = await response.json();
+          if (errorData.error) {
+            errStatus.find('.placeholder').text(`${errorData.error}`);
+          }
+        } catch (e) {
+          // ignore JSON parse errors
+        }
         errStatus.removeClass('template');
         overview.append(errStatus);
         return;
@@ -508,6 +516,7 @@ function renderScoreboard(data) {
     const resultLink = row.find('.scoreboard-target a');
     resultLink.attr('href', `#report:${entry.report_id}`);
     resultLink.text(entry.url);
+    resultLink.attr('title', entry.url);
     resultLink.on('click', async function(e) { e.preventDefault(); await analyzeReport(entry.report_id); window.location.hash = `report:${entry.report_id}`; });
     row.find('.scoreboard-timestamp').text(new Date(entry.ts).toLocaleString('en-UK', timeFormatOptions));
     scoreboardTableBody.append(row);

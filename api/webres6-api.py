@@ -9,11 +9,12 @@ import sys
 import argparse
 import json
 import os
+import signal
 import platform
 import time
 from os import getenv
 from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from hashlib import sha256
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -351,9 +352,9 @@ def split_hostname(hostname):
         local_part = (parts[0] + '.') if len(parts) > 2 else ''
     else:
         parts = hostname.split('.')
-        for i in range(1, len(parts)):
+        for i in range(1, len(parts)+1):
             domain_part = '.'.join(parts[-i:])
-            local_part  = '.'.join(parts[:-i]) + ('.' if i > 0 else '')
+            local_part  = '.'.join(parts[:-i]) + ('.' if len(parts[:-i]) > 0 else '')
             if domain_part not in public_suffixes:
                 break
 
@@ -713,7 +714,7 @@ def add_whois_info(hosts):
     return stats['global_cache_hit'], stats['local_cache_hit'], stats['whois_lookup'], stats['whois_failed']
 
 
-def gen_json(url, hosts={}, ipv6_only_ready=None, score=None, http_score=None, dns_score=None, screenshot=None,
+def gen_json(url, domain=None, hosts={}, ipv6_only_ready=None, score=None, http_score=None, dns_score=None, screenshot=None,
              report_id=None, timestamp=datetime.now(timezone.utc), timings=None, extension=None, scoreboard_entry=False,
              error=None, error_code=200):
     """ prepare the hosts dictionary to be dumped as a JSON object.
@@ -746,7 +747,8 @@ def gen_json(url, hosts={}, ipv6_only_ready=None, score=None, http_score=None, d
              'error': error,
              'error_code': error_code,
              'ts': timestamp,
-             'url': url,
+             'url': url.geturl(),
+             'domain': domain,
              'ipv6_only_ready': ipv6_only_ready,
              'ipv6_only_score': score,
              'ipv6_only_http_score': http_score,
@@ -771,7 +773,7 @@ def gen_json(url, hosts={}, ipv6_only_ready=None, score=None, http_score=None, d
 def gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, report_node):
     """ Generates a unique report ID based on the input parameters.
     """
-    subject = sha256(f"{url}:{wait}:{timeout}:{ext}:{screenshot_mode}:{lookup_whois}".encode('ascii')).hexdigest()
+    subject = sha256(f"{url.geturl()}:{wait}:{timeout}:{ext}:{screenshot_mode}:{lookup_whois}".encode('utf-8')).hexdigest()
     return f"{int(ts.timestamp()):x}-{subject}-{report_node}"
 
 
@@ -799,7 +801,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
         report_id = gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, report_node)
     lp = f"res6 {report_id:.25} "
     webres6_tested_total.inc()
-    print(f"{lp}testing {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
+    print(f"{lp}testing {url.geturl().translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
     print(f"{lp}options: wait={wait}s, timeout={timeout}s, scoreboard={scoreboard_entry}, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
     push_timing('init')
 
@@ -808,7 +810,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     if not driver:
         webres6_tested_results.labels(result='errors').inc()
         return gen_json(url, report_id=report_id, error='Could not initialize selenium with the requested extension', error_code=500), 500
-    crawl, err = crawl_page(url, driver, wait=wait, timeout=timeout, log_prefix=lp);
+    crawl, err = crawl_page(url.geturl(), driver, wait=wait, timeout=timeout, log_prefix=lp);
     push_timing('crawl')
 
     # take screenshot if requested
@@ -856,7 +858,8 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
         webres6_scores_total.labels(score_type='overall').observe(score)
 
     # generate final report
-    report = gen_json(url, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready,
+    _, domain = split_hostname(url.hostname)
+    report = gen_json(url, domain=domain, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready,
                     score=score, http_score=http_score, dns_score=dns_score,
                     screenshot=screenshot, timestamp=ts, extension=ext, scoreboard_entry=scoreboard_entry, timings=timings)
     # remove None values from report
@@ -1030,8 +1033,16 @@ def create_http_app():
         # parse url
         if not url:
             return jsonify({'error': 'URL parameter is required'}), 400
-        if not url.lower().startswith('http'):
-            url = 'https://' + url
+        try:
+            parsed_url = urlparse(url) 
+            if parsed_url.scheme == '':
+                # try adding https scheme if missing
+                parsed_url = urlparse('https://' + url)
+            if not parsed_url.scheme or parsed_url.scheme not in ['http', 'https'] or not parsed_url.netloc:
+                print(f"ERROR: invalid URL provided: {url} --> {parsed_url}", file=sys.stderr)
+                return jsonify({'error': 'Invalid URL provided'}), 400
+        except Exception as e:
+            return jsonify({'error': f'Invalid URL provided: {e}'}), 400
         # parse other parameters
         wait = float(request.args.get('wait')) if request.args.get('wait') else 2
         if wait > max_wait:
@@ -1050,7 +1061,7 @@ def create_http_app():
         if enable_whois and request.args.get('whois', 'false').lower() in ['1', 'true', 'yes', 'on']:
             lookup_whois = True
 
-        response, error_code = crawl_and_analyze_url_cached(url, wait=wait, timeout=timeout, scoreboard_entry=scoreboard_entry,
+        response, error_code = crawl_and_analyze_url_cached(parsed_url, wait=wait, timeout=timeout, scoreboard_entry=scoreboard_entry,
                                           ext=ext, screenshot_mode=screenshot_mode, lookup_whois=lookup_whois,
                                           headless_selenium=headless_selenium, report_node=report_node)
         webres6_response_time.labels(whois=str(lookup_whois), screenshot=str(screenshot_mode)).observe((datetime.now(timezone.utc) - ts).total_seconds())
@@ -1124,6 +1135,15 @@ def create_http_app():
 
     return app
 
+# signal handler for graceful shutdown
+def signal_handler(sig, frame):
+    print(f"Received signal {sig}, shutting down...", file=sys.stderr)
+    if storage_manager and storage_manager.can_persist():
+        print("Persisting local cache to disk...", file=sys.stderr)
+        storage_manager.persist()
+    sys.exit(0)
+
+# main entry point
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawTextHelpFormatter,
@@ -1141,6 +1161,9 @@ if __name__ == "__main__":
         debug_flask = True
         print("Debugging mode is ON. This will print a lot of information to stderr.", file=sys.stderr)
 
+    # register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     # Check if URL is provided and valid
     print(f"Starting HTTP API server on port {args.port}", file=sys.stderr)

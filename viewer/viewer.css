@@ -78,6 +78,7 @@ h1 {
   color: #2a4d7a;
 }
 .results h2 {
+  max-width: 100%;
   text-overflow: ellipsis;
   text-wrap: nowrap;
   overflow: hidden;
@@ -156,21 +157,25 @@ input[type="text"] {
   border-radius: 6px;
   box-sizing: border-box;
 }
+table.scoreboard-table{
+  table-layout: fixed;
+}
 td.scoreboard-ipv6only-score, th.scoreboard-ipv6only-score {
   text-align: left;
-  width: 27%;
+  width: 23%;
 }
 td.scoreboard-ipv6only-score span.percentage {
   font-weight: bold;
   float: right;
 }
 th.scoreboard-target, td.scoreboard-target {
+  text-wrap-mode: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 th.scoreboard-timestamp, td.scoreboard-timestamp {
   text-align: left;
-  width: 23%;
+  width: 20%;
 }
 td.protocol {
   color: gray;
@@ -405,6 +410,10 @@ td.ip-netname {
   }
   .overview-item progress {
     width: 30%;
+  }
+  table.scoreboard-table{
+    table-layout: auto;
+    empty-cells: hide;
   }
   td.scoreboard-timestamp, th.scoreboard-timestamp {
     visibility: collapse;
