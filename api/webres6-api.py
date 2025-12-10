@@ -27,6 +27,7 @@ from flask import Flask, redirect, request, jsonify, send_from_directory
 from ipwhois import IPWhois
 from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 from webres6_storage import StorageManager, LocalStorageManager, RedisStorageManager, Scoreboard
+from webres6_selenium_extension import check_extension_parameter, get_selenium_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl
 
 # config/flag variables
 webres6_version  = "1.1.0"
@@ -43,7 +44,6 @@ redis_url        = getenv("REDIS_URL", None)
 result_cache_ttl = int(getenv("RESULT_CACHE_TTL", 900))  # Default 15min
 result_archive_ttl = int(getenv("RESULT_ARCHIVE_TTL", 3600*24*90))  # Default 3 month
 app_home         = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
-extensions_dir   = os.path.join(app_home, 'extensions')
 viewer_dir       = os.path.join(app_home, '..', 'viewer')
 srvconfig_dir    = os.path.join(app_home, 'serverconfig')
 local_cache_dir  = getenv("LOCAL_CACHE_DIR", os.path.join(app_home, '..', 'local_cache'))
@@ -98,16 +98,6 @@ if selenium_remote:
         username=selenium_username if selenium_username else 'admin',
         password=selenium_password if selenium_password else 'admin',
     )
-
-# Discover extensions available in the extensions directory
-print(f"loading extensions from {extensions_dir}.", file=sys.stderr)
-extensions = []
-if os.path.exists(extensions_dir):
-    for ext in os.listdir(extensions_dir):
-        ext_path = os.path.join(extensions_dir, ext)
-        if os.path.isfile(ext_path) and ext.endswith('.crx'):
-            extensions.append(ext)
-            print(f"\t{ext} (packed)", file=sys.stderr)
 
 # read public suffix list
 public_suffixes = None
@@ -230,7 +220,7 @@ class FlaskJSONProvider(flask.json.provider.DefaultJSONProvider):
         return super().default(obj)
 
 
-def init_webdriver(headless=False, log_prefix='', implicit_wait=0.5, extension=None):
+def init_webdriver(log_prefix='', implicit_wait=0.5, extension=None):
     """ Initializes the Selenium WebDriver with the necessary options.
     """
     options = webdriver.ChromeOptions()
@@ -243,29 +233,13 @@ def init_webdriver(headless=False, log_prefix='', implicit_wait=0.5, extension=N
     options.add_experimental_option('perfLoggingPrefs', { 'enableNetwork' : True })
     options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
 
-    if headless:
+    if headless_selenium:
         options.headless = True
         options.add_argument("--headless=new")
 
-    # load extension if requested
-    if extension:
-        ext = os.path.normpath(os.path.join(extensions_dir, os.path.basename(extension)))
-        if not ext.startswith(extensions_dir):
-            print(f"{log_prefix}ERROR: requested extension {ext} is outside of extensions directory", file=sys.stderr)
-            driver.quit()
-            return None
-        elif os.path.exists(ext):
-            print(f"{log_prefix}adding requested extension {ext} to browser", file=sys.stderr)
-            try:
-                options.add_extension(ext)
-            except WebDriverException as e:
-                print(f"{log_prefix}ERROR: failed adding extension {ext} to browser: {e}", file=sys.stderr)
-                driver.quit()
-                return None
-        else:
-            print(f"{log_prefix}ERROR: extension {ext} does not exist", file=sys.stderr)
-            driver.quit()
-            return None
+    # initialize extension if needed
+    if not init_selenium_options(options, extension, log_prefix=log_prefix):
+        return None
 
     # If SELENIUM_REMOTE_URL is set, use it to connect to a remote Selenium server
     driver = None
@@ -293,13 +267,26 @@ def init_webdriver(headless=False, log_prefix='', implicit_wait=0.5, extension=N
     return driver
 
 
-def crawl_page(url, driver=None, wait=2, timeout=10, log_prefix=''):
+def crawl_page(url, driver=None, extension=None, wait=2, timeout=10, log_prefix=''):
     """ Fetches the web page at the given URL using Selenium WebDriver.
     """
 
     try:
+        # prepare for crawl
+        success, err = prepare_selenium_crawl(driver, extension=extension, log_prefix=log_prefix)
+        if not success:
+            return False, err
+
+        # start crawl
         start_time = time.time()
         driver.get(url)
+
+        # operate after crawl
+        success, err = operate_selenium_crawl(driver, url, extension=extension, log_prefix=log_prefix)
+        if not success:
+            return False, err
+
+        # wait for page load complete
         while time.time() - start_time < timeout:
             time.sleep(wait)
             state = driver.execute_script("return document.readyState")
@@ -308,6 +295,8 @@ def crawl_page(url, driver=None, wait=2, timeout=10, log_prefix=''):
 
     except WebDriverException as e:
         return False, e.msg.replace('unknown error: ', '')
+    except Exception as e:
+        return False, str(e)
 
     return True, None
 
@@ -525,7 +514,7 @@ def add_dnsprobe_info(hosts):
 
         # Add DNSProbe data to host info
         info['dns'] = dnsprobe_data
-    
+
     return total, success, noerror, servfail
 
 
@@ -534,7 +523,7 @@ def get_ipv6_only_score(hosts):
     """
 
     if not hosts or len(hosts) == 0:
-        return None, None
+        return None, None, None, False
 
     ipv6_only_ready = True
     resources_total = 0
@@ -778,7 +767,7 @@ def gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, re
 
 
 def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
-                          ext=None, screenshot_mode=None, headless_selenium=False,
+                          ext=None, screenshot_mode=None,
                           lookup_whois=False, report_id = None, report_node='unknown'):
     """ Crawls and analyzes the given URL, returning the results as a JSON object.
     """
@@ -806,11 +795,11 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     push_timing('init')
 
     # initialize webdriver and crawl page
-    driver = init_webdriver(headless=headless_selenium, log_prefix=lp, extension=ext)
+    driver = init_webdriver(log_prefix=lp, extension=ext)
     if not driver:
         webres6_tested_results.labels(result='errors').inc()
         return gen_json(url, report_id=report_id, error='Could not initialize selenium with the requested extension', error_code=500), 500
-    crawl, err = crawl_page(url.geturl(), driver, wait=wait, timeout=timeout, log_prefix=lp);
+    crawl, err = crawl_page(url.geturl(), driver, extension=ext, wait=wait, timeout=timeout, log_prefix=lp);
     push_timing('crawl')
 
     # take screenshot if requested
@@ -896,7 +885,7 @@ def get_archived_report(report_id):
 
 
 def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
-                                 ext=None, screenshot_mode=None, headless_selenium=False,
+                                 ext=None, screenshot_mode=None,
                                  lookup_whois=False, report_node='unknown'):
     """ Crawls and analyzes the given URL, using cached results if available.
     """
@@ -904,7 +893,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
     if not storage_manager:
         # Redis is not configured, skip cache lookup
         return crawl_and_analyze_url(url, wait=wait, timeout=timeout, ext=ext, scoreboard_entry=scoreboard_entry,
-                                      screenshot_mode=screenshot_mode, headless_selenium=headless_selenium,
+                                      screenshot_mode=screenshot_mode,
                                       lookup_whois=lookup_whois, report_node=report_node)
 
     # Try to lookup in Redis cache first if available
@@ -920,7 +909,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
         cache_age = datetime.now(timezone.utc) - ts
         type = json_result.get('type', None)
         data = json_result.get('data', None)
-        print(f"{lp}sending cached {type} age={cache_age.total_seconds():.1f}s {url.translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
+        print(f"{lp}sending cached {type} age={cache_age.total_seconds():.1f}s {url.geturl().translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
         print(f"{lp}options: wait={wait}s, timeout={timeout}s, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
         if type == 'sentinel':
             response = jsonify({ 'error': 'Crawl in progress - please come back later', 'report_id': report_id })
@@ -943,7 +932,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
 
     # Perform actual crawl and cache the result
     json_result, error_code = crawl_and_analyze_url(url, wait=wait, timeout=timeout, ext=ext, scoreboard_entry=scoreboard_entry,
-                                   screenshot_mode=screenshot_mode, headless_selenium=headless_selenium,
+                                   screenshot_mode=screenshot_mode,
                                    lookup_whois=lookup_whois, report_id=report_id, report_node=report_node)
 
     # Archive the result in storage
@@ -995,7 +984,7 @@ def create_http_app():
     global scoreboard
     if storage_manager.can_archive() and enable_scoreboard:
         scoreboard = Scoreboard(storage_manager=storage_manager)
-    
+
     # Start a simple HTTP API server using Flask
     app = Flask(__name__, static_folder=app_home)
     app.config['RESTFUL_JSON'] = {'ensure_ascii': False}
@@ -1019,7 +1008,7 @@ def create_http_app():
     def res6_serverconfig():
         return jsonify({'version': webres6_version,
                         'message': srv_message, 'privacy_policy': privacy_policy,
-                        'max_wait': max_wait, 'extensions': extensions,
+                        'max_wait': max_wait, 'extensions': get_selenium_extensions(),
                         'whois': enable_whois, 'screenshot_modes': screenshot_modes,
                         'archive': storage_manager.can_archive(),
                         'scoreboard': scoreboard is not None,
@@ -1034,7 +1023,7 @@ def create_http_app():
         if not url:
             return jsonify({'error': 'URL parameter is required'}), 400
         try:
-            parsed_url = urlparse(url) 
+            parsed_url = urlparse(url)
             if parsed_url.scheme == '':
                 # try adding https scheme if missing
                 parsed_url = urlparse('https://' + url)
@@ -1052,8 +1041,10 @@ def create_http_app():
             timeout = max_timeout
         scoreboard_entry = request.args.get('scoreboard', 'false').lower() in ['1', 'true', 'yes', 'on']
         ext = request.args.get('ext')
-        if ext and ext not in extensions:
-            return jsonify({'error': f'Extension {ext} not found.'}), 400
+        if ext:
+            ext_ok, ext_error = check_extension_parameter(ext)
+            if not ext_ok:
+                return jsonify({'error': ext_error}), 400
         screenshot_mode = request.args.get('screenshot', 'none').lower()
         if screenshot_mode == 'none' or screenshot_mode not in screenshot_modes:
             screenshot_mode = None
@@ -1063,7 +1054,7 @@ def create_http_app():
 
         response, error_code = crawl_and_analyze_url_cached(parsed_url, wait=wait, timeout=timeout, scoreboard_entry=scoreboard_entry,
                                           ext=ext, screenshot_mode=screenshot_mode, lookup_whois=lookup_whois,
-                                          headless_selenium=headless_selenium, report_node=report_node)
+                                          report_node=report_node)
         webres6_response_time.labels(whois=str(lookup_whois), screenshot=str(screenshot_mode)).observe((datetime.now(timezone.utc) - ts).total_seconds())
         return response, error_code
 
