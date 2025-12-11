@@ -1,3 +1,8 @@
+#
+# SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+#
 import os
 import sys
 from selenium.common.exceptions import WebDriverException
