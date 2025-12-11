@@ -11,3 +11,8 @@ data:
     {{- .Values.serverconfig.privacy | nindent 4 }}
   MESSAGE: |
     {{- .Values.serverconfig.message | nindent 4 }}
+  {{- if .Values.serverconfig.webres6_selenium_extension_py }}
+  webres6_selenium_extension.py: |
+    {{- .Values.serverconfig.webres6_selenium_extension_py | nindent 4 }}
+  {{- end }}
+

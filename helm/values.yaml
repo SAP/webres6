@@ -14,9 +14,22 @@ imagePullSecrets:
 # API server based server message and privacy text configuration
 serverconfig:
   privacy: |-
-    <p>All data input is processed in accordance with <a href="https://www.sap.com/about/legal/privacy.html">SAP privacy policy</a>.<br/>
+    <p>All data input is processed in accordance with GDPR regulations. No personal data is stored unless explicitly provided by the user (e.g., URLs analyzed). Usage data is collected anonymously to improve service quality.</p>
     IP addresses resolved by this server my be processed by the WHOIS services of the respective Regional Internet Registries.</p>
   message: ""
+  webres6_selenium_extension_py: |-
+    import sys
+    def get_selenium_extensions():
+        return []
+    def check_extension_parameter(extension):
+        return False, f'no extensions are supported in this configuration'
+    def init_selenium_options(options, extension=None, log_prefix=""):
+        return True
+    def prepare_selenium_crawl(driver, extension=None, log_prefix=""):
+        return True, ''
+    def operate_selenium_crawl(driver, url, extension=None, log_prefix=""):
+        return True, ''
+    print ("loaded empty selenium extension override", file=sys.stderr)
 
 # Default image for both API and Viewer unless overridden
 image:
