@@ -272,6 +272,9 @@ def crawl_page(url, driver=None, extension=None, wait=2, timeout=10, log_prefix=
     """
 
     try:
+        # initialize page load timeout
+        driver.set_page_load_timeout(timeout)
+
         # prepare for crawl
         success, err = prepare_selenium_crawl(driver, extension=extension, log_prefix=log_prefix)
         if not success:
@@ -281,17 +284,19 @@ def crawl_page(url, driver=None, extension=None, wait=2, timeout=10, log_prefix=
         start_time = time.time()
         driver.get(url)
 
+        # wait requested settle time
+        time.sleep(wait)
+
         # operate after crawl
         success, err = operate_selenium_crawl(driver, url, extension=extension, log_prefix=log_prefix)
         if not success:
             return False, err
 
-        # wait for page load complete
+        # wait for page load complete if time budget allows
         while time.time() - start_time < timeout:
-            time.sleep(wait)
-            state = driver.execute_script("return document.readyState")
-            if state == "complete":
+            if driver.execute_script("return document.readyState") == "complete":
                 break
+            time.sleep(0.5)
 
     except WebDriverException as e:
         return False, e.msg.replace('unknown error: ', '')
@@ -792,14 +797,18 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     webres6_tested_total.inc()
     print(f"{lp}testing {url.geturl().translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
     print(f"{lp}options: wait={wait}s, timeout={timeout}s, scoreboard={scoreboard_entry}, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
-    push_timing('init')
 
-    # initialize webdriver and crawl page
+    # initialize webdriver
     driver = init_webdriver(log_prefix=lp, extension=ext)
     if not driver:
         webres6_tested_results.labels(result='errors').inc()
         return gen_json(url, report_id=report_id, error='Could not initialize selenium with the requested extension', error_code=500), 500
+    push_timing('init')
+
+    # perform crawl
     crawl, err = crawl_page(url.geturl(), driver, extension=ext, wait=wait, timeout=timeout, log_prefix=lp);
+    if crawl:
+        print(f"{lp}page crawl done", file=sys.stderr)
     push_timing('crawl')
 
     # take screenshot if requested
@@ -807,12 +816,17 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     if screenshot_mode:
         screenshot = take_screenshot(driver, mode=screenshot_mode, log_prefix=lp)
         push_timing('screenshot')
+    elif not crawl:
+        screenshot = take_screenshot(driver, mode='small', log_prefix=lp)
+        push_timing('screenshot')
 
+    # handle crawl errors
     if not crawl:
         print(f"{lp}ERROR: fetching page failed: {err.replace('\n', ' --- ')}", file=sys.stderr)
         cleanup_crawl(driver)
         webres6_tested_results.labels(result='errors').inc()
         return gen_json(url, report_id=report_id, screenshot=screenshot, timestamp=ts, timings=timings, error=err, error_code=200), 200
+
 
     # collect host info and analyze
     hosts = get_hostinfo(driver, log_prefix=lp)
@@ -1036,7 +1050,7 @@ def create_http_app():
         wait = float(request.args.get('wait')) if request.args.get('wait') else 2
         if wait > max_wait:
             wait = max_wait
-        timeout = float(request.args.get('timeout')) if request.args.get('timeout') else 3*wait
+        timeout = float(request.args.get('timeout')) if request.args.get('timeout') else max(3*wait, 10)
         if timeout > max_timeout:
             timeout = max_timeout
         scoreboard_entry = request.args.get('scoreboard', 'false').lower() in ['1', 'true', 'yes', 'on']
