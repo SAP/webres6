@@ -6,3 +6,4 @@ deploy/*-secret.yaml
 local_cache/
 pyvenv.cfg
 api/public_suffix_list.dat
+api/serverconfig/*.crx

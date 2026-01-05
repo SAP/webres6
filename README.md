@@ -38,11 +38,12 @@ The tool is inspired by Paul Marks' [IPvFoo](https://github.com/pmarks-net/ipvfo
 - Shows IPv4 and IPv6 addresses for all hosts used and whether the website is ready for IPv6-only clients.
 - Can take screenshots from the pages crawled for debugging purpose.
 - Can add WHOIS data to provide a hint about the infrastructure behind the resources.
-- Can load Chrome extensions to manage cookie consent
+- Can load load custom Selenium/Python code to instrument the crawling process.
 - Can handle NAT64 on the API server side.
 - Exports data using a REST API as JSON for further analysis.
 - Allows caching and archiving of results in Redis or flat files.
 - Calculates scores based on the share of resources available for IPv6-only clients and keeps a score-board of the results.
+- Splits domain names into host/domain part using [public suffix list](https://publicsuffix.org/).
 
 The tool can be accessed using a [CLI Client](#cli) and a built-in [Web app](#web-app).
 
@@ -58,13 +59,15 @@ The Selenium automation is quite simple and just loads the URL.
 As modern Web pages tend to be complex, this will most likely result in many resources not getting loaded/analyzed a normal browser would load.
  - No efforts are taken to hide this being a robot
  - No delayed on-scroll content loading takes place
- - Limited Cookie consent interactions are supported through plugins. This does not work well in practice though.
+ - No Cookie consent interactions are supported (can be added through custom Selenium/Python code – this does not work well in practice though)
  - Because we don't have long-term cooke state, we [expect that some advertisements and analytics may not be loaded](https://doi.org/10.48550/arXiv.2506.11947).
- - No authentication/login takes place
+ - No authentication/login takes place (could be added through custom Selenium/Python code)
 
 Without *dnsprobe*, it ignores DNS aspects: Even if this tool reports green, it is still necessary to check the whole DNS delegation chain of all hosts involved for IPv6-only realness.
-With the *dnsprobe* microservice included in the project, DNS testing can be little fragile, especially in containerized environments.
+With the *dnsprobe* microservice included in the project, DNS testing is fully supported.
 If the tool reports a problem, a more thorough DNS IPv6-only analysis with a tool like [ready.chair6.net](/https://ready.chair6.net/) is recommended.
+
+Containerized setup requires IPv6 being enabled in the container runtime. This can be challenging especially under MacOS.
 
 
 ## Requirements 
@@ -119,44 +122,8 @@ Please see the Dockerfile in the *dnsprobe* folder for the package dependencies.
 
 There is a helm chart available in the `helm` directory with a deployment example in the `deploy` folder.
 
-## Usage
 
-### API server 
-
-```bash
-# Start web service
-./webres6-server.py [options]
-
-Options:
-  -h, --help                  Show this help message and exit
-  --port PORT                 Port to listen on (default: 6400)
-  --debug                     Enable debugging output
-
-Environment variables:
-  ADMIN_API_KEY               API Key to call privileged functions
-  TIMEOUT                     Maximum timeout value in seconds
-  NAT64_PREFIXES              Comma-separated list of NAT64 prefixes
-  SELENIUM_REMOTE_URL         Use remote Selenium server instead of starting selenium for each request
-  DNSPROBE_API_URL            Enable DNS checking using specified dns probe service
-  REDIS_URL                   URL for optional REDIS cache
-  LOCAL_CACHE_DIR             DIR for optional LOCAL filesystem-based cache
-  ENABLE_WHOIS                Enable clients to request whois lookups
-  WHOIS_CACHE_TTL             Expiry time for whois cache
-  RESULT_CACHE_TTL            Expiry time for result cache
-  RESULT_ARCHIVE_TTL          Expiry time for result archive
-
-API endpoints:
-  /ping                       liveness probe endpoint
-  /favicon.EXT                send favicon
-  /res6/$metadata             get OData metadata document
-  /res6/srvconfig             list available extensions, screenshot-modes, whois support, ...
-  /res6/url(URL)              get JSON results for URL provided
-  /metrics                    Prometheus compatible metrics
-  /adm/whois/expire           expire old whois cache entries (requires ADMIN_API_KEY if set)
-  /[#URL]                     Web app to initiate analysis and display results
-```
-
-### CLI Client
+## CLI Client Usage
 
 ```bash
 ./webres6-cli.py [options] URL

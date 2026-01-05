@@ -17,9 +17,6 @@ export LANG='C.utf8'
 export LC_ALL='C.utf8'
 export TZ='UTC'
 
-# Fix python path and include serverconfig directory to allow selenium extensions
-export PYTHONPATH="/app/serverconfig:/app:${PYTHONPATH}"
-
 # Fix python buffering
 export PYTHONUNBUFFERED=1
 

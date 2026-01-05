@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+# load system modules
 import sys
 import argparse
 import json
@@ -24,10 +25,7 @@ from urllib.parse import urlparse
 import urllib3
 import flask
 from flask import Flask, redirect, request, jsonify, send_from_directory
-from ipwhois import IPWhois
 from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
-from webres6_storage import StorageManager, LocalStorageManager, RedisStorageManager, Scoreboard
-from webres6_selenium_extension import check_extension_parameter, get_selenium_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl
 
 # config/flag variables
 webres6_version  = "1.1.0"
@@ -54,6 +52,12 @@ whois_cache_ttl  = int(getenv("WHOIS_CACHE_TTL", 270000)) # seconds
 enable_scoreboard = getenv("ENABLE_SCOREBOARD", 'true').lower() in ['true', '1', 'yes']
 scoreboard_request_limit = int(getenv("SCOREBOARD_REQUEST_LIMIT", 1024))
 screenshot_modes = ['none', 'small', 'medium', 'full']
+
+# load custom modules (allows overrides in serverconfig directory)
+sys.path.insert(0, srvconfig_dir)
+from webres6_storage import StorageManager, LocalStorageManager, RedisStorageManager, Scoreboard
+from webres6_whois import get_whois_info
+from webres6_selenium_extension import check_extension_parameter, get_selenium_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl, cleanup_selenium_extension
 
 # get nodename for report id
 report_node = platform.node().split('.')[0]
@@ -141,7 +145,6 @@ webres6_time_spent = Counter('webres6_time_spent_seconds_total', 'Time spent in 
 webres6_response_time = Histogram('webres6_response_time_seconds_total', 'Response time for checks performed', ['whois', 'screenshot'], buckets=(0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 90, 120, 150, 180))
 webres6_hostinfo_parsed = Counter('webres6_hostinfo_parsed_total', 'Total number of hostinfo entries parsed', ['type'])
 webres6_resources_total = Counter('webres6_resources_total', 'Total number of resources per protocol', ['protocol'])
-webres6_whois_lookups = Counter('webres6_whois_lookups_total', 'WHOIS lookups performed', ['type'])
 webres6_whois_cache_size = Gauge('webres6_whois_cache_size_total', 'Number of entries in whois cache')
 webres6_whois_cache_size.set_function(lambda: storage_manager.whois_cache_size() if storage_manager else 0)
 
@@ -336,6 +339,7 @@ def take_screenshot(driver, mode='full', log_prefix=''):
         print(f"{log_prefix}ERROR: failed acquiring screenshot: {e.msg}", file=sys.stderr)
         return None
 
+
 def split_hostname(hostname):
     """ Splits the hostname into local part and domain part.
     """
@@ -469,11 +473,12 @@ def get_hostinfo(driver, log_prefix=''):
     return hosts
 
 
-def cleanup_crawl(driver, log_prefix=''):
+def cleanup_crawl(driver, extension=None, log_prefix=''):
     """Cleans up the Selenium WebDriver instance by safely quitting it.
 
     Args:
         driver: The Selenium WebDriver instance to be cleaned up
+        extension (str, optional): The extension name being used. Defaults to None.
         log_prefix (str, optional): Prefix to add to error log messages. Defaults to ''.
 
     Returns:
@@ -481,6 +486,7 @@ def cleanup_crawl(driver, log_prefix=''):
 
     """
     try:
+        cleanup_selenium_extension(driver, extension=extension, log_prefix=log_prefix)
         driver.quit()
     except WebDriverException as e:
         print(f"{log_prefix}ERROR: failed quitting WebDriver: {e.msg}", file=sys.stderr)
@@ -569,98 +575,6 @@ def get_ipv6_only_score(hosts):
 
     return overall_score, http_score, dns_score, ipv6_only_ready
 
-def get_whois_info(ip, local_cache):
-    """ Fetches WHOIS information for the given IP address using local and global caches.
-
-    Args:
-        ip (ipaddress.IPv4Address or ipaddress.IPv6Address): The IP address to look up
-
-    Returns:
-        dict: The WHOIS information for the IP address, or None if not found.
-    """
-
-    def push_to_local_cache(whois_info):
-        try:
-            for cidr in whois_info['network']['cidr'].split(','):
-                ipn = ip_network(cidr.strip())
-                local_cache[ipn] = whois_info
-        except (ValueError, KeyError) as e:
-            print(f"\tWARNING: local cache push failed for whois info {whois_info}: {e}", file=sys.stderr)
-
-    def lookup_local_cache(ip):
-        for network_cidr, cached_data in local_cache[ip.version].items():
-            if ip in network_cidr:
-                if debug_whois:
-                    print(f"\twhois cache local hit for {ip} in network {network_cidr}", file=sys.stderr)
-                return cached_data
-        return None
-
-    def lookup_whois(ip):
-        # Perform WHOIS lookup using ipwhois library last
-        try:
-            obj = IPWhois(str(ip))
-            result = obj.lookup_rdap(depth=1)
-
-            # Extract network CIDR
-            network_cidr = result.get("network", {}).get("cidr")
-            if not network_cidr:
-                print(f"\tWARNING: whois lookup failed for {ip}: {e}", file=sys.stderr)
-                return None
-
-            whois_info = {
-                'ts': datetime.now(timezone.utc),
-                'asn': result.get("asn"),
-                'asn_description': result.get("asn_description"),
-                'asn_country': result.get("asn_country_code"),
-                'network': {
-                    "name": result.get("network", {}).get("name"),
-                    "handle": result.get("network", {}).get("handle"),
-                    "country": result.get("network", {}).get("country"),
-                    "cidr": network_cidr
-                }
-            }
-
-            if debug_whois:
-                print(f"\twhois lookup for {ip}: {whois_info}", file=sys.stderr)
-
-            return whois_info
-
-        except Exception as e:
-            print(f"\tWARNING: whois lookup failed for {ip}: {e}", file=sys.stderr)
-            return None
-
-    # Check global cache (exact ip match) first
-    if (whois_info := storage_manager.get_whois_cacheline(ip)):
-        if debug_whois:
-            print(f"\twhois global cache hit for {ip}", file=sys.stderr)
-        # Cache the result locally
-        push_to_local_cache(whois_info)
-        # store result
-        webres6_whois_lookups.labels(type='cache-global').inc()
-        return whois_info, 'global_cache_hit'
-
-    # Check if IP falls into any locally cached network afterwards
-    elif (whois_info := lookup_local_cache(ip)):
-        # Cache the result globally
-        storage_manager.put_whois_cacheline(ip, whois_info)
-        # store result
-        webres6_whois_lookups.labels(type='cache-local').inc()
-        return whois_info, 'local_cache_hit'
-
-    # finally do a real whois lookup
-    elif (whois_info := lookup_whois(ip)):
-        # Cache the result locally using network CIDR
-        push_to_local_cache(whois_info)
-        # Cache the result globally
-        storage_manager.put_whois_cacheline(ip, whois_info)
-        # store result
-        webres6_whois_lookups.labels(type='whois-success').inc()
-        return whois_info, 'whois_lookup'
-    else:
-        # store result
-        webres6_whois_lookups.labels(type='whois-fail').inc()
-        return None, 'whois_failed'
-
 
 def add_whois_info(hosts):
     """Adds WHOIS information for each unique IP address in the hosts dictionary.
@@ -698,7 +612,7 @@ def add_whois_info(hosts):
             if debug_whois:
                 print(f"\taquiring whois info for {ip_in} lookup {ip}", file=sys.stderr)
 
-            whois_info, source = get_whois_info(ip, local_cache)
+            whois_info, source = get_whois_info(ip, local_cache, storage_manager, debug=debug_whois)
             whois_data[ip_in] = whois_info
             stats[source] += 1
 
@@ -823,7 +737,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     # handle crawl errors
     if not crawl:
         print(f"{lp}ERROR: fetching page failed: {err.replace('\n', ' --- ')}", file=sys.stderr)
-        cleanup_crawl(driver)
+        cleanup_crawl(driver, extension=ext, log_prefix=lp)
         webres6_tested_results.labels(result='errors').inc()
         return gen_json(url, report_id=report_id, screenshot=screenshot, timestamp=ts, timings=timings, error=err, error_code=200), 200
 
@@ -831,7 +745,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     # collect host info and analyze
     hosts = get_hostinfo(driver, log_prefix=lp)
     print(f"{lp}found {len(hosts)} hosts", file=sys.stderr)
-    cleanup_crawl(driver)
+    cleanup_crawl(driver, extension=ext, log_prefix=lp)
     push_timing('extract')
 
     # add dnsprobe info if configured

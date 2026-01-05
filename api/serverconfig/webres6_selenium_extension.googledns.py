@@ -5,6 +5,7 @@
 #
 # This webres6_selenium_extension module is just an empty template 
 
+import sys
 
 def get_selenium_extensions():
     """ Get the list of options provided by this selenium extension module.
@@ -35,7 +36,13 @@ def init_selenium_options(options, extension=None, log_prefix=""):
         Returns:
                 bool: True if extension was loaded successfully or no extension requested, False otherwise
     """
-    return True, ''
+    print(f"{log_prefix}injecting DoH config for Google DNS into the browser", file=sys.stderr)
+    local_state = {
+        "dns_over_https.mode": "secure",
+        "dns_over_https.templates": "https://dns64.dns.google/dns-query{?dns}",
+    }
+    options.add_experimental_option('localState', local_state)
+    return True
 
 
 def prepare_selenium_crawl(driver, extension=None, log_prefix=""):

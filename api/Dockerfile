@@ -15,7 +15,7 @@ RUN apt update --yes \
   && rm -rf /var/lib/apt/lists/*
 
 # Copy application code
-COPY api/requirements.txt api/docker-entrypoint api/webres6-api.py api/webres6_storage.py api/webres6_selenium_extension.py api/webres6-api-metadata.xml ./
+COPY api/requirements.txt api/docker-entrypoint api/webres6-api.py api/webres6_*.py api/webres6-api-metadata.xml ./
 
 # Install python dependencies
 RUN pip install --no-cache-dir -r requirements.txt; \
@@ -24,8 +24,8 @@ RUN pip install --no-cache-dir -r requirements.txt; \
 # Don't copy viewer files into api image, viewer is served separately
 # COPY viewer ./viewer/
 
-# create empty extensions folder
-RUN mkdir ./extensions
+# create empty server config folder
+RUN mkdir ./serverconfig
 
 # get public suffix list
 RUN curl -O https://publicsuffix.org/list/public_suffix_list.dat
