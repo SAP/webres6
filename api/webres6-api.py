@@ -28,7 +28,7 @@ from flask import Flask, redirect, request, jsonify, send_from_directory
 from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 
 # config/flag variables
-webres6_version  = "1.1.0"
+webres6_version  = "1.2.0"
 debug_whois      = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo   = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask      = 'flask'    in getenv("DEBUG", '').lower().split(',')
@@ -57,7 +57,7 @@ screenshot_modes = ['none', 'small', 'medium', 'full']
 sys.path.insert(0, srvconfig_dir)
 from webres6_storage import StorageManager, LocalStorageManager, RedisStorageManager, Scoreboard
 from webres6_whois import get_whois_info
-from webres6_selenium_extension import check_extension_parameter, get_selenium_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl, cleanup_selenium_extension
+from webres6_extension import check_extension_parameter, get_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl, cleanup_selenium_crawl, finalize_report 
 
 # get nodename for report id
 report_node = platform.node().split('.')[0]
@@ -223,7 +223,7 @@ class FlaskJSONProvider(flask.json.provider.DefaultJSONProvider):
         return super().default(obj)
 
 
-def init_webdriver(log_prefix='', implicit_wait=0.5, extension=None):
+def init_webdriver(log_prefix='', implicit_wait=0.5, extension=None, extension_data=None):
     """ Initializes the Selenium WebDriver with the necessary options.
     """
     options = webdriver.ChromeOptions()
@@ -241,7 +241,7 @@ def init_webdriver(log_prefix='', implicit_wait=0.5, extension=None):
         options.add_argument("--headless=new")
 
     # initialize extension if needed
-    if not init_selenium_options(options, extension, log_prefix=log_prefix):
+    if not init_selenium_options(options, extension, extension_data=extension_data, log_prefix=log_prefix):
         return None
 
     # If SELENIUM_REMOTE_URL is set, use it to connect to a remote Selenium server
@@ -270,7 +270,7 @@ def init_webdriver(log_prefix='', implicit_wait=0.5, extension=None):
     return driver
 
 
-def crawl_page(url, driver=None, extension=None, wait=2, timeout=10, log_prefix=''):
+def crawl_page(url, driver=None, extension=None, extension_data=None, wait=2, timeout=10, log_prefix=''):
     """ Fetches the web page at the given URL using Selenium WebDriver.
     """
 
@@ -279,7 +279,7 @@ def crawl_page(url, driver=None, extension=None, wait=2, timeout=10, log_prefix=
         driver.set_page_load_timeout(timeout)
 
         # prepare for crawl
-        success, err = prepare_selenium_crawl(driver, extension=extension, log_prefix=log_prefix)
+        success, err = prepare_selenium_crawl(driver, url, extension=extension, extension_data=extension_data, log_prefix=log_prefix)
         if not success:
             return False, err
 
@@ -291,7 +291,7 @@ def crawl_page(url, driver=None, extension=None, wait=2, timeout=10, log_prefix=
         time.sleep(wait)
 
         # operate after crawl
-        success, err = operate_selenium_crawl(driver, url, extension=extension, log_prefix=log_prefix)
+        success, err = operate_selenium_crawl(driver, url, extension=extension, extension_data=extension_data, log_prefix=log_prefix)
         if not success:
             return False, err
 
@@ -473,7 +473,7 @@ def get_hostinfo(driver, log_prefix=''):
     return hosts
 
 
-def cleanup_crawl(driver, extension=None, log_prefix=''):
+def cleanup_crawl(driver, extension=None, extension_data=None, log_prefix=''):
     """Cleans up the Selenium WebDriver instance by safely quitting it.
 
     Args:
@@ -486,7 +486,7 @@ def cleanup_crawl(driver, extension=None, log_prefix=''):
 
     """
     try:
-        cleanup_selenium_extension(driver, extension=extension, log_prefix=log_prefix)
+        cleanup_selenium_crawl(driver, extension=extension, extension_data=extension_data, log_prefix=log_prefix)
         driver.quit()
     except WebDriverException as e:
         print(f"{log_prefix}ERROR: failed quitting WebDriver: {e.msg}", file=sys.stderr)
@@ -713,14 +713,15 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     print(f"{lp}options: wait={wait}s, timeout={timeout}s, scoreboard={scoreboard_entry}, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
 
     # initialize webdriver
-    driver = init_webdriver(log_prefix=lp, extension=ext)
+    extension_data = {}
+    driver = init_webdriver(log_prefix=lp, extension=ext, extension_data=extension_data)
     if not driver:
         webres6_tested_results.labels(result='errors').inc()
         return gen_json(url, report_id=report_id, error='Could not initialize selenium with the requested extension', error_code=500), 500
     push_timing('init')
 
     # perform crawl
-    crawl, err = crawl_page(url.geturl(), driver, extension=ext, wait=wait, timeout=timeout, log_prefix=lp);
+    crawl, err = crawl_page(url.geturl(), driver, extension=ext, extension_data=extension_data, wait=wait, timeout=timeout, log_prefix=lp);
     if crawl:
         print(f"{lp}page crawl done", file=sys.stderr)
     push_timing('crawl')
@@ -737,7 +738,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     # handle crawl errors
     if not crawl:
         print(f"{lp}ERROR: fetching page failed: {err.replace('\n', ' --- ')}", file=sys.stderr)
-        cleanup_crawl(driver, extension=ext, log_prefix=lp)
+        cleanup_crawl(driver, extension=ext, extension_data=extension_data, log_prefix=lp)
         webres6_tested_results.labels(result='errors').inc()
         return gen_json(url, report_id=report_id, screenshot=screenshot, timestamp=ts, timings=timings, error=err, error_code=200), 200
 
@@ -745,7 +746,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     # collect host info and analyze
     hosts = get_hostinfo(driver, log_prefix=lp)
     print(f"{lp}found {len(hosts)} hosts", file=sys.stderr)
-    cleanup_crawl(driver, extension=ext, log_prefix=lp)
+    cleanup_crawl(driver, extension=ext, extension_data=extension_data, log_prefix=lp)
     push_timing('extract')
 
     # add dnsprobe info if configured
@@ -779,6 +780,10 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     report = gen_json(url, domain=domain, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready,
                     score=score, http_score=http_score, dns_score=dns_score,
                     screenshot=screenshot, timestamp=ts, extension=ext, scoreboard_entry=scoreboard_entry, timings=timings)
+
+    # call extension finalization if needed
+    finalize_report(report, extension=ext, extension_data=extension_data, log_prefix=lp)
+
     # remove None values from report
     for key in list(report.keys()):
         if report[key] is None:
@@ -936,7 +941,7 @@ def create_http_app():
     def res6_serverconfig():
         return jsonify({'version': webres6_version,
                         'message': srv_message, 'privacy_policy': privacy_policy,
-                        'max_wait': max_wait, 'extensions': get_selenium_extensions(),
+                        'max_wait': max_wait, 'extensions': get_extensions(),
                         'whois': enable_whois, 'screenshot_modes': screenshot_modes,
                         'archive': storage_manager.can_archive(),
                         'scoreboard': scoreboard is not None,

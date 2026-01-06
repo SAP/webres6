@@ -64,7 +64,7 @@ The API server is built with Flask and uses Selenium WebDriver to crawl web page
 - **Main API endpoints** (`webres6-api.py`) - Flask application providing REST endpoints
 - **Storage management** (`webres6_storage.py`) - Handles result caching and persistence  
 - **WHOIS integration** (`webres6_whois.py`) - Provides IP address ownership information
-- **Selenium extensions** (`webres6_selenium_extension.py`) - Extensible browser automation framework
+- **Custom extensions** (`webres6_extension.py`) - Hooks to modify browser automation framework
 - **DNSprobe** – External API to check IPv6-only readiness of the DNS records (see top level `dnsprobe` directory)
 
 ## Extension Mechanisms
@@ -72,51 +72,19 @@ The API server is built with Flask and uses Selenium WebDriver to crawl web page
 The IPv6 Web Resource checker can be extended by adding custom selenium/python logic into `webres6_selenium_extension.py`. 
 This, for example, enables adding Chrome extensions, custom DNS configurations, and specialized crawling behaviors.
 
-- **Default Implementation**: The base `webres6_selenium_extension.py` provides a no-op template
-- **Custom Implementations**: Place custom `serverconfig/webres6_selenium_extension.py` to override default behavior (`serverconfig/` dir is prepended to the PYTHON-PATH during startup)
+- **Default Implementation**: The base `webres6_extension.py` provides a no-op template
+- **Custom Implementations**: Place custom `serverconfig/webres6_extension.py` to override default behavior (`serverconfig/` dir is prepended to the PYTHON-PATH during startup)
 
-### Hooking Functions
-The following hooks are available:
-
-**`get_selenium_extensions()`**
-- Returns a list of extension names/identifiers available in this module
-- Used to populate the extension dropdown in the web UI
-- Return type: `list[str]`
-
-**`check_extension_parameter(extension)`**
-- Validates if the requested extension name is supported
-- Args: `extension` (str) - extension name to validate
-- Returns: `tuple[bool, str]` - (is_valid, error_message)
-
-**`init_selenium_options(options, extension=None, log_prefix="")`**
-- Configures Selenium WebDriver ChromeOptions before driver initialization
-- Used for loading Chrome extensions, setting browser preferences, etc.
-- Args:
-  - `options` - Selenium ChromeOptions instance
-  - `extension` (str) - requested extension name
-  - `log_prefix` (str) - prefix for log messages
-- Returns: `tuple[bool, str]` - (success, error_message)
-
-**`prepare_selenium_crawl(driver, extension=None, log_prefix="")`**
-- Performs setup before `driver.get(url)` is called
-- Can be used for authentication, cookie setup, etc.
-- Returns: `tuple[bool, str]` - (success, error_message)
-
-**`operate_selenium_crawl(driver, url, extension=None, log_prefix="")`**
-- Performs operations after page load (e.g., clicking consent dialogs)
-- Returns: `tuple[bool, str]` - (success, error_message)
-
-**`cleanup_selenium_extension(driver, extension=None, log_prefix="")`**
-- Cleanup operations after crawling is complete
-- No return value expected
+See `webres6_extension.py` for descriptions of the hooking functions. 
 
 ### Example Extensions:
 
-#### Chrome Extension Loader (`serverconfig/webres6_selenium_extension.py`)
+#### Chrome Extension Loader (`serverconfig/webres6_extension.loadcrx.py`)
 - Discovers Chrome extensions from `.crx` files in the `serverconfig/` directory
 - Presents list of discovered extensions through the `/res6/serverconfig` API endpoint 
 - Loads requested extension via `ChromeOptions.add_extension()`
 
-#### DNS-over-HTTPS Configuration (`serverconfig/webres6_selenium_extension.googledns.py`)
+#### DNS-over-HTTPS Configuration (`serverconfig/webres6_extension.googledns.py`)
 - Configures Chrome to use DNS-over-HTTPS with Google DNS
 - Sets secure DNS mode with IPv6-capable DNS64 endpoint
+- Adds DOH template URL to the report
