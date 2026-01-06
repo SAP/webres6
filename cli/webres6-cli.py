@@ -216,8 +216,7 @@ def display_image_in_iterm2(image_data, filename="screenshot", width=None):
 
 def print_timings(timings):
     print("Time spent:", end=' ')
-    for key in ['crawl', 'screenshot', 'extract', 'whois']:
-        if key in timings:
+    for key in timings.keys():
             print(f"{key}={timings[key]:.2f}s", end=' ')
     print()
 
@@ -268,8 +267,8 @@ def main():
         description=" IPv6 Web Resource Checker CLI client. Uses /res6 api and renders host info locally.")
     parser.add_argument("--api", default=api_url, help=f"Base API endpoint overriding WEBRES6_API_URL env (default: {api_url})")
     parser.add_argument("--serverconfig", action="store_true", help="Show server configuration - incl. supported extensions and screenshot modes - and exit")
-    parser.add_argument("-r", "--read-json", type=argparse.FileType('r', encoding='utf-8'), metavar="FILE.json", help="Read JSON input from file ignoring URL argument")
-    parser.add_argument("-o", "--save-json", action="append", type=argparse.FileType('w', encoding='utf-8'), metavar="FILE.json", help="Save JSON output to file")
+    parser.add_argument("-r", "--read-json", type=str, metavar="FILE.json", help="Read JSON input from file ignoring URL argument")
+    parser.add_argument("-o", "--save-json", action="append", type=str, metavar="FILE.json", help="Save JSON output to file")
     parser.add_argument("-w", "--wait", type=float, help="Wait time for page settle (seconds)")
     parser.add_argument("-t", "--timeout", type=float, help="Timeout for page load (seconds)")
     parser.add_argument("-e", "--extension", type=str, help="Extension to use (must be available on server)")
@@ -304,19 +303,19 @@ def main():
     
     # gather results from JSON or server
     if args.read_json:
-        print(f"Reading JSON input from: {args.read_json.name}", file=sys.stderr)
+        print(f"Reading JSON input from: {args.read_json}", file=sys.stderr)
         try:
-            res = json.load(args.read_json)
+            with open(args.read_json, 'r', encoding='utf-8') as f:
+                res = json.load(f)
         except Exception as e:
-            print(f"ERROR: Failed to read JSON from {args.read_json.name}: {e}", file=sys.stderr)
+            print(f"ERROR: Failed to read JSON from {args.read_json}: {e}", file=sys.stderr)
             sys.exit(2)
     else:
         print(f"API endpoint: {args.api}", file=sys.stderr)
         print(f"Fetching results for: {args.url} ...", file=sys.stderr, end=' ', flush=True)
         try:
             res = fetch_res6_json(args.api, args.url, ext=args.extension, screenshot=args.screenshot,
-                                  whois=(args.show_asn or args.show_asd or args.show_network),
-                                  wait=args.wait, timeout=args.timeout)
+                                  whois=True, wait=args.wait, timeout=args.timeout)
             print("done", file=sys.stderr)
         except Exception as e:
             print(f"ERROR: Failed to fetch from {args.api}: {e}", file=sys.stderr)
@@ -324,9 +323,18 @@ def main():
 
     # save JSON if requested
     if args.save_json:
-        for f in args.save_json:
-            json.dump(res, f)
-            print(f"JSON dump saved to: {f}", file=sys.stderr)
+        for filename in args.save_json:
+            try:
+                with open(filename, 'w', encoding='utf-8') as f:
+                    json.dump(res, f)
+                print(f"JSON dump saved to: {filename}", file=sys.stderr)
+            except Exception as e:
+                print(f"ERROR: Failed to save JSON to {filename}: {e}", file=sys.stderr)
+                sys.exit(2)
+
+    if res.get('error'):
+        print(f"ERROR: {res['error']}", file=sys.stderr)
+        sys.exit(2)
 
     # display results unless quiet
     if not args.quiet:
