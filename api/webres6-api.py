@@ -28,34 +28,35 @@ from flask import Flask, redirect, request, jsonify, send_from_directory
 from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 
 # config/flag variables
-webres6_version  = "1.2.0"
-debug_whois      = 'whois'    in getenv("DEBUG", '').lower().split(',')
-debug_hostinfo   = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
-debug_flask      = 'flask'    in getenv("DEBUG", '').lower().split(',')
-admin_api_key    = getenv("ADMIN_API_KEY", None)
-selenium_remote  = getenv("SELENIUM_REMOTE_URL", None)
+webres6_version   = "1.2.1"
+debug_whois       = 'whois'    in getenv("DEBUG", '').lower().split(',')
+debug_hostinfo    = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
+debug_flask       = 'flask'    in getenv("DEBUG", '').lower().split(',')
+admin_api_key     = getenv("ADMIN_API_KEY", None)
+selenium_remote   = getenv("SELENIUM_REMOTE_URL", None)
 selenium_username = getenv("SELENIUM_USERNAME", None)
 selenium_password = getenv("SELENIUM_PASSWORD", None)
 headless_selenium = getenv("HEADLESS_SELENIUM", False)
-dnsprobe_api_url = getenv("DNSPROBE_API_URL", None)
-redis_url        = getenv("REDIS_URL", None)
-result_cache_ttl = int(getenv("RESULT_CACHE_TTL", 900))  # Default 15min
+dnsprobe_api_url  = getenv("DNSPROBE_API_URL", None)
+valkey_url        = getenv("VALKEY_URL", None)
+archive_dir       = getenv("ARCHIVE_DIR", None)
+result_cache_ttl  = int(getenv("RESULT_CACHE_TTL", 900))  # Default 15min
 result_archive_ttl = int(getenv("RESULT_ARCHIVE_TTL", 3600*24*90))  # Default 3 month
-app_home         = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
-viewer_dir       = os.path.join(app_home, '..', 'viewer')
-srvconfig_dir    = os.path.join(app_home, 'serverconfig')
-local_cache_dir  = getenv("LOCAL_CACHE_DIR", os.path.join(app_home, '..', 'local_cache'))
-max_timeout      = int(getenv("TIMEOUT", 180))//2
-max_wait         = max_timeout//3
-enable_whois     = getenv("ENABLE_WHOIS", 'true').lower() in ['true', '1', 'yes']
-whois_cache_ttl  = int(getenv("WHOIS_CACHE_TTL", 270000)) # seconds
+app_home          = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
+viewer_dir        = os.path.join(app_home, '..', 'viewer')
+srvconfig_dir     = os.path.join(app_home, 'serverconfig')
+local_cache_dir   = getenv("LOCAL_CACHE_DIR", os.path.join(app_home, '..', 'local_cache'))
+max_timeout       = int(getenv("TIMEOUT", 180))//2
+max_wait          = max_timeout//3
+enable_whois      = getenv("ENABLE_WHOIS", 'true').lower() in ['true', '1', 'yes']
+whois_cache_ttl   = int(getenv("WHOIS_CACHE_TTL", 270000)) # seconds
 enable_scoreboard = getenv("ENABLE_SCOREBOARD", 'true').lower() in ['true', '1', 'yes']
 scoreboard_request_limit = int(getenv("SCOREBOARD_REQUEST_LIMIT", 1024))
-screenshot_modes = ['none', 'small', 'medium', 'full']
+screenshot_modes  = ['none', 'small', 'medium', 'full']
 
 # load custom modules (allows overrides in serverconfig directory)
 sys.path.insert(0, srvconfig_dir)
-from webres6_storage import StorageManager, LocalStorageManager, RedisStorageManager, Scoreboard
+from webres6_storage import StorageManager, LocalStorageManager, ValkeyStorageManager, ValkeyFileHybridStorageManager, Scoreboard
 from webres6_whois import get_whois_info
 from webres6_extension import check_extension_parameter, get_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl, cleanup_selenium_crawl, finalize_report 
 
@@ -824,12 +825,12 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
     """
 
     if not storage_manager:
-        # Redis is not configured, skip cache lookup
+        # Valkey is not configured, skip cache lookup
         return crawl_and_analyze_url(url, wait=wait, timeout=timeout, ext=ext, scoreboard_entry=scoreboard_entry,
                                       screenshot_mode=screenshot_mode,
                                       lookup_whois=lookup_whois, report_node=report_node)
 
-    # Try to lookup in Redis cache first if available
+    # Try to lookup in Valkey cache first if available
     cache_key = sha256(f"{url}:{wait}:{timeout}:{ext}:{screenshot_mode}:{lookup_whois}".encode('utf-8')).hexdigest()
     json_result = storage_manager.get_result_cacheline(cache_key)
     if json_result:
@@ -906,11 +907,16 @@ def create_http_app():
 
     # inialize storage manager
     global storage_manager
-    if redis_url and redis_url.strip() != '':
-        print("Redis client configured, using RedisStorageManager", file=sys.stderr)
-        storage_manager = RedisStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, redis_url=redis_url)
+    if valkey_url and valkey_url.strip() != '':
+        if archive_dir and archive_dir.strip() != '':
+            print("Valkey client and local archive dir configured, using ValkeyFileHybridStorageManager", file=sys.stderr)
+            storage_manager = ValkeyFileHybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
+                                                             valkey_url=valkey_url, archive_dir=archive_dir)
+        else:
+            print("Valkey client configured, using ValkeyStorageManager", file=sys.stderr)
+            storage_manager = ValkeyStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, valkey_url=valkey_url)
     else:
-        print("Redis client not configured, using LocalStorageManager", file=sys.stderr)
+        print("Valkey client not configured, using LocalStorageManager", file=sys.stderr)
         storage_manager = LocalStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, cache_dir=local_cache_dir)
 
     # initialize scoreboard if enabled

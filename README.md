@@ -41,7 +41,7 @@ The tool is inspired by Paul Marks' [IPvFoo](https://github.com/pmarks-net/ipvfo
 - Can load load custom Selenium/Python code to instrument the crawling process.
 - Can handle NAT64 on the API server side.
 - Exports data using a REST API as JSON for further analysis.
-- Allows caching and archiving of results in Redis or flat files.
+- Allows caching and archiving of results in Valkey or flat files.
 - Calculates scores based on the share of resources available for IPv6-only clients and keeps a score-board of the results.
 - Splits domain names into host/domain part using [public suffix list](https://publicsuffix.org/).
 

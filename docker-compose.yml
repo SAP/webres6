@@ -22,16 +22,19 @@ services:
       - "6400:6400"
     environment:
       - SELENIUM_REMOTE_URL=http://selenium:4444/wd/hub
-      - DNSPROBE_API_URL=http://webres6-dnsprobe:6453/dnsprobe
+      # - DNSPROBE_API_URL=http://webres6-dnsprobe:6453/dnsprobe
       - ENABLE_WHOIS=true
-      - REDIS_URL=redis://webres6-redis:6379/0
+      - VALKEY_URL=valkey://webres6-valkey:6379/0
       - WHOIS_CACHE_TTL=3600
       - RESULT_CACHE_TTL=90
       - RESULT_ARCHIVE_TTL=3600
+      - ARCHIVE_DIR=/archive
+    volumes:
+      - ./local_cache/reports:/archive
     depends_on:
       - selenium
       - webres6-dnsprobe
-      - redis
+      - valkey
 
   webres6-viewer:
     build: 
@@ -73,9 +76,9 @@ services:
     # ports:
     #   - "4444:4444"
 
-  redis:
-    image: redis:latest
-    container_name: webres6-redis
+  valkey:
+    image: valkey/valkey:latest
+    container_name: webres6-valkey
     networks:
       - webres6-network
     ports:

@@ -65,9 +65,9 @@ spec:
             - name: DNSPROBE_API_URL
               value: "http://{{ include "webres6.fullname" . }}-dnsprobe:{{ .Values.dnsprobe.service.port }}/dnsprobe"
             {{- end }}
-            {{- if .Values.api.redis.url }}
-            - name: REDIS_URL
-              value: {{ .Values.api.redis.url | quote }}
+            {{- if .Values.api.valkey.url }}
+            - name: VALKEY_URL
+              value: {{ .Values.api.valkey.url | quote }}
             {{- end }}
             - name: ENABLE_WHOIS
               value: {{ .Values.api.whois.enabled | quote | default "true" }}

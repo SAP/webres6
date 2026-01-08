@@ -5,13 +5,14 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+from hashlib import sha256
 import json
 import math
 import os
 import sys
 from datetime import datetime, timezone, timedelta
 from ipaddress import ip_address
-import redis
+import valkey
 
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -68,6 +69,7 @@ class LocalStorageManager(StorageManager):
     whois_cache = {}
     result_cache = {}
     local_cache_dir = None
+    local_archive_dir = None
     max_scorecards = 0
     scorecards = []
 
@@ -76,8 +78,20 @@ class LocalStorageManager(StorageManager):
         self.result_archive_ttl = result_archive_ttl
         if cache_dir and os.path.isdir(cache_dir):
             self.local_cache_dir = cache_dir
-            print(f"local cache dir \"{cache_dir}\" exists\nenabling result archive and cache-persist", file=sys.stderr)
+            print(f"local cache dir \"{cache_dir}\" exists\nenabling archive and cache-persist", file=sys.stderr)
             self._load()
+            # setup archive dir
+            self.local_archive_dir = os.path.join(cache_dir, 'reports')
+            if not os.path.exists(self.local_archive_dir):
+                os.makedirs(self.local_archive_dir)
+                print(f"created local archive dir \"{self.local_archive_dir}\"", file=sys.stderr)
+                # migrate existing report files if any
+                for file in os.listdir(self.local_cache_dir):
+                    if file.startswith("report-") and file.endswith(".json"):
+                        src = os.path.join(self.local_cache_dir, file)
+                        dst = os.path.join(self.local_archive_dir, file)
+                        os.rename(src, dst)
+                        print(f"migrated report file \"{src}\" to \"{dst}\"", file=sys.stderr)
         else:
             print(f"local cache dir \"{cache_dir}\" does not exist\ndeactivating result archive and cache-persist", file=sys.stderr)
         self.max_scorecards = max_scorecards
@@ -89,13 +103,13 @@ class LocalStorageManager(StorageManager):
         print("         - Consider setting up a cron job to expire archive files", file=sys.stderr)
 
     def can_archive(self):
-        return self.local_cache_dir is not None
+        return self.local_archive_dir is not None
 
     def archive_result(self, report_id, data):
-        if not self.local_cache_dir:
+        if not self.local_archive_dir:
             return False
         try:
-            file = os.path.join(self.local_cache_dir, f"report-{report_id}.json")
+            file = os.path.join(self.local_archive_dir, f"report-{report_id}.json")
             with open(file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, cls=DateTimeEncoder, ensure_ascii=False)
                 f.close()
@@ -105,10 +119,10 @@ class LocalStorageManager(StorageManager):
             return False
 
     def retrieve_result(self, report_id):
-        if not self.local_cache_dir:
+        if not self.local_archive_dir:
             return None
         try:
-            file = os.path.join(self.local_cache_dir, f"report-{report_id}.json")
+            file = os.path.join(self.local_archive_dir, f"report-{report_id}.json")
             if os.path.exists(file):
                 with open(file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
@@ -263,22 +277,22 @@ class LocalStorageManager(StorageManager):
             return False
 
 
-# Redis storage manager for cache/archive
-class RedisStorageManager(StorageManager):
+# Valkey storage manager for cache/archive
+class ValkeyStorageManager(StorageManager):
 
-    redis_client = None
+    valkey_client = None
     whois_mem_cache = {}
     whois_mem_cache_size_max = 0
 
-    def __init__(self, whois_cache_ttl, result_archive_ttl, redis_url, whois_mem_cache_size_max=2048):
+    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, whois_mem_cache_size_max=2048):
         self.whois_cache_ttl = whois_cache_ttl
         self.result_archive_ttl = result_archive_ttl
         self.whois_mem_cache_size_max = whois_mem_cache_size_max
-        # initialize redis client if redis url is set
-        if redis_url and redis_url.strip() != '':
-            self.redis_client = redis.from_url(redis_url, decode_responses=False)
-        if not self.redis_client:
-            print("ERROR: RedisStorageManager requires a valid Redis URL!", file=sys.stderr)
+        # initialize valkey client if valkey url is set
+        if valkey_url and valkey_url.strip() != '':
+            self.valkey_client = valkey.from_url(valkey_url, decode_responses=False)
+        if not self.valkey_client:
+            print("ERROR: ValkeyStorageManager requires a valid Valkey URL!", file=sys.stderr)
             return None
 
     def can_archive(self):
@@ -286,43 +300,43 @@ class RedisStorageManager(StorageManager):
 
     def archive_result(self, report_id, data):
         try:
-            self.redis_client.set(f"webres6:archive:{report_id}", json.dumps(data, cls=DateTimeEncoder).encode('utf-8'), ex=self.result_archive_ttl)
+            self.valkey_client.set(f"webres6:archive:{report_id}", json.dumps(data, cls=DateTimeEncoder).encode('utf-8'), ex=self.result_archive_ttl)
             return True
         except Exception as e:
-            print(f"WARNING: failed archiving result {report_id} to redis: {e}", file=sys.stderr)
+            print(f"WARNING: failed archiving result {report_id} to valkey: {e}", file=sys.stderr)
             return False
 
     def retrieve_result(self, report_id):
         try:
-            cached_data = self.redis_client.get(f"webres6:archive:{report_id}")
+            cached_data = self.valkey_client.get(f"webres6:archive:{report_id}")
             if cached_data:
                 data = json.loads(cached_data)
                 return data
             else:
                 return None
         except Exception as e:
-            print(f"WARNING: failed retrieving archived result {report_id} from redis: {e}", file=sys.stderr)
+            print(f"WARNING: failed retrieving archived result {report_id} from valkey: {e}", file=sys.stderr)
             return None
 
     def put_result_cacheline(self, cache_key, data, ttl, overwrite=True):
         try:
-            self.redis_client.set(f"webres6:cache:{cache_key}", json.dumps(data, cls=DateTimeEncoder).encode('utf-8'), ex=ttl, nx=(not overwrite))
+            self.valkey_client.set(f"webres6:cache:{cache_key}", json.dumps(data, cls=DateTimeEncoder).encode('utf-8'), ex=ttl, nx=(not overwrite))
             return True
         except Exception as e:
-            print(f"WARNING: failed putting cacheline {cache_key} to redis: {e}", file=sys.stderr)
+            print(f"WARNING: failed putting cacheline {cache_key} to valkey: {e}", file=sys.stderr)
             return False
 
     def delete_result_cacheline(self, cache_key):
         try:
-            self.redis_client.delete(f"webres6:cache:{cache_key}")
+            self.valkey_client.delete(f"webres6:cache:{cache_key}")
             return True
         except Exception as e:
-            print(f"WARNING: failed deleting cacheline {cache_key} from redis: {e}", file=sys.stderr)
+            print(f"WARNING: failed deleting cacheline {cache_key} from valkey: {e}", file=sys.stderr)
             return False
 
     def get_result_cacheline(self, cache_key):
         try:
-            cached_data = self.redis_client.get(f"webres6:cache:{cache_key}")
+            cached_data = self.valkey_client.get(f"webres6:cache:{cache_key}")
             if cached_data:
                 data = json.loads(cached_data)
                 # understand why this may be a list
@@ -334,7 +348,7 @@ class RedisStorageManager(StorageManager):
             else:
                 return None
         except Exception as e:
-            print(f"WARNING: failed getting cacheline {cache_key} from redis: {e}", file=sys.stderr)
+            print(f"WARNING: failed getting cacheline {cache_key} from valkey: {e}", file=sys.stderr)
             return None
 
     def put_whois_cacheline(self, ip, data):
@@ -343,12 +357,12 @@ class RedisStorageManager(StorageManager):
         ttl = max(0, self.whois_cache_ttl - int(age.total_seconds()))
         # add to in-memory cache 
         self._put_whois_mem_cacheline(ip, data)
-        # add to redis cache
+        # add to valkey cache
         try:
-            self.redis_client.set(f"webres6:whois:{ip}", json.dumps(data, cls=DateTimeEncoder).encode('utf-8'), ex=ttl)
+            self.valkey_client.set(f"webres6:whois:{ip}", json.dumps(data, cls=DateTimeEncoder).encode('utf-8'), ex=ttl)
             return True
         except Exception as e:
-            print(f"WARNING: failed putting whois cacheline for {ip} to redis: {e}", file=sys.stderr)
+            print(f"WARNING: failed putting whois cacheline for {ip} to valkey: {e}", file=sys.stderr)
             return False
 
     def _put_whois_mem_cacheline(self, ip, data):
@@ -356,7 +370,7 @@ class RedisStorageManager(StorageManager):
         if self.whois_mem_cache_size_max == 0:
             return False
         if len(self.whois_mem_cache) >= self.whois_mem_cache_size_max:
-            # just flush the cache -- re-filling it from redis is not too expensive
+            # just flush the cache -- re-filling it from valkey is not too expensive
             self.whois_mem_cache.clear()
         self.whois_mem_cache[ip] = data
         return True
@@ -369,9 +383,9 @@ class RedisStorageManager(StorageManager):
                 del self.whois_mem_cache[ip]
             else:
                 return result
-        # check redis cache next
+        # check valkey cache next
         try:
-            cached_data = self.redis_client.get(f"webres6:whois:{ip}")
+            cached_data = self.valkey_client.get(f"webres6:whois:{ip}")
             if cached_data:
                 data = json.loads(cached_data)
                 data['ts'] = datetime.fromisoformat(data['ts'])
@@ -379,7 +393,7 @@ class RedisStorageManager(StorageManager):
             else:
                 return None
         except Exception as e:
-            print(f"WARNING: failed getting whois cacheline for {ip} from redis: {e}", file=sys.stderr)
+            print(f"WARNING: failed getting whois cacheline for {ip} from valkey: {e}", file=sys.stderr)
             return None
 
     def whois_cache_size(self):
@@ -387,16 +401,16 @@ class RedisStorageManager(StorageManager):
     
     def put_scorecard(self, scorecard):
         try:
-            self.redis_client.lpush("webres6:scorecards", json.dumps(scorecard, cls=DateTimeEncoder).encode('utf-8'))
+            self.valkey_client.lpush("webres6:scorecards", json.dumps(scorecard, cls=DateTimeEncoder).encode('utf-8'))
             return True
         except Exception as e:
-            print(f"WARNING: failed putting scorecard to redis: {e}", file=sys.stderr)
+            print(f"WARNING: failed putting scorecard to valkey: {e}", file=sys.stderr)
             return False
         
     def get_scorecards(self, max_entries=23):
         deadline = datetime.now(timezone.utc) - timedelta(seconds=self.result_archive_ttl)
         try:
-            raw_scorecards = self.redis_client.lrange("webres6:scorecards", 0, max_entries - 1)
+            raw_scorecards = self.valkey_client.lrange("webres6:scorecards", 0, max_entries - 1)
             scorecards = []
             for raw in raw_scorecards:
                 scorecard = json.loads(raw)
@@ -406,21 +420,21 @@ class RedisStorageManager(StorageManager):
                     scorecards.append(scorecard)
             return scorecards
         except Exception as e:
-            print(f"WARNING: failed getting scorecards from redis: {e}", file=sys.stderr)
+            print(f"WARNING: failed getting scorecards from valkey: {e}", file=sys.stderr)
             return []
 
     def _expire_scorecards(self):
         try:
             deadline = datetime.now(timezone.utc) - timedelta(seconds=self.result_archive_ttl)
-            len = self.redis_client.llen("webres6:scorecards")
+            len = self.valkey_client.llen("webres6:scorecards")
             idx = len // 2
             while len > 1:
-                if item := self.redis_client.lindex("webres6:scorecards", idx):
+                if item := self.valkey_client.lindex("webres6:scorecards", idx):
                     scorecard = json.loads(item)
                     scorecard_ts = datetime.fromisoformat(scorecard['ts'])
                     if scorecard_ts < deadline:
                         # remove this and all older entries
-                        self.redis_client.ltrim("webres6:scorecards", idx, - 1)
+                        self.valkey_client.ltrim("webres6:scorecards", idx, - 1)
                         # continue binary search in left half
                         len = len//2
                         idx -= len//2
@@ -429,17 +443,59 @@ class RedisStorageManager(StorageManager):
                         len = len//2
                         idx += len//2
                 else:
-                    print(f"WARNING: failed getting scorecard at index {idx} from redis during expiry", file=sys.stderr)
+                    print(f"WARNING: failed getting scorecard at index {idx} from valkey during expiry", file=sys.stderr)
                     break
             return len-idx
         except Exception as e:
-            print(f"WARNING: failed expiring scorecards from redis: {e}", file=sys.stderr)
+            print(f"WARNING: failed expiring scorecards from valkey: {e}", file=sys.stderr)
             return None
 
     def expire(self):
-        # Redis handles expiration automatically via TTLs
+        # Valkey handles expiration automatically via TTLs
         # only need to clear old scorecards
         return self._expire_scorecards()
+
+class ValkeyFileHybridStorageManager(ValkeyStorageManager):
+    """ Hybrid storage manager that uses Valkey for main storage
+        and file system for persistence of the result archive. 
+    """
+
+    local_archive_dir = None
+
+    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, archive_dir=None, whois_mem_cache_size_max=2048):
+        super().__init__(whois_cache_ttl, result_archive_ttl, valkey_url, whois_mem_cache_size_max)
+        if archive_dir and os.path.isdir(archive_dir):
+            self.local_archive_dir = archive_dir
+            print(f"local archive dir \"{archive_dir}\" exists\nenabling archive persistence", file=sys.stderr)
+
+    def can_archive(self):
+        return self.local_archive_dir is not None
+
+    def archive_result(self, report_id, data):
+        try:
+            file = os.path.join(self.local_archive_dir, f"report-{report_id}.json")
+            with open(file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, cls=DateTimeEncoder, ensure_ascii=False)
+                f.close()
+            return True
+        except Exception as e:
+            print(f"WARNING: failed archiving result {report_id} to local cache: {e}", file=sys.stderr)
+            return False
+
+    def retrieve_result(self, report_id):
+        try:
+            file = os.path.join(self.local_archive_dir, f"report-{report_id}.json")
+            if os.path.exists(file):
+                with open(file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    data['ts'] = datetime.fromisoformat(data['ts'])
+                    f.close()
+                return data
+            else:
+                return None
+        except Exception as e:
+            print(f"WARNING: failed retrieving archived result {report_id} from local storage: {e}", file=sys.stderr)
+            return None
 
 
 # Scoreboard management

@@ -64,7 +64,7 @@ api:
   whois:
     enabled: true
     cacheTTL: "86400"
-  redis:
+  valkey:
     url: ""
   results:
     cacheTTL: "180"

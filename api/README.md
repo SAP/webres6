@@ -30,7 +30,7 @@ Environment variables:
   NAT64_PREFIXES              Comma-separated list of NAT64 prefixes
   SELENIUM_REMOTE_URL         Use remote Selenium server instead of starting selenium for each request
   DNSPROBE_API_URL            Enable DNS checking using specified dns probe service
-  REDIS_URL                   URL for optional REDIS cache
+  VALKEY_URL                  URL for optional VALKEY cache
   LOCAL_CACHE_DIR             DIR for optional LOCAL filesystem-based cache
   ENABLE_WHOIS                Enable clients to request whois lookups
   WHOIS_CACHE_TTL             Expiry time for whois cache
