@@ -1001,7 +1001,7 @@ def create_http_app():
     @app.route('/res6/report/<string:report_id>', methods=['GET'])
     def res6_report(report_id):
         # check record id - only allow alphanumeric characters and hyphens
-        if not report_id.replace('-', '').isalnum():
+        if not report_id.replace('-', '').isalnum() or len(report_id) > 255:
             return jsonify({'error': 'Invalid report ID.'}), 400
         return get_archived_report(report_id)
 
