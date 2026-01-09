@@ -23,6 +23,10 @@ Options:
   -h, --help                  Show this help message and exit
   --port PORT                 Port to listen on (default: 6400)
   --debug                     Enable debugging output
+  --export-scoreboard sb.json export scoreboard entries to JSON file and exit
+  --import-scoreboard sb.json import scoreboard entries from JSON file and exit
+  --export-reports /to/dir/   export all archived reports to the given directory and exit
+  --import-reports /from/dir  import all archived reports from the given directory and exit
 
 Environment variables:
   ADMIN_API_KEY               API Key to call privileged functions

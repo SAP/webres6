@@ -56,7 +56,7 @@ screenshot_modes  = ['none', 'small', 'medium', 'full']
 
 # load custom modules (allows overrides in serverconfig directory)
 sys.path.insert(0, srvconfig_dir)
-from webres6_storage import StorageManager, LocalStorageManager, ValkeyStorageManager, ValkeyFileHybridStorageManager, Scoreboard
+from webres6_storage import StorageManager, LocalStorageManager, ValkeyStorageManager, ValkeyFileHybridStorageManager, Scoreboard, export_archived_reports, import_archived_reports
 from webres6_whois import get_whois_info
 from webres6_extension import check_extension_parameter, get_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl, cleanup_selenium_crawl, finalize_report 
 
@@ -117,11 +117,26 @@ if os.path.exists(os.path.join(app_home, 'public_suffix_list.dat')):
 else:
     print(f"WARNING: public suffix list not found, domain part extraction will always use the 2nd level domain.", file=sys.stderr)
 
-# define storage manager - initialize later
+# inialize storage manager
 storage_manager = None
+if valkey_url and valkey_url.strip() != '':
+    if archive_dir and archive_dir.strip() != '':
+        print("Valkey client and local archive dir configured, using ValkeyFileHybridStorageManager", file=sys.stderr)
+        storage_manager = ValkeyFileHybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
+                                                            valkey_url=valkey_url, archive_dir=archive_dir)
+    else:
+        print("Valkey client configured, using ValkeyStorageManager", file=sys.stderr)
+        storage_manager = ValkeyStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, valkey_url=valkey_url)
+else:
+    print("Valkey client not configured, using LocalStorageManager", file=sys.stderr)
+    LocalStorageManager.print_warnings(None)
+    storage_manager = LocalStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, cache_dir=local_cache_dir)
 
-# define scoreboard - initialize later
+# initialize scoreboard if enabled
 scoreboard = None
+if storage_manager.can_archive() and enable_scoreboard:
+    scoreboard = Scoreboard(storage_manager=storage_manager)
+
 
 # create connection pool for dnsprobe if needed
 dnsprobe = None
@@ -905,24 +920,6 @@ def create_http_app():
         Flask app instance
     """
 
-    # inialize storage manager
-    global storage_manager
-    if valkey_url and valkey_url.strip() != '':
-        if archive_dir and archive_dir.strip() != '':
-            print("Valkey client and local archive dir configured, using ValkeyFileHybridStorageManager", file=sys.stderr)
-            storage_manager = ValkeyFileHybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
-                                                             valkey_url=valkey_url, archive_dir=archive_dir)
-        else:
-            print("Valkey client configured, using ValkeyStorageManager", file=sys.stderr)
-            storage_manager = ValkeyStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, valkey_url=valkey_url)
-    else:
-        print("Valkey client not configured, using LocalStorageManager", file=sys.stderr)
-        storage_manager = LocalStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, cache_dir=local_cache_dir)
-
-    # initialize scoreboard if enabled
-    global scoreboard
-    if storage_manager.can_archive() and enable_scoreboard:
-        scoreboard = Scoreboard(storage_manager=storage_manager)
 
     # Start a simple HTTP API server using Flask
     app = Flask(__name__, static_folder=app_home)
@@ -1080,9 +1077,45 @@ if __name__ == "__main__":
         description="A small web service inspired by Paul Marks' IPvFoo that loads a website\n"\
             " and displays ip addresses it fetched resources from",
             epilog="For production use, consider running in gunicorn behind a reverse proxy.\n")
-    parser.add_argument("--port", type=int, metavar='6400', help="start a simple HTTP API server at given port")
+    parser.add_argument("--port", type=int, metavar='6400', default=6400, help="start a simple HTTP API server at given port")
     parser.add_argument("--debug", action="store_true", help="enable flask debugging output for the HTTP API server")
+    parser.add_argument("--export-scoreboard", type=str, metavar='scoreboard.json', help="export scoreboard entries to JSON file and exit")
+    parser.add_argument("--import-scoreboard", type=str, metavar='scoreboard.json', help="import scoreboard entries from JSON file and exit")
+    parser.add_argument("--export-reports", type=str, metavar='/path/to/dir', help="export all archived reports to the given directory and exit")
+    parser.add_argument("--import-reports", type=str, metavar='/path/from/dir', help="import all archived reports from the given directory and exit")
     args = parser.parse_args()
+
+    # dump scoreboard if requested and exit
+    if args.export_scoreboard:
+        if not scoreboard:
+            print("Scoreboard is not enabled in this deployment.", file=sys.stderr)
+            sys.exit(1)
+        scoreboard.export_entries(args.export_scoreboard)
+        sys.exit(0)
+
+    # import scoreboard if requested and exit
+    if args.import_scoreboard:
+        if not scoreboard:
+            print("Scoreboard is not enabled in this deployment.", file=sys.stderr)
+            sys.exit(1)
+        if scoreboard.import_entries(args.import_scoreboard):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+
+    # export archived reports if requested and exit
+    if args.export_reports:
+        if export_archived_reports(storage_manager, args.export_reports):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+
+    # import archived reports if requested and exit
+    if args.import_reports:
+        if import_archived_reports(storage_manager, args.import_reports):
+            sys.exit(0)
+        else:
+            sys.exit(1)
 
     # Process store-only arguments
     if args.debug:

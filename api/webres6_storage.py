@@ -35,6 +35,9 @@ class StorageManager:
     def archive_result(self, report_id, data):
         pass
 
+    def list_archived_reports(self):
+        pass
+
     def retrieve_result(self, report_id):
         pass
 
@@ -73,28 +76,37 @@ class LocalStorageManager(StorageManager):
     max_scorecards = 0
     scorecards = []
 
-    def __init__(self, whois_cache_ttl, result_archive_ttl, cache_dir=None, max_scorecards=128):
+    def __init__(self, whois_cache_ttl=3600*24, result_archive_ttl=3600*24, cache_dir=None, archive_dir=None, max_scorecards=128):
         self.whois_cache_ttl = whois_cache_ttl
         self.result_archive_ttl = result_archive_ttl
+        self.max_scorecards = max_scorecards
+        # check cache dir
         if cache_dir and os.path.isdir(cache_dir):
             self.local_cache_dir = cache_dir
-            print(f"local cache dir \"{cache_dir}\" exists\nenabling archive and cache-persist", file=sys.stderr)
+            print(f"local cache dir \"{cache_dir}\" exists - enabling cache-persist", file=sys.stderr)
             self._load()
-            # setup archive dir
-            self.local_archive_dir = os.path.join(cache_dir, 'reports')
-            if not os.path.exists(self.local_archive_dir):
-                os.makedirs(self.local_archive_dir)
-                print(f"created local archive dir \"{self.local_archive_dir}\"", file=sys.stderr)
-                # migrate existing report files if any
-                for file in os.listdir(self.local_cache_dir):
+        elif cache_dir:
+            print(f"local cache dir \"{cache_dir}\" does not exist - deactivating cache-persist", file=sys.stderr)
+        # setup archive dir in cache dir if not specified
+        if not archive_dir and cache_dir:
+            archive_dir = os.path.join(cache_dir, 'reports')
+            if not os.path.exists(archive_dir):
+                os.makedirs(archive_dir)
+                print(f"created local archive dir \"{archive_dir}\"", file=sys.stderr)
+                # migrate existing report files in cache dir if any
+                for file in os.listdir(cache_dir):
                     if file.startswith("report-") and file.endswith(".json"):
-                        src = os.path.join(self.local_cache_dir, file)
-                        dst = os.path.join(self.local_archive_dir, file)
+                        src = os.path.join(cache_dir, file)
+                        dst = os.path.join(archive_dir, file)
                         os.rename(src, dst)
                         print(f"migrated report file \"{src}\" to \"{dst}\"", file=sys.stderr)
+        if archive_dir and os.path.isdir(archive_dir):
+            self.local_archive_dir = archive_dir
+            print(f"local archive dir \"{archive_dir}\" exists - enabling archive", file=sys.stderr)
         else:
-            print(f"local cache dir \"{cache_dir}\" does not exist\ndeactivating result archive and cache-persist", file=sys.stderr)
-        self.max_scorecards = max_scorecards
+            print(f"local archive dir \"{archive_dir}\" does not exist - deactivating archive", file=sys.stderr)
+
+    def print_warnings(self):
         # warn about limitations
         print("WARNING: LocalStorageManager is not suitable for production use!", file=sys.stderr)
         print("         - No multi-instance synchronization", file=sys.stderr)
@@ -117,6 +129,17 @@ class LocalStorageManager(StorageManager):
         except Exception as e:
             print(f"WARNING: failed archiving result {report_id} to local cache: {e}", file=sys.stderr)
             return False
+
+    def list_archived_reports(self):
+        if not self.local_archive_dir:
+            return []
+        try:
+            files = os.listdir(self.local_archive_dir)
+            report_ids = [file[len("report-"):-len(".json")] for file in files if file.startswith("report-") and file.endswith(".json")]
+            return report_ids
+        except Exception as e:
+            print(f"WARNING: failed listing archived reports from local storage: {e}", file=sys.stderr)
+            return []
 
     def retrieve_result(self, report_id):
         if not self.local_archive_dir:
@@ -179,8 +202,8 @@ class LocalStorageManager(StorageManager):
             self.scorecards.pop(0)
         return True
 
-    def get_scorecards(self, max_entries=None):
-        if max_entries is None or max_entries >= len(self.scorecards):
+    def get_scorecards(self, max_entries=0):
+        if max_entries == 0 or max_entries >= len(self.scorecards):
             return self.scorecards
         return self.scorecards[-max_entries:]
 
@@ -305,6 +328,15 @@ class ValkeyStorageManager(StorageManager):
         except Exception as e:
             print(f"WARNING: failed archiving result {report_id} to valkey: {e}", file=sys.stderr)
             return False
+
+    def list_archived_reports(self):
+        try:
+            keys = self.valkey_client.keys("webres6:archive:*")
+            report_ids = [key.decode('utf-8').split(":")[-1] for key in keys]
+            return report_ids
+        except Exception as e:
+            print(f"WARNING: failed listing archived reports from valkey: {e}", file=sys.stderr)
+            return []
 
     def retrieve_result(self, report_id):
         try:
@@ -460,42 +492,25 @@ class ValkeyFileHybridStorageManager(ValkeyStorageManager):
         and file system for persistence of the result archive. 
     """
 
-    local_archive_dir = None
+    local_storage_manager = None
 
     def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, archive_dir=None, whois_mem_cache_size_max=2048):
         super().__init__(whois_cache_ttl, result_archive_ttl, valkey_url, whois_mem_cache_size_max)
         if archive_dir and os.path.isdir(archive_dir):
-            self.local_archive_dir = archive_dir
-            print(f"local archive dir \"{archive_dir}\" exists\nenabling archive persistence", file=sys.stderr)
+            self.local_storage_manager = LocalStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
+                                                              cache_dir=None, archive_dir=archive_dir)
 
     def can_archive(self):
-        return self.local_archive_dir is not None
+        return self.local_storage_manager.can_archive()
 
     def archive_result(self, report_id, data):
-        try:
-            file = os.path.join(self.local_archive_dir, f"report-{report_id}.json")
-            with open(file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, cls=DateTimeEncoder, ensure_ascii=False)
-                f.close()
-            return True
-        except Exception as e:
-            print(f"WARNING: failed archiving result {report_id} to local cache: {e}", file=sys.stderr)
-            return False
+        return self.local_storage_manager.archive_result(report_id, data)
+
+    def list_archived_reports(self):
+        return self.local_storage_manager.list_archived_reports()
 
     def retrieve_result(self, report_id):
-        try:
-            file = os.path.join(self.local_archive_dir, f"report-{report_id}.json")
-            if os.path.exists(file):
-                with open(file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    data['ts'] = datetime.fromisoformat(data['ts'])
-                    f.close()
-                return data
-            else:
-                return None
-        except Exception as e:
-            print(f"WARNING: failed retrieving archived result {report_id} from local storage: {e}", file=sys.stderr)
-            return None
+        return self.local_storage_manager.retrieve_result(report_id)
 
 
 # Scoreboard management
@@ -528,3 +543,71 @@ class Scoreboard:
         """ Return the current scoreboard entries.
         """
         return self.storage_manager.get_scorecards(max_entries=limit)
+
+    def export_entries(self, file=None):
+        """ Export the current scoreboard entries to stdout as JSON.
+        """
+        entries = self.get_entries(limit=0)
+        with (sys.stdout if file is None else open(file, 'w', encoding='utf-8')) as f:
+            f.write(json.dumps(entries, indent=2, cls=DateTimeEncoder, ensure_ascii=False))
+
+    def import_entries(self, file):
+        """ Import scoreboard entries from the given JSON file.
+        """
+        with open(file, 'r', encoding='utf-8') as f:
+            entries = json.load(f)
+            for entry in entries:
+                entry['ts'] = datetime.fromisoformat(entry['ts'])
+                self.storage_manager.put_scorecard(entry)
+
+
+def export_archived_reports(storage_manager, export_dir):
+    """ Export all archived reports to the given directory.
+    """
+
+    if not storage_manager or not storage_manager.can_archive():
+        print("Archiving is not enabled in this deployment.", file=sys.stderr)
+        return False
+    if not os.path.exists(export_dir):
+        print(f"Export directory {export_dir} does not exist - aborting.", file=sys.stderr)
+        return False
+    print(f"Exporting archived reports to {export_dir}...", file=sys.stderr)
+    report_ids = storage_manager.list_archived_reports()
+    if not report_ids or len(report_ids) == 0:
+        print("No archived reports found.", file=sys.stderr)
+        return True
+    export_storage_manager = LocalStorageManager(archive_dir=export_dir)
+    for report_id in report_ids:
+        report = storage_manager.retrieve_result(report_id)
+        if not report:
+            print(f"WARNING: could not retrieve report {report_id} from archive", file=sys.stderr)
+            continue
+        archived = export_storage_manager.archive_result(report_id, report)
+    print("Export completed.", file=sys.stderr)
+    return True
+
+
+def import_archived_reports(storage_manager, import_dir):
+    """ Import all archived reports from the given directory.
+    """
+
+    if not storage_manager or not storage_manager.can_archive():
+        print("Archiving is not enabled in this deployment.", file=sys.stderr)
+        return False
+    if not os.path.exists(import_dir):
+        print(f"Import directory {import_dir} does not exist - aborting.", file=sys.stderr)
+        return False
+    print(f"Importing archived reports from {import_dir}...", file=sys.stderr)
+    import_storage_manager = LocalStorageManager(archive_dir=import_dir)
+    report_ids = import_storage_manager.list_archived_reports()
+    if not report_ids or len(report_ids) == 0:
+        print("No archived reports found in import directory.", file=sys.stderr)
+        return True
+    for report_id in report_ids:
+        report = import_storage_manager.retrieve_result(report_id)
+        if not report:
+            print(f"WARNING: could not retrieve report {report_id} from import archive", file=sys.stderr)
+            continue
+        archived = storage_manager.archive_result(report_id, report)
+    print("Import completed.", file=sys.stderr)
+    return True
