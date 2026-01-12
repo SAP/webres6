@@ -1123,6 +1123,9 @@ if __name__ == "__main__":
         if storage_manager and hasattr(storage_manager, 'expire'):
             result = storage_manager.expire()
             print(f"Expired {result} cache entries", file=sys.stderr)
+            if storage_manager.can_persist():
+                print("Persisting local cache to disk...", file=sys.stderr)
+                storage_manager.persist()
             sys.exit(0)
         else:
             print("Storage manager does not support expiring cache entries.", file=sys.stderr)

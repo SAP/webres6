@@ -440,6 +440,16 @@ async function loadScoreboard(resultsLimit=12) {
       });
       if (data.length > 0) {
         console.log('Scoreboard loaded with', data.length, 'entries');
+        // Fix old scoreboard entries without domain field
+        $.each(data, function(idx, entry) {
+          if (!entry.domain) {
+            try {
+              entry.domain = new URL(entry.url).hostname.split('.').slice(-2).join('.');
+            } catch (e) {
+              entry.domain = '_invalid';
+            }
+          }
+        });
         // Sort data by score (descending - highest scores first)
         data.sort(function(a, b) {
           var score = -compareScoreboardEntries(a, b, 'ipv6_only_score');
