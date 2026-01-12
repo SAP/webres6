@@ -1083,6 +1083,7 @@ if __name__ == "__main__":
     parser.add_argument("--import-scoreboard", type=str, metavar='scoreboard.json', help="import scoreboard entries from JSON file and exit")
     parser.add_argument("--export-reports", type=str, metavar='/path/to/dir', help="export all archived reports to the given directory and exit")
     parser.add_argument("--import-reports", type=str, metavar='/path/from/dir', help="import all archived reports from the given directory and exit")
+    parser.add_argument("--expire", action="store_true", help="expire local cache entries and exit")
     args = parser.parse_args()
 
     # dump scoreboard if requested and exit
@@ -1115,6 +1116,16 @@ if __name__ == "__main__":
         if import_archived_reports(storage_manager, args.import_reports):
             sys.exit(0)
         else:
+            sys.exit(1)
+
+    # expire local cache entries if requested and exit
+    if args.expire:
+        if storage_manager and hasattr(storage_manager, 'expire'):
+            result = storage_manager.expire()
+            print(f"Expired {result} cache entries", file=sys.stderr)
+            sys.exit(0)
+        else:
+            print("Storage manager does not support expiring cache entries.", file=sys.stderr)
             sys.exit(1)
 
     # Process store-only arguments

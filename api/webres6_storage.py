@@ -83,10 +83,9 @@ class LocalStorageManager(StorageManager):
         # check cache dir
         if cache_dir and os.path.isdir(cache_dir):
             self.local_cache_dir = cache_dir
-            print(f"local cache dir \"{cache_dir}\" exists - enabling cache-persist", file=sys.stderr)
             self._load()
         elif cache_dir:
-            print(f"local cache dir \"{cache_dir}\" does not exist - deactivating cache-persist", file=sys.stderr)
+            print(f"WARNING: local cache dir \"{cache_dir}\" does not exist - deactivating cache-persist", file=sys.stderr)
         # setup archive dir in cache dir if not specified
         if not archive_dir and cache_dir:
             archive_dir = os.path.join(cache_dir, 'reports')
@@ -102,9 +101,8 @@ class LocalStorageManager(StorageManager):
                         print(f"migrated report file \"{src}\" to \"{dst}\"", file=sys.stderr)
         if archive_dir and os.path.isdir(archive_dir):
             self.local_archive_dir = archive_dir
-            print(f"local archive dir \"{archive_dir}\" exists - enabling archive", file=sys.stderr)
         else:
-            print(f"local archive dir \"{archive_dir}\" does not exist - deactivating archive", file=sys.stderr)
+            print(f"WARNING: local archive dir \"{archive_dir}\" does not exist - deactivating archive", file=sys.stderr)
 
     def print_warnings(self):
         # warn about limitations
@@ -571,7 +569,7 @@ def export_archived_reports(storage_manager, export_dir):
     if not os.path.exists(export_dir):
         print(f"Export directory {export_dir} does not exist - aborting.", file=sys.stderr)
         return False
-    print(f"Exporting archived reports to {export_dir}...", file=sys.stderr)
+    print(f"Exporting archived reports to {export_dir}: ", file=sys.stderr, end='')
     report_ids = storage_manager.list_archived_reports()
     if not report_ids or len(report_ids) == 0:
         print("No archived reports found.", file=sys.stderr)
@@ -583,7 +581,11 @@ def export_archived_reports(storage_manager, export_dir):
             print(f"WARNING: could not retrieve report {report_id} from archive", file=sys.stderr)
             continue
         archived = export_storage_manager.archive_result(report_id, report)
-    print("Export completed.", file=sys.stderr)
+        if not archived:
+            print(f"\nWARNING: could not export report {report_id}", file=sys.stderr)
+        else:
+            print(".", file=sys.stderr, end='', flush=True)
+    print(" export completed.", file=sys.stderr)
     return True
 
 
@@ -597,7 +599,7 @@ def import_archived_reports(storage_manager, import_dir):
     if not os.path.exists(import_dir):
         print(f"Import directory {import_dir} does not exist - aborting.", file=sys.stderr)
         return False
-    print(f"Importing archived reports from {import_dir}...", file=sys.stderr)
+    print(f"Importing archived reports from {import_dir}: ", file=sys.stderr, end='')
     import_storage_manager = LocalStorageManager(archive_dir=import_dir)
     report_ids = import_storage_manager.list_archived_reports()
     if not report_ids or len(report_ids) == 0:
@@ -609,5 +611,9 @@ def import_archived_reports(storage_manager, import_dir):
             print(f"WARNING: could not retrieve report {report_id} from import archive", file=sys.stderr)
             continue
         archived = storage_manager.archive_result(report_id, report)
-    print("Import completed.", file=sys.stderr)
+        if not archived:
+            print(f"\nWARNING: could not import report {report_id}", file=sys.stderr)
+        else:
+            print(".", file=sys.stderr, end='', flush=True)
+    print(" import completed.", file=sys.stderr)
     return True

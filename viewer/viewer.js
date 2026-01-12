@@ -444,9 +444,9 @@ async function loadScoreboard(resultsLimit=12) {
         data.sort(function(a, b) {
           var score = -compareScoreboardEntries(a, b, 'ipv6_only_score');
           if (score !== 0) return score;
-          var score = compareScoreboardEntries(a, b, 'url');
-          if (score !== 0) return score;
           var score = -compareScoreboardEntries(a, b, 'ts');
+          if (score !== 0) return score;
+          var score = compareScoreboardEntries(a, b, 'url');
           if (score !== 0) return score;
           return 0;
         });
@@ -486,17 +486,17 @@ function compareScoreboardEntries(a, b, column) {
         case 'ipv6_only_score':
             if (a.ipv6_only_score < b.ipv6_only_score) return -1;
             if (a.ipv6_only_score > b.ipv6_only_score) return 1;
-            // fallthrough
-        case 'url':
-            if (a.url < b.url) return -1;
-            if (a.url > b.url) return 1;
-            // fallthrough
+            return 0;
         case 'ts':
             if (a.ts < b.ts) return -1;
             if (a.ts > b.ts) return 1;
-            // fallthrough
+            return 0;
+        case 'url':
+            if ((r = a.domain.localeCompare(b.domain)) != 0 ) return r;
+            return a.url.localeCompare(b.url);
+        default:
+            return 0;
     }
-    return 0;
 }
 
 /* Render scoreboard data into the DOM */
