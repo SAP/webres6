@@ -1,6 +1,6 @@
 /* viewer.js - JavaScript for the IPv6 Web Resource Checker viewer HTML page 
  *
- * SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+ * SPDX-FileCopyrightText: 2026 SAP SE and IPv6 Web Resource Checker contributors
  * SPDX-License-Identifier: Apache-2.0
  *
  */
