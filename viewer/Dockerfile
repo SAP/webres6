@@ -9,5 +9,5 @@ FROM nginx:mainline
 WORKDIR /usr/share/nginx/html
 COPY viewer/viewer.* viewer/favicon.* ./
 COPY viewer/fonts/ ./fonts/
-RUN ln -sf viewer.html index.html
-RUN mkdir .well-known/
+COPY viewer/nginx.conf.template /etc/nginx/templates/default.conf.template
+RUN mkdir -p .well-known/ res6/report
