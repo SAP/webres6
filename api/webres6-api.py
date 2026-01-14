@@ -15,7 +15,7 @@ import platform
 import time
 from os import getenv
 from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -824,7 +824,7 @@ def get_archived_report(report_id):
     lp = f"res6 {report_id:.25} "
     report = storage_manager.retrieve_result(report_id)
     if report:
-        ttl = report['ts'] + result_archive_ttl - datetime.now(timezone.utc)
+        ttl = report['ts'] + timedelta(seconds=result_archive_ttl) - datetime.now(timezone.utc)
         print(f"{lp}sending archived report {report_id}", file=sys.stderr)
         webres6_archive_total.labels(result='success').inc()
         res = jsonify(report)

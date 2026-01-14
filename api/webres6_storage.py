@@ -373,6 +373,7 @@ class ValkeyStorageManager(StorageManager):
             cached_data = self.valkey_client.get(f"webres6:archive:{report_id}")
             if cached_data:
                 data = json.loads(cached_data)
+                data['ts'] = datetime.fromisoformat(data['ts'])
                 return data
             else:
                 return None
