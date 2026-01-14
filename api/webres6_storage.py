@@ -109,8 +109,7 @@ class LocalStorageManager(StorageManager):
         print("WARNING: LocalStorageManager is not suitable for production use!", file=sys.stderr)
         print("         - No multi-instance synchronization", file=sys.stderr)
         print("         - Use /admin/persist to manually persists cache", file=sys.stderr)
-        print("         - Use /admin/expire to manually expire cache", file=sys.stderr)
-        print("         - Consider setting up a cron job to expire archive files", file=sys.stderr)
+        print("         - Use /admin/expire or --expire to manually expire cache", file=sys.stderr)
 
     def can_archive(self):
         return self.local_archive_dir is not None
@@ -235,23 +234,56 @@ class LocalStorageManager(StorageManager):
             return False
 
     def expire(self):
-        expired_count = 0
         # expire old result cache entries
+        print ("Expiring result cache entries... ", file=sys.stderr, end='', flush=True)
         now = datetime.now(timezone.utc)
+        result_cache_expired = 0
         for key in [key for key in self.result_cache.keys() if now > self.result_cache[key]['expiry']]:
             del self.result_cache[key]
-            expired_count += 1
+            result_cache_expired += 1
+        print(f"done, expired {result_cache_expired} entries.", file=sys.stderr)
+
         # expire old whois cache entries
+        print ("Expiring whois cache entries... ", file=sys.stderr, end='', flush=True)
         threshold = now - timedelta(seconds=self.whois_cache_ttl)
+        whois_cache_expired = 0
         for key in [key for key in self.whois_cache.keys() if self.whois_cache[key]['ts'] < threshold]:
             del self.whois_cache[key]
-            expired_count += 1
+            whois_cache_expired += 1
+        print(f"done, expired {whois_cache_expired} entries.", file=sys.stderr)
+
         # expire old scorecards
+        print ("Expiring scorecards... ", file=sys.stderr, end='', flush=True)
         deadline = now - timedelta(seconds=self.result_archive_ttl)
+        scorecards_expired = 0
         for scorecard in [scorecard for scorecard in self.scorecards if scorecard['ts'] < deadline]:
             self.scorecards.remove(scorecard)
-            expired_count += 1
-        return expired_count
+            scorecards_expired += 1
+        print(f"done, expired {scorecards_expired} entries.", file=sys.stderr)
+
+        # expire old archive files
+        print ("Expiring archived report files", file=sys.stderr, end='', flush=True)
+        threshold = now - timedelta(seconds=self.result_archive_ttl)
+        report_cached_expired = 0
+        if self.local_archive_dir:
+            for file in os.listdir(self.local_archive_dir):
+                if file.startswith("report-") and file.endswith(".json"):
+                    file_path = os.path.join(self.local_archive_dir, file)
+                    print('.', end='', flush=True)
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            data['ts'] = datetime.fromisoformat(data['ts'])
+                            f.close()
+                        if data['ts'] < threshold:
+                            os.remove(file_path)
+                            report_cached_expired += 1
+                    except Exception as e:
+                        print(f"WARNING: failed expiring archived report file {file_path}: {e}", file=sys.stderr)
+        print(f" done, expired {report_cached_expired} entries.", file=sys.stderr)
+
+        # return number of expired entries
+        return result_cache_expired + whois_cache_expired + scorecards_expired + report_cached_expired
 
     def _load(self):
         """ load local cache from disk """
@@ -509,6 +541,11 @@ class ValkeyFileHybridStorageManager(ValkeyStorageManager):
 
     def retrieve_result(self, report_id):
         return self.local_storage_manager.retrieve_result(report_id)
+
+    def expire(self):
+        expired = super().expire()
+        expired += self.local_storage_manager.expire()
+        return expired
 
 
 # Scoreboard management

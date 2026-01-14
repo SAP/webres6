@@ -28,7 +28,7 @@ from flask import Flask, redirect, request, jsonify, send_from_directory
 from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 
 # config/flag variables
-webres6_version   = "1.2.1"
+webres6_version   = "1.2.2"
 debug_whois       = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo    = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask       = 'flask'    in getenv("DEBUG", '').lower().split(',')
@@ -824,9 +824,12 @@ def get_archived_report(report_id):
     lp = f"res6 {report_id:.25} "
     report = storage_manager.retrieve_result(report_id)
     if report:
+        ttl = report['ts'] + result_archive_ttl - datetime.now(timezone.utc)
         print(f"{lp}sending archived report {report_id}", file=sys.stderr)
         webres6_archive_total.labels(result='success').inc()
-        return jsonify(report), 200
+        res = jsonify(report)
+        res.headers['Cache-Control'] = f"public, max-age={ttl.total_seconds():.0f}"
+        return res, 200
     else:
         print(f"{lp}WARNING: cached report {report_id} not found in archive", file=sys.stderr)
         webres6_archive_total.labels(result='not_found').inc()
@@ -839,7 +842,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
     """ Crawls and analyzes the given URL, using cached results if available.
     """
 
-    if not storage_manager:
+    if not storage_manager or not storage_manager.can_archive():
         # Valkey is not configured, skip cache lookup
         return crawl_and_analyze_url(url, wait=wait, timeout=timeout, ext=ext, scoreboard_entry=scoreboard_entry,
                                       screenshot_mode=screenshot_mode,
@@ -865,7 +868,8 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
             response.headers['Refresh'] = '15'
             return response, 202
         elif type == 'report':
-            return get_archived_report(report_id)
+            # redirect to report URL to improve client caching
+            return redirect(f"/res6/report/{report_id}"), 303
         else:
             print(f"{lp}WARNING: unknown cached result type {type}", file=sys.stderr)
 
@@ -899,7 +903,11 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
         scoreboard.enter(json_result)
 
     # return the result
-    return jsonify(json_result), error_code
+    if archived:
+        # redirect to report URL to improve client caching
+        return redirect(f"/res6/report/{report_id}"), 303
+    else:
+        return json_result, error_code
 
 
 def check_auth(request):
@@ -942,13 +950,15 @@ def create_http_app():
     print("\t/res6/serverconfig   list available extensions, screenshot-modes, whois support, ...", file=sys.stderr)
     @app.route('/res6/serverconfig', methods=['GET'])
     def res6_serverconfig():
-        return jsonify({'version': webres6_version,
+        res = jsonify({'version': webres6_version,
                         'message': srv_message, 'privacy_policy': privacy_policy,
                         'max_wait': max_wait, 'extensions': get_extensions(),
                         'whois': enable_whois, 'screenshot_modes': screenshot_modes,
                         'archive': storage_manager.can_archive(),
                         'scoreboard': scoreboard is not None,
-                        }), 200
+                        })
+        res.headers['Cache-Control'] = 'public, max-age=900'
+        return res, 200
 
     print("\t/res6/url(URL)       get JSON results for URL provided", file=sys.stderr)
     @app.route('/res6/url(<path:url>)', methods=['GET'])
@@ -1009,7 +1019,9 @@ def create_http_app():
             limit = int(request.args.get('limit')) if request.args.get('limit') else 12
             if limit > scoreboard_request_limit:
                 limit = scoreboard_request_limit
-            return jsonify(scoreboard.get_entries(limit=limit)), 200
+            res = jsonify(scoreboard.get_entries(limit=limit))
+            res.headers['Cache-Control'] = 'public, max-age=60'
+            return res, 200
 
     print("\t/metrics             get Prometheus compatible metrics", file=sys.stderr)
     @app.route('/metrics', methods=['GET'])
