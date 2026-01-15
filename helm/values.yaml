@@ -64,8 +64,9 @@ api:
   whois:
     enabled: true
     cacheTTL: "86400"
-  valkey:
-    url: ""
+  valkeyURL: ""
+  s3Bucket: ""
+  s3Endpoint: ""
   results:
     cacheTTL: "180"
     archiveTTL: "7776000"

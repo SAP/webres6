@@ -28,7 +28,7 @@ from flask import Flask, redirect, request, jsonify, send_from_directory
 from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 
 # config/flag variables
-webres6_version   = "1.2.2"
+webres6_version   = "1.3.0"
 debug_whois       = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo    = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask       = 'flask'    in getenv("DEBUG", '').lower().split(',')
@@ -39,6 +39,8 @@ selenium_password = getenv("SELENIUM_PASSWORD", None)
 headless_selenium = getenv("HEADLESS_SELENIUM", False)
 dnsprobe_api_url  = getenv("DNSPROBE_API_URL", None)
 valkey_url        = getenv("VALKEY_URL", None)
+s3_bucket         = getenv("S3_BUCKET", None)
+s3_endpoint       = getenv("S3_ENDPOINT", None)
 archive_dir       = getenv("ARCHIVE_DIR", None)
 result_cache_ttl  = int(getenv("RESULT_CACHE_TTL", 900))  # Default 15min
 result_archive_ttl = int(getenv("RESULT_ARCHIVE_TTL", 3600*24*90))  # Default 3 month
@@ -56,7 +58,7 @@ screenshot_modes  = ['none', 'small', 'medium', 'full']
 
 # load custom modules (allows overrides in serverconfig directory)
 sys.path.insert(0, srvconfig_dir)
-from webres6_storage import StorageManager, LocalStorageManager, ValkeyStorageManager, ValkeyFileHybridStorageManager, Scoreboard, export_archived_reports, import_archived_reports
+from webres6_storage import StorageManager, LocalStorageManager, ValkeyStorageManager, ValkeyFileHybridStorageManager, ValkeyS3HybridStorageManager, Scoreboard, export_archived_reports, import_archived_reports
 from webres6_whois import get_whois_info
 from webres6_extension import check_extension_parameter, get_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl, cleanup_selenium_crawl, finalize_report 
 
@@ -120,7 +122,11 @@ else:
 # inialize storage manager
 storage_manager = None
 if valkey_url and valkey_url.strip() != '':
-    if archive_dir and archive_dir.strip() != '':
+    if s3_bucket and s3_bucket.strip() != '':
+        print("Valkey client and S3 endpoint configured, using ValkeyS3HybridStorageManager", file=sys.stderr)
+        storage_manager = ValkeyS3HybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
+                                              valkey_url=valkey_url, s3_bucket=s3_bucket, s3_endpoint=s3_endpoint)
+    elif archive_dir and archive_dir.strip() != '':
         print("Valkey client and local archive dir configured, using ValkeyFileHybridStorageManager", file=sys.stderr)
         storage_manager = ValkeyFileHybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
                                                             valkey_url=valkey_url, archive_dir=archive_dir)
@@ -822,18 +828,25 @@ def get_archived_report(report_id):
         return jsonify({ 'error': 'Archive links are not supported in this deployment', 'report_id': report_id }), 200
 
     lp = f"res6 {report_id:.25} "
-    report = storage_manager.retrieve_result(report_id)
-    if report:
+
+    if report_url := storage_manager.retrieve_result_url(report_id):
+        # redirect to external report URL to improve client caching
+        print(f"{lp}sending archived report {report_id} via redirect to {report_url}", file=sys.stderr)
+        webres6_archive_total.labels(result='success').inc()
+        return redirect(report_url), 303
+
+    if report := storage_manager.retrieve_result(report_id):
         ttl = report['ts'] + timedelta(seconds=result_archive_ttl) - datetime.now(timezone.utc)
         print(f"{lp}sending archived report {report_id}", file=sys.stderr)
         webres6_archive_total.labels(result='success').inc()
         res = jsonify(report)
         res.headers['Cache-Control'] = f"public, max-age={ttl.total_seconds():.0f}"
         return res, 200
-    else:
-        print(f"{lp}WARNING: cached report {report_id} not found in archive", file=sys.stderr)
-        webres6_archive_total.labels(result='not_found').inc()
-        return jsonify({ 'error': 'Report not found in archive', 'report_id': report_id }), 404
+    
+    # report not found
+    print(f"{lp}WARNING: cached report {report_id} not found in archive", file=sys.stderr)
+    webres6_archive_total.labels(result='not_found').inc()
+    return jsonify({ 'error': 'Report not found in archive', 'report_id': report_id }), 404
 
 
 def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
@@ -869,7 +882,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
             return response, 202
         elif type == 'report':
             # redirect to report URL to improve client caching
-            return redirect(f"/res6/report/{report_id}"), 303
+            return redirect(f"./report/{report_id}"), 303
         else:
             print(f"{lp}WARNING: unknown cached result type {type}", file=sys.stderr)
 
@@ -905,7 +918,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
     # return the result
     if archived:
         # redirect to report URL to improve client caching
-        return redirect(f"/res6/report/{report_id}"), 303
+        return redirect(f"./report/{report_id}"), 303
     else:
         return json_result, error_code
 

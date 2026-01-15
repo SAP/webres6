@@ -13,6 +13,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from ipaddress import ip_address
 import valkey
+import boto3 
 
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -41,6 +42,9 @@ class StorageManager:
     def retrieve_result(self, report_id):
         pass
 
+    def retrieve_result_url(self, report_id):
+        return None
+    
     def put_result_cacheline(self, cache_key, data, ttl, overwrite=True):
         pass
 
@@ -547,6 +551,80 @@ class ValkeyFileHybridStorageManager(ValkeyStorageManager):
         expired = super().expire()
         expired += self.local_storage_manager.expire()
         return expired
+
+
+class ValkeyS3HybridStorageManager(ValkeyStorageManager):
+    """ Hybrid storage manager that uses Valkey for cache and S3 for archive.
+    """
+
+    s3_client = None
+    s3_bucket = None
+    s3_presigned_url_expiry = 3600
+
+    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, s3_bucket, s3_endpoint=None, s3_presigned_url_expiry=3600, whois_mem_cache_size_max=2048):
+        super().__init__(whois_cache_ttl, result_archive_ttl, valkey_url, whois_mem_cache_size_max)
+        if s3_endpoint and s3_endpoint.strip() != '':
+            self.s3_client = boto3.client('s3', endpoint_url=s3_endpoint)
+        else:
+            self.s3_client = boto3.client('s3')
+        self.s3_bucket = s3_bucket
+        self.s3_presigned_url_expiry = s3_presigned_url_expiry
+
+    def can_archive(self):
+        return True
+
+    def _make_s3_key(self, report_id):
+        return f"report-{report_id}.json"
+
+    def archive_result(self, report_id, data):
+        date = datetime.now(timezone.utc) + timedelta(seconds=self.result_archive_ttl)
+        try:
+            self.s3_client.put_object(Bucket=self.s3_bucket, Key=self._make_s3_key(report_id),
+                                      Body=json.dumps(data, cls=DateTimeEncoder).encode('utf-8'),
+                                      ContentType='application/json', Expires=date)
+            return True
+        except Exception as e:
+            print(f"WARNING: failed archiving result {report_id} to S3: {e}", file=sys.stderr)
+            return False
+
+    def list_archived_reports(self):
+        try:
+            response = self.s3_client.list_objects_v2(Bucket=self.s3_bucket, Prefix='report-')
+            report_ids = []
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    key = obj['Key']
+                    if key.startswith("report-") and key.endswith(".json"):
+                        report_id = key[len("report-"):-len(".json")]
+                        report_ids.append(report_id)
+            return report_ids
+        except Exception as e:
+            print(f"WARNING: failed listing archived reports from S3: {e}", file=sys.stderr)
+            return []
+
+    def retrieve_result(self, report_id):
+        try:
+            response = self.s3_client.get_object(Bucket=self.s3_bucket, Key=self._make_s3_key(report_id))
+            if 'Body' in response:
+                body = response['Body'].read()
+                data = json.loads(body)
+                data['ts'] = datetime.fromisoformat(data['ts'])
+                return data
+            else:
+                return None
+        except Exception as e:
+            print(f"WARNING: failed retrieving archived result {report_id} from S3: {e}", file=sys.stderr)
+            return None
+
+    def retrieve_result_url(self, report_id):
+        try:
+            response = self.s3_client.generate_presigned_url('get_object',
+                                                        Params={'Bucket': self.s3_bucket, 'Key': self._make_s3_key(report_id)},
+                                                        ExpiresIn=self.s3_presigned_url_expiry)
+            return response
+        except Exception as e:
+            print(f"WARNING: failed getting presigned archive url for {report_id} from S3: {e}", file=sys.stderr)
+            return None
 
 
 # Scoreboard management

@@ -65,9 +65,17 @@ spec:
             - name: DNSPROBE_API_URL
               value: "http://{{ include "webres6.fullname" . }}-dnsprobe:{{ .Values.dnsprobe.service.port }}/dnsprobe"
             {{- end }}
-            {{- if .Values.api.valkey.url }}
+            {{- if .Values.api.valkeyURL }}
             - name: VALKEY_URL
-              value: {{ .Values.api.valkey.url | quote }}
+              value: {{ .Values.api.valkeyURL | quote }}
+            {{- if .Values.api.s3Bucket }}
+            - name: S3_BUCKET
+              value: {{ .Values.api.s3Bucket | quote }}
+            {{- if .Values.api.s3Endpoint }}
+            - name: S3_ENDPOINT
+              value: {{ .Values.api.s3Endpoint | quote }}
+            {{- end }}
+            {{- end }}
             {{- end }}
             - name: ENABLE_WHOIS
               value: {{ .Values.api.whois.enabled | quote | default "true" }}

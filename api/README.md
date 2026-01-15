@@ -35,6 +35,9 @@ Environment variables:
   SELENIUM_REMOTE_URL         Use remote Selenium server instead of starting selenium for each request
   DNSPROBE_API_URL            Enable DNS checking using specified dns probe service
   VALKEY_URL                  URL for optional VALKEY cache
+  S3_BUCKET                   Name of S3 bucket to use for report storage (requires valkey to be set)
+  S3_ENDPOINT                 S3 Endpoint to use for report storage
+  ARCHIVE_DIR                 DIR for report storage 
   LOCAL_CACHE_DIR             DIR for optional LOCAL filesystem-based cache
   ENABLE_WHOIS                Enable clients to request whois lookups
   WHOIS_CACHE_TTL             Expiry time for whois cache
