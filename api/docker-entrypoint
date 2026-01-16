@@ -20,8 +20,12 @@ export TZ='UTC'
 # Fix python buffering
 export PYTHONUNBUFFERED=1
 
-printenv
-
 set -e
 
-gunicorn --bind "[::]:${PORT}" --timeout ${TIMEOUT} $@ 'webres6-api:create_http_app()'
+if [ -z "$1" ]; then
+  echo "Starting webres6-api via gunicorn on port ${PORT} with timeout ${TIMEOUT}..." >&2
+  gunicorn --bind "[::]:${PORT}" --timeout ${TIMEOUT} $@ 'webres6-api:create_http_app()'
+else
+  echo "Starting webres6-api with custom arguments: $@" >&2
+  ./webres6-api.py $@
+fi

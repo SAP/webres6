@@ -13,18 +13,45 @@ Set CORS policy
 ```bash
 cat > s3-localstack-cors.json <<EOF
 {
-    "CORSRules": [
-      {
-        "AllowedOrigins": ["http://localhost:6400", "http://localhost:6480"],
-        "AllowedMethods": ["GET", "HEAD"],
-        "AllowedHeaders": ["*"],
-        "ExposeHeaders": ["ETag", "Expires"],
-        "MaxAgeSeconds": 38400
-      }
-    ]
+  "CORSRules": [
+    {
+      "AllowedOrigins": ["http://localhost:6400", "http://localhost:6480"],
+      "AllowedMethods": ["GET", "HEAD"],
+      "AllowedHeaders": ["*"],
+      "ExposeHeaders": [
+        "Cache-control",
+        "Content-encoding",
+        "Content-type",
+        "ETag",
+        "Expires"
+      ],
+      "MaxAgeSeconds": 38400
+    }
+  ]
 }
 EOF
 aws s3api put-bucket-cors --region eu-west-1 --endpoint http://127.0.0.1:4566 --bucket webres6-test --cors-configuration file://s3-localstack-cors.json
+```
+
+Set report expiry
+```bash
+cat > s3-localstack-expiry.json <<EOF
+{
+  "Rules": [
+    {
+      "Expiration": {
+        "Days": 90
+      },
+      "ID": "expireReports",
+      "Filter": {
+        "Prefix": "report-"
+      },
+      "Status": "Enabled"
+    }
+  ]
+}
+EOF
+aws s3api put-bucket-lifecycle-configuration --region eu-west-1 --endpoint http://127.0.0.1:4566 --bucket webres6-test --lifecycle-configuration=file:/s3-localstack-expiry.json
 ```
 
 Start Valkey

@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+from compression import gzip
 from hashlib import sha256
 import json
 import math
@@ -26,6 +27,7 @@ class StorageManager:
 
     whois_cache_ttl = 3600
     result_archive_ttl = 3600*24
+    url_expiry = 0
 
     def can_archive(self):
         pass
@@ -559,7 +561,6 @@ class ValkeyS3HybridStorageManager(ValkeyStorageManager):
 
     s3_client = None
     s3_bucket = None
-    s3_presigned_url_expiry = 3600
 
     def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, s3_bucket, s3_endpoint=None, s3_presigned_url_expiry=3600, whois_mem_cache_size_max=2048):
         super().__init__(whois_cache_ttl, result_archive_ttl, valkey_url, whois_mem_cache_size_max)
@@ -568,7 +569,7 @@ class ValkeyS3HybridStorageManager(ValkeyStorageManager):
         else:
             self.s3_client = boto3.client('s3')
         self.s3_bucket = s3_bucket
-        self.s3_presigned_url_expiry = s3_presigned_url_expiry
+        self.url_expiry = s3_presigned_url_expiry
 
     def can_archive(self):
         return True
@@ -580,8 +581,9 @@ class ValkeyS3HybridStorageManager(ValkeyStorageManager):
         date = datetime.now(timezone.utc) + timedelta(seconds=self.result_archive_ttl)
         try:
             self.s3_client.put_object(Bucket=self.s3_bucket, Key=self._make_s3_key(report_id),
-                                      Body=json.dumps(data, cls=DateTimeEncoder).encode('utf-8'),
-                                      ContentType='application/json', Expires=date)
+                                      Body=gzip.compress(json.dumps(data, cls=DateTimeEncoder).encode('utf-8'), compresslevel=8),
+                                      ContentType='application/json; charset=utf-8', ContentEncoding='gzip', 
+                                      Expires=date, CacheControl=f'public, immutable')
             return True
         except Exception as e:
             print(f"WARNING: failed archiving result {report_id} to S3: {e}", file=sys.stderr)
@@ -620,7 +622,7 @@ class ValkeyS3HybridStorageManager(ValkeyStorageManager):
         try:
             response = self.s3_client.generate_presigned_url('get_object',
                                                         Params={'Bucket': self.s3_bucket, 'Key': self._make_s3_key(report_id)},
-                                                        ExpiresIn=self.s3_presigned_url_expiry)
+                                                        ExpiresIn=self.url_expiry)
             return response
         except Exception as e:
             print(f"WARNING: failed getting presigned archive url for {report_id} from S3: {e}", file=sys.stderr)

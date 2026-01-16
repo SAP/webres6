@@ -174,7 +174,7 @@ function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
   if (apiBase && srvSupportsArchiveLinks && data.ID) {
     rawdataContainer.find('a').attr('href', `${getAPIBase()}/report/${data.ID}`);
   } else {
-    rawdataContainer.find('a').attr('href', `data:text/json;charset=utf-8;base64, ${btoa(JSON.stringify(data, null, 2))}`);
+    rawdataContainer.find('a').attr('href', `data:text/json;charset=utf-8;base64,${btoa(JSON.stringify(data, null, 2))}`);
   }
   rawdataContainer.removeClass('template');
 }
@@ -568,6 +568,7 @@ $(document).ready( async function() {
       analyzeURL(decodeURIComponent(target));
     } else if (verb.toLowerCase() === 'report' && target) {
       $('#input').hide();
+      srvSupportsArchiveLinks = true; // assume archive link support for direct report loading
       analyzeReport(target)
     } else if (verb.toLowerCase() === 'scoreboard') {
       if (await loadSrvConfig()) {

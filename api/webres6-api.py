@@ -60,7 +60,7 @@ screenshot_modes  = ['none', 'small', 'medium', 'full']
 sys.path.insert(0, srvconfig_dir)
 from webres6_storage import StorageManager, LocalStorageManager, ValkeyStorageManager, ValkeyFileHybridStorageManager, ValkeyS3HybridStorageManager, Scoreboard, export_archived_reports, import_archived_reports
 from webres6_whois import get_whois_info
-from webres6_extension import check_extension_parameter, get_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl, cleanup_selenium_crawl, finalize_report 
+from webres6_extension import check_extension_parameter, get_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl, cleanup_selenium_crawl, finalize_report
 
 # get nodename for report id
 report_node = platform.node().split('.')[0]
@@ -833,7 +833,9 @@ def get_archived_report(report_id):
         # redirect to external report URL to improve client caching
         print(f"{lp}sending archived report {report_id} via redirect to {report_url}", file=sys.stderr)
         webres6_archive_total.labels(result='success').inc()
-        return redirect(report_url), 303
+        rr = redirect(report_url)
+        rr.headers['Cache-Control'] = f"public, max-age={storage_manager.url_expiry}"
+        return rr, 303
 
     if report := storage_manager.retrieve_result(report_id):
         ttl = report['ts'] + timedelta(seconds=result_archive_ttl) - datetime.now(timezone.utc)
@@ -842,7 +844,7 @@ def get_archived_report(report_id):
         res = jsonify(report)
         res.headers['Cache-Control'] = f"public, max-age={ttl.total_seconds():.0f}"
         return res, 200
-    
+
     # report not found
     print(f"{lp}WARNING: cached report {report_id} not found in archive", file=sys.stderr)
     webres6_archive_total.labels(result='not_found').inc()
@@ -882,7 +884,9 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
             return response, 202
         elif type == 'report':
             # redirect to report URL to improve client caching
-            return redirect(f"./report/{report_id}"), 303
+            rr = redirect(f"./report/{report_id}")
+            rr.headers['Cache-Control'] = f"private, max-age={max(0, result_cache_ttl - cache_age.total_seconds()):.0f}"
+            return rr, 303
         else:
             print(f"{lp}WARNING: unknown cached result type {type}", file=sys.stderr)
 
@@ -907,18 +911,20 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
     # Cache the result in storage if archiving was successful
     storage_manager.delete_result_cacheline(cache_key)  # remove sentinel
     if archived:
+        # put cache line pointing to archived report
         cache_line = { 'type': 'report', 'ts': ts, 'report_id': report_id,
                         'data': "./reports/" + report_id }
         storage_manager.put_result_cacheline(cache_key, cache_line, result_cache_ttl, True)
 
-    # enter scoreboard entry
-    if scoreboard and scoreboard_entry and json_result.get('error', None) is None:
-        scoreboard.enter(json_result)
+        # enter scoreboard entry
+        if scoreboard and scoreboard_entry and json_result.get('error', None) is None:
+            scoreboard.enter(json_result)
 
-    # return the result
-    if archived:
         # redirect to report URL to improve client caching
-        return redirect(f"./report/{report_id}"), 303
+        rr = redirect(f"./report/{report_id}")
+        rr.headers['Cache-Control'] = f"private, max-age={max(0, result_cache_ttl):.0f}"
+        return rr, 303
+
     else:
         return json_result, error_code
 
@@ -944,7 +950,7 @@ def create_http_app():
 
     # Start a simple HTTP API server using Flask
     app = Flask(__name__, static_folder=app_home)
-    app.config['RESTFUL_JSON'] = {'ensure_ascii': False}
+    app.config['JSON_AS_ASCII'] = False
     app.json_provider_class = FlaskJSONProvider
     app.json = app.json_provider_class(app)
 
