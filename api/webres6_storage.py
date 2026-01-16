@@ -6,9 +6,7 @@
 #
 
 from compression import gzip
-from hashlib import sha256
 import json
-import math
 import os
 import sys
 from datetime import datetime, timezone, timedelta
@@ -677,22 +675,28 @@ class Scoreboard:
                 self.storage_manager.put_scorecard(entry)
 
 
-def export_archived_reports(storage_manager, export_dir):
+def export_archived_reports(storage_manager, export_dir, result_archive_ttl):
     """ Export all archived reports to the given directory.
     """
 
+    export_storage_manager = None
     if not storage_manager or not storage_manager.can_archive():
         print("Archiving is not enabled in this deployment.", file=sys.stderr)
         return False
-    if not os.path.exists(export_dir):
+    if os.path.exists(export_dir):
+        print(f"Exporting archived reports to {export_dir}: ", file=sys.stderr, end='')
+        export_storage_manager = LocalStorageManager(result_archive_ttl=result_archive_ttl, archive_dir=export_dir)
+    elif export_dir.startswith('s3:'):
+        endpoint, bucket = export_dir[3:].rsplit('/', 1)
+        print(f"Exporting archived reports to S3 endpoint {endpoint} bucket {bucket}: ", file=sys.stderr, end='')
+        export_storage_manager = ValkeyS3HybridStorageManager(0, result_archive_ttl=result_archive_ttl, valkey_url='valkey://localhost:9', s3_endpoint=endpoint, s3_bucket=bucket)
+    else:
         print(f"Export directory {export_dir} does not exist - aborting.", file=sys.stderr)
         return False
-    print(f"Exporting archived reports to {export_dir}: ", file=sys.stderr, end='')
     report_ids = storage_manager.list_archived_reports()
     if not report_ids or len(report_ids) == 0:
         print("No archived reports found.", file=sys.stderr)
         return True
-    export_storage_manager = LocalStorageManager(archive_dir=export_dir)
     for report_id in report_ids:
         report = storage_manager.retrieve_result(report_id)
         if not report:
@@ -707,18 +711,24 @@ def export_archived_reports(storage_manager, export_dir):
     return True
 
 
-def import_archived_reports(storage_manager, import_dir):
+def import_archived_reports(storage_manager, import_dir, result_archive_ttl):
     """ Import all archived reports from the given directory.
     """
 
+    import_storage_manager = None
     if not storage_manager or not storage_manager.can_archive():
         print("Archiving is not enabled in this deployment.", file=sys.stderr)
         return False
-    if not os.path.exists(import_dir):
+    if os.path.exists(import_dir):
+        print(f"Importing archived reports from {import_dir}: ", file=sys.stderr, end='')
+        import_storage_manager = LocalStorageManager(result_archive_ttl=result_archive_ttl, archive_dir=import_dir)
+    elif import_dir.startswith('s3:'):
+        endpoint, bucket = import_dir[3:].rsplit('/', 1)
+        print(f"Importing archived reports from S3 endpoint {endpoint} bucket {bucket}: ", file=sys.stderr, end='')
+        import_storage_manager = ValkeyS3HybridStorageManager(0, result_archive_ttl=result_archive_ttl, valkey_url='valkey://localhost:9', s3_endpoint=endpoint, s3_bucket=bucket)
+    else:
         print(f"Import directory {import_dir} does not exist - aborting.", file=sys.stderr)
         return False
-    print(f"Importing archived reports from {import_dir}: ", file=sys.stderr, end='')
-    import_storage_manager = LocalStorageManager(archive_dir=import_dir)
     report_ids = import_storage_manager.list_archived_reports()
     if not report_ids or len(report_ids) == 0:
         print("No archived reports found in import directory.", file=sys.stderr)

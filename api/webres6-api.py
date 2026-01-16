@@ -136,7 +136,7 @@ if valkey_url and valkey_url.strip() != '':
 else:
     print("Valkey client not configured, using LocalStorageManager", file=sys.stderr)
     LocalStorageManager.print_warnings(None)
-    storage_manager = LocalStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, cache_dir=local_cache_dir)
+    storage_manager = LocalStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, cache_dir=local_cache_dir, archive_dir=archive_dir)
 
 # initialize scoreboard if enabled
 scoreboard = None
@@ -1137,14 +1137,14 @@ if __name__ == "__main__":
 
     # export archived reports if requested and exit
     if args.export_reports:
-        if export_archived_reports(storage_manager, args.export_reports):
+        if export_archived_reports(storage_manager, args.export_reports, result_archive_ttl):
             sys.exit(0)
         else:
             sys.exit(1)
 
     # import archived reports if requested and exit
     if args.import_reports:
-        if import_archived_reports(storage_manager, args.import_reports):
+        if import_archived_reports(storage_manager, args.import_reports, result_archive_ttl):
             sys.exit(0)
         else:
             sys.exit(1)

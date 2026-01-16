@@ -39,6 +39,9 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if .Values.api.serviceAccountName -}}
+      serviceAccountName: {{ .Values.api.serviceAccountName }}
+      {{- end }}
       containers:
         - name: webres6-api
           image: {{ .Values.api.image.repository | default "" .Values.image.repository }}{{ .Values.api.image.name | default "webres6-api" }}:{{ .Values.api.image.tag | default "latest" .Values.image.tag }}
@@ -76,6 +79,18 @@ spec:
               value: {{ .Values.api.s3Endpoint | quote }}
             {{- end }}
             {{- end }}
+            {{- end }}
+            {{- if .Values.api.awsSecret }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.api.awsSecret }}
+                  key: accessKeyID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.api.awsSecret }}
+                  key: secretAccessKey  
             {{- end }}
             - name: ENABLE_WHOIS
               value: {{ .Values.api.whois.enabled | quote | default "true" }}

@@ -14,7 +14,7 @@ imagePullSecrets:
 # API server based server message and privacy text configuration
 serverconfig:
   privacy: |-
-    <p>All data input is processed in accordance with GDPR regulations. No personal data is stored unless explicitly provided by the user (e.g., URLs analyzed). Usage data is collected anonymously to improve service quality.</p>
+    <p>All data input is processed in accordance with <a href="https://www.sap.com/about/legal/privacy.html">SAP privacy policy</a>.<br/>
     IP addresses resolved by this server my be processed by the WHOIS services of the respective Regional Internet Registries.</p>
   message: ""
   webres6_extension_py: |-
@@ -64,6 +64,8 @@ api:
   whois:
     enabled: true
     cacheTTL: "86400"
+  serviceAccountName: ""
+  awsSecret: ""
   valkeyURL: ""
   s3Bucket: ""
   s3Endpoint: ""
@@ -163,7 +165,6 @@ dnsprobe:
       memory: "256Mi"
   securityContext: {}
   podSecurityContext: {}
-
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
