@@ -26,7 +26,7 @@ class StorageManager:
     whois_cache_ttl = 3600
     result_archive_ttl = 3600*24
     url_expiry = 0
-    url_template = './reports/report-{report_id}.json'
+    url_template = '/res6/report/{report_id}'
 
     def can_archive(self):
         pass
