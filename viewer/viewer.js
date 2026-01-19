@@ -14,6 +14,7 @@ const timeFormatOptions = { timeZoneName: 'short', hour12: false , month: '2-dig
  * this loads and renders messages, browser extensions in remote Selenium, screenshot modes, whois support and more
  */
 var srvSupportsArchiveLinks = false;
+var srvArchiveLinkTemplate = function(report_id) { return getAPIBase() + `/report/${report_id}`; };
 var srvSupportsScoreboard = false;
 async function loadSrvConfig() {
   // load config
@@ -65,6 +66,9 @@ async function loadSrvConfig() {
       // Archive link support
       if (srvconfig && srvconfig.archive) {
         srvSupportsArchiveLinks = true;
+        if (srvconfig.archive_url_template) {
+          srvArchiveLinkTemplate = function(report_id) { return srvconfig.archive_url_template.replace('{report_id}', report_id); };
+        } 
       }
       // Scoreboard support
       if (srvconfig && srvconfig.scoreboard) {
@@ -172,7 +176,7 @@ function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
   }
   const rawdataContainer = footer.find('.rawdata');
   if (apiBase && srvSupportsArchiveLinks && data.ID) {
-    rawdataContainer.find('a').attr('href', `${getAPIBase()}/report/${data.ID}`);
+    rawdataContainer.find('a').attr('href', srvArchiveLinkTemplate(data.ID));
   } else {
     rawdataContainer.find('a').attr('href', `data:text/json;charset=utf-8;base64,${btoa(JSON.stringify(data, null, 2))}`);
   }
@@ -397,7 +401,7 @@ async function analyzeReport(report) {
   const loadingStatus = $('#results-template .overview .status.status-loading').clone();
   loadingStatus.appendTo(overview);
   // Fetch report data
-  reportUrl = getAPIBase() + `/report/${encodeURIComponent(report)}`;
+  reportUrl = srvArchiveLinkTemplate(report);
   try {
     const response = await fetch(reportUrl);
     if (response.ok) {
@@ -559,6 +563,12 @@ function handleJsonDrop(event) {
 
 /* Load server config and register callbacks */ 
 $(document).ready( async function() {
+  // Drag and drop support
+  document.body.ondragover = function(e) { e.preventDefault(); }
+  document.body.ondrop = function(e) { e.preventDefault(); handleJsonDrop(e); };
+  // Load server config and enable features
+  s = await loadSrvConfig();
+  if (!s) { return; }
   // Check for URL anchor and analyze it if present
   const anchor = document.URL.split('#')[1];
   if (anchor) {
@@ -571,14 +581,9 @@ $(document).ready( async function() {
       srvSupportsArchiveLinks = true; // assume archive link support for direct report loading
       analyzeReport(target)
     } else if (verb.toLowerCase() === 'scoreboard') {
-      if (await loadSrvConfig()) {
-        loadScoreboard(parseInt(target) || 12);
-      }
+      loadScoreboard(parseInt(target) || 12);
     }
   } else {
-    // Load server config and enable features
-    s = await loadSrvConfig();
-    if (!s) { return; }
     // enable scoreboard
     loadScoreboard(12);
     // show input form and add handlers
@@ -590,7 +595,4 @@ $(document).ready( async function() {
       $('#scoreboard').addClass('hide');
     });
   }
-  // Drag and drop support
-  document.body.ondragover = function(e) { e.preventDefault(); }
-  document.body.ondrop = function(e) { e.preventDefault(); handleJsonDrop(e); };
 });

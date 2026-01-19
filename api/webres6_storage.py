@@ -26,6 +26,7 @@ class StorageManager:
     whois_cache_ttl = 3600
     result_archive_ttl = 3600*24
     url_expiry = 0
+    url_template = './reports/report-{report_id}.json'
 
     def can_archive(self):
         pass
@@ -559,15 +560,19 @@ class ValkeyS3HybridStorageManager(ValkeyStorageManager):
 
     s3_client = None
     s3_bucket = None
+    s3_delivery_strategy = None
 
-    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, s3_bucket, s3_endpoint=None, s3_presigned_url_expiry=3600, whois_mem_cache_size_max=2048):
+    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, s3_bucket, s3_endpoint, s3_delivery_strategy = 'public', s3_presigned_url_expiry=3600, whois_mem_cache_size_max=2048):
         super().__init__(whois_cache_ttl, result_archive_ttl, valkey_url, whois_mem_cache_size_max)
-        if s3_endpoint and s3_endpoint.strip() != '':
-            self.s3_client = boto3.client('s3', endpoint_url=s3_endpoint)
-        else:
-            self.s3_client = boto3.client('s3')
-        self.s3_bucket = s3_bucket
         self.url_expiry = s3_presigned_url_expiry
+        self.s3_client = boto3.client('s3', endpoint_url=s3_endpoint)
+        self.s3_bucket = s3_bucket
+        if s3_delivery_strategy not in ['public', 'presigned', 'private']:
+            print(f"WARNING: invalid s3_delivery_strategy {s3_delivery_strategy}, defaulting to 'public'", file=sys.stderr)
+            s3_delivery_strategy = 'public'
+        if s3_delivery_strategy == 'public':
+            self.url_template = f"{self.s3_client.meta.endpoint_url}/{self.s3_bucket}/report-{{report_id}}.json"
+        self.s3_delivery_strategy = s3_delivery_strategy
 
     def can_archive(self):
         return True
@@ -617,6 +622,10 @@ class ValkeyS3HybridStorageManager(ValkeyStorageManager):
             return None
 
     def retrieve_result_url(self, report_id):
+        if self.s3_delivery_strategy == 'public':
+            return f"{self.s3_client.meta.endpoint_url}/{self.s3_bucket}/{self._make_s3_key(report_id)}"
+        elif self.s3_delivery_strategy == 'private':
+            return None
         try:
             response = self.s3_client.generate_presigned_url('get_object',
                                                         Params={'Bucket': self.s3_bucket, 'Key': self._make_s3_key(report_id)},

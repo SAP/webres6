@@ -9,7 +9,7 @@ SPDX-License-Identifier: Apache-2.0
   <link rel="x-webres6-api" href="/res6"/>
   <link rel="stylesheet" href="viewer.css"/>
   <link rel="shortcut icon" type="image/png" href="favicon.png"/>
-  <link rel="prefetch" href="/res6/serverconfig"/>
+  <link rel="preload" href="/res6/serverconfig" as="fetch" crossorigin="anonymous" referrerpolicy="same-origin"/>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js" crossorigin="anonymous" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="></script>
   <script src="viewer.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -170,6 +170,7 @@ SPDX-License-Identifier: Apache-2.0
     <div class="contents-container">
       <div class="contents-container-header">
         <h2>Introduction / Help</h2>
+        <div class="help-hide-button" style="float: right; cursor: pointer; color: lightgray;" onclick="$(this).closest('.contents-container').hide()">&#x2715;</div>
       </div>
       <p>This is the <i>IPv6 Web Resource Checker (webres6)</i>. It checks IPv6-only readiness of a Web page or app 
         by crawling a given URL using Selenium and analyzes whether all page resources have been loaded via IPv6.</p>

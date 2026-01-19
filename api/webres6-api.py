@@ -41,6 +41,7 @@ dnsprobe_api_url  = getenv("DNSPROBE_API_URL", None)
 valkey_url        = getenv("VALKEY_URL", None)
 s3_bucket         = getenv("S3_BUCKET", None)
 s3_endpoint       = getenv("S3_ENDPOINT", None)
+s3_strategy       = getenv("S3_DELIVERY_STRATEGY", "public")
 archive_dir       = getenv("ARCHIVE_DIR", None)
 result_cache_ttl  = int(getenv("RESULT_CACHE_TTL", 900))  # Default 15min
 result_archive_ttl = int(getenv("RESULT_ARCHIVE_TTL", 3600*24*90))  # Default 3 month
@@ -125,7 +126,7 @@ if valkey_url and valkey_url.strip() != '':
     if s3_bucket and s3_bucket.strip() != '':
         print("Valkey client and S3 endpoint configured, using ValkeyS3HybridStorageManager", file=sys.stderr)
         storage_manager = ValkeyS3HybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
-                                              valkey_url=valkey_url, s3_bucket=s3_bucket, s3_endpoint=s3_endpoint)
+                                              valkey_url=valkey_url, s3_bucket=s3_bucket, s3_endpoint=s3_endpoint, s3_delivery_strategy=s3_strategy)
     elif archive_dir and archive_dir.strip() != '':
         print("Valkey client and local archive dir configured, using ValkeyFileHybridStorageManager", file=sys.stderr)
         storage_manager = ValkeyFileHybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
@@ -863,6 +864,11 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
                                       screenshot_mode=screenshot_mode,
                                       lookup_whois=lookup_whois, report_node=report_node)
 
+    def redirect_to_report(report_id, ttl, storage_manager):
+        rr = redirect(storage_manager.url_template.replace('{report_id}', report_id))
+        rr.headers['Cache-Control'] = f"private, max-age={ttl:.0f}"
+        return rr, 303
+
     # Try to lookup in Valkey cache first if available
     cache_key = sha256(f"{url}:{wait}:{timeout}:{ext}:{screenshot_mode}:{lookup_whois}".encode('utf-8')).hexdigest()
     json_result = storage_manager.get_result_cacheline(cache_key)
@@ -884,9 +890,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
             return response, 202
         elif type == 'report':
             # redirect to report URL to improve client caching
-            rr = redirect(f"./report/{report_id}")
-            rr.headers['Cache-Control'] = f"private, max-age={max(0, result_cache_ttl - cache_age.total_seconds()):.0f}"
-            return rr, 303
+            return redirect_to_report(report_id, max(0, result_cache_ttl - cache_age.total_seconds()), storage_manager)
         else:
             print(f"{lp}WARNING: unknown cached result type {type}", file=sys.stderr)
 
@@ -921,9 +925,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
             scoreboard.enter(json_result)
 
         # redirect to report URL to improve client caching
-        rr = redirect(f"./report/{report_id}")
-        rr.headers['Cache-Control'] = f"private, max-age={max(0, result_cache_ttl):.0f}"
-        return rr, 303
+        return redirect_to_report(report_id, result_cache_ttl, storage_manager)
 
     else:
         return json_result, error_code
@@ -974,6 +976,7 @@ def create_http_app():
                         'max_wait': max_wait, 'extensions': get_extensions(),
                         'whois': enable_whois, 'screenshot_modes': screenshot_modes,
                         'archive': storage_manager.can_archive(),
+                        'archive_url_template': storage_manager.url_template if storage_manager and storage_manager.can_archive() else None,
                         'scoreboard': scoreboard is not None,
                         })
         res.headers['Cache-Control'] = 'public, max-age=900'

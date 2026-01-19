@@ -34,10 +34,13 @@ Environment variables:
   NAT64_PREFIXES              Comma-separated list of NAT64 prefixes
   SELENIUM_REMOTE_URL         Use remote Selenium server instead of starting selenium for each request
   DNSPROBE_API_URL            Enable DNS checking using specified dns probe service
-  VALKEY_URL                  URL for optional VALKEY cache
+  VALKEY_URL                  URL for optional VALKEY cache, will also store reports if S3_BUCKET/ARCHIVE_DIR are not set
   S3_BUCKET                   Name of S3 bucket to use for report storage (requires valkey to be set)
   S3_ENDPOINT                 S3 Endpoint to use for report storage
-  ARCHIVE_DIR                 DIR for report storage 
+  S3_DELIVERY_STRATEGY        'public'    - redirect to S3 bucket using a public URL
+                              'presigned' - redirect to S3 bucket using a presigned URL
+                              'private'   - fetch object from S3 and deliver from API
+  ARCHIVE_DIR                 DIR for optional filesystem-based report storage
   LOCAL_CACHE_DIR             DIR for optional LOCAL filesystem-based cache
   ENABLE_WHOIS                Enable clients to request whois lookups
   WHOIS_CACHE_TTL             Expiry time for whois cache
