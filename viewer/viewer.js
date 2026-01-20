@@ -10,12 +10,13 @@ function getAPIBase() {
 }
 
 const timeFormatOptions = { timeZoneName: 'short', hour12: false , month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'};
+const scoreboardDefaultLimit=12;
 /* Load server config
  * this loads and renders messages, browser extensions in remote Selenium, screenshot modes, whois support and more
  */
+var srvSupportsScoreboard = false;
 var srvSupportsArchiveLinks = false;
 var srvArchiveLinkTemplate = function(report_id) { return getAPIBase() + `/report/${report_id}`; };
-var srvSupportsScoreboard = false;
 async function loadSrvConfig() {
   // load config
   try {
@@ -113,19 +114,24 @@ function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
   // Error (if present)
   if (data.error) {
     const errStatus = $('#results-template .overview .status.error').clone();
-    errStatus.find('.placeholder').text(data.error);
+    if (data.error.substring('Timed out receiving message from renderer')) {
+      errStatus.find('.placeholder').text('Timeout while loading the web page in the browser. Increase the wait time and try again.');
+    } else {
+      errStatus.find('.placeholder').text(data.error);
+    }
     overview.append(errStatus);
-  }
-  // Status
-  let v6status;
-  if (data.ipv6_only_ready === true) {
-    v6status = $('#results-template .overview .status.ipv6only-ready').clone();
-  } else if (data.ipv6_only_ready === false) {
-    v6status = $('#results-template .overview .status.ipv6only-not-ready').clone();
   } else {
-    v6status = $('#results-template .overview .status.ipv6only-unknown').clone();
+    // Status
+    let v6status;
+    if (data.ipv6_only_ready === true) {
+      v6status = $('#results-template .overview .status.ipv6only-ready').clone();
+    } else if (data.ipv6_only_ready === false) {
+      v6status = $('#results-template .overview .status.ipv6only-not-ready').clone();
+    } else {
+      v6status = $('#results-template .overview .status.ipv6only-unknown').clone();
+    }
+    overview.append(v6status);
   }
-  overview.append(v6status);
   // IPv6-Only HTTP Score
   if (data.ipv6_only_score !== null) {
     const scoreStatus = $('#results-template .overview .status.ipv6only-score').clone();
@@ -427,7 +433,7 @@ async function analyzeReport(report) {
 }
 
 /* Load and render scoreboard */
-async function loadScoreboard(resultsLimit=12) {
+async function loadScoreboard(resultsLimit=scoreboardDefaultLimit) {
   // Check if scoreboard is supported
   if (!srvSupportsScoreboard) {
     return;
@@ -465,7 +471,7 @@ async function loadScoreboard(resultsLimit=12) {
           return 0;
         });
         // Render scoreboard
-        renderScoreboard(data);
+        renderScoreboard(data, resultsLimit);
         // Add sorting functionality to table headers
         $('#scoreboard th.sortable').on('click', function() {
           const column = $(this).data('sort');
@@ -481,7 +487,7 @@ async function loadScoreboard(resultsLimit=12) {
             if (reverse) return -score;
             return score;
           });
-          renderScoreboard(data);
+          renderScoreboard(data, resultsLimit);
         });
       } else {
         console.log('No scoreboard entries available');
@@ -514,7 +520,7 @@ function compareScoreboardEntries(a, b, column) {
 }
 
 /* Render scoreboard data into the DOM */
-function renderScoreboard(data) {
+function renderScoreboard(data, resultsLimit) {
   // prepare scoreboard container references
   const scoreboardContainer = $('#scoreboard');
   const scoreboardTableBody = scoreboardContainer.find('.scoreboard-table tbody');
@@ -535,6 +541,16 @@ function renderScoreboard(data) {
     row.find('.scoreboard-timestamp').text(new Date(entry.ts).toLocaleString('en-UK', timeFormatOptions));
     scoreboardTableBody.append(row);
   });
+  /* Load more button */
+  if (data.length < resultsLimit) {
+    scoreboardContainer.find('#scoreboard-load-more').addClass('hide');
+  } else {
+    scoreboardContainer.find('#scoreboard-load-more').removeClass('hide');
+    scoreboardContainer.find('#scoreboard-load-more').on('click', async function(e) {
+      e.preventDefault();
+      await loadScoreboard(resultsLimit * 2);
+    });
+  }
   scoreboardContainer.removeClass('template');
 }
 
@@ -581,11 +597,11 @@ $(document).ready( async function() {
       srvSupportsArchiveLinks = true; // assume archive link support for direct report loading
       analyzeReport(target)
     } else if (verb.toLowerCase() === 'scoreboard') {
-      loadScoreboard(parseInt(target) || 12);
+      loadScoreboard(parseInt(target) || scoreboardDefaultLimit);
     }
   } else {
     // enable scoreboard
-    loadScoreboard(12);
+    loadScoreboard(scoreboardDefaultLimit);
     // show input form and add handlers
     $('#input').removeClass('template');
     $('#urlForm').on('submit', function(e) {

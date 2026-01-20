@@ -58,7 +58,9 @@ SPDX-License-Identifier: Apache-2.0
           <label for="scoreboardSwitch"><strong>Public result:</strong></label>
           <input type="checkbox" id="scoreboardSwitch" name="scoreboard" value="true" checked>
         </div>
-        <button type="submit">Analyze</button>
+        <div class="input-parameter-container" id="submit-button">
+          <button type="submit">Analyze</button>
+        </div>
       </form>
     </div>
     <div class="contents-container scoreboard template" id="scoreboard">
@@ -86,6 +88,9 @@ SPDX-License-Identifier: Apache-2.0
           </tr>
         </tbody>
       </table>
+      <div class="contents-container-footer">
+          <button id="scoreboard-load-more">Show more results</button>
+      </div>
     </div>
     <div class="contents-container results template" id="results-template">
       <div class="contents-container-header">

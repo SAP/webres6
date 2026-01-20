@@ -49,6 +49,7 @@ app_home          = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 viewer_dir        = os.path.join(app_home, '..', 'viewer')
 srvconfig_dir     = os.path.join(app_home, 'serverconfig')
 local_cache_dir   = getenv("LOCAL_CACHE_DIR", os.path.join(app_home, '..', 'local_cache'))
+min_timeout       = int(getenv("TIMEOUT_MIN", 20))
 max_timeout       = int(getenv("TIMEOUT", 180))//2
 max_wait          = max_timeout//3
 enable_whois      = getenv("ENABLE_WHOIS", 'true').lower() in ['true', '1', 'yes']
@@ -1004,7 +1005,7 @@ def create_http_app():
         wait = float(request.args.get('wait')) if request.args.get('wait') else 2
         if wait > max_wait:
             wait = max_wait
-        timeout = float(request.args.get('timeout')) if request.args.get('timeout') else max(3*wait, 10)
+        timeout = float(request.args.get('timeout')) if request.args.get('timeout') else max(3*wait, min_timeout)
         if timeout > max_timeout:
             timeout = max_timeout
         scoreboard_entry = request.args.get('scoreboard', 'false').lower() in ['1', 'true', 'yes', 'on']
@@ -1038,7 +1039,10 @@ def create_http_app():
         print("\t/res6/scoreboard     get current scoreboard entries", file=sys.stderr)
         @app.route('/res6/scoreboard', methods=['GET'])
         def res6_scoreboard():
-            limit = int(request.args.get('limit')) if request.args.get('limit') else 12
+            try:
+                limit = int(request.args.get('limit'))
+            except (TypeError, ValueError):
+                limit = 12
             if limit > scoreboard_request_limit:
                 limit = scoreboard_request_limit
             res = jsonify(scoreboard.get_entries(limit=limit))

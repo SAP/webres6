@@ -144,8 +144,7 @@ tbody {
   border-top: 1px solid #b0b0b0;
 }
 button {
-  margin-top: 10px;
-  padding: 10px 20px;
+  padding: 8px 20px;
   background-color: #2a4d7a;
   color: white;
   border: none;
@@ -176,6 +175,10 @@ th.scoreboard-target, td.scoreboard-target {
 th.scoreboard-timestamp, td.scoreboard-timestamp {
   text-align: left;
   width: 23%;
+}
+#scoreboard-load-more {
+  float: right;
+  min-width: 19%;
 }
 td.protocol {
   color: gray;
@@ -259,7 +262,6 @@ td.ip-netname {
 .input-parameter-container {
   display: inline-flex;
   flex-direction: row;
-  margin-bottom: 20px;
   margin-top: 20px;
   margin-right: 20px;
   white-space: nowrap;
@@ -271,9 +273,16 @@ td.ip-netname {
   display: inline-block;
   width: 100%;
 }
-#urlForm button{
+.input-parameter-container button {
   min-width: 19%; 
+}
+#submit-button {
   float: right;
+  min-width: 19%; 
+  margin-right: 0px;
+}
+#submit-button button {
+  width: 100%;
 }
 #urlInput {
   width: 100%;
