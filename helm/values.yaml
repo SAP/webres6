@@ -140,6 +140,8 @@ dnsprobe:
   enabled: true
   # external URL to dnsprobe service, if empty internal dnsprobe service will be used
   url: ""
+  # expose dnsprobe as a separate service
+  exposeIngress: false
   # image configuration
   image:
     # Overrides the image repository whose default is "" – needs to end with a slash if name is set

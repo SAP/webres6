@@ -40,6 +40,15 @@ spec:
           {{- with $.Values.ingress.additionalPaths }}
           {{- toYaml . | nindent 10 }}
           {{- end }}
+          {{- if $.Values.dnsprobe.exposeIngress }}
+          - path: /dnsprobe
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "webres6.fullname" $ }}-dnsprobe
+                port:
+                  number: {{ $.Values.dnsprobe.service.port }}
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:

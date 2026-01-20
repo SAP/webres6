@@ -53,6 +53,7 @@ def res_v6only(hostname):
     ts = datetime.now(timezone.utc)
     elapsed = (ts - stat).total_seconds()
 
+    rcode_str = result.rcode_str if result else unbound.ub_strerror(status)
     ips = []
     if status==0 and result.havedata:
         try:
@@ -60,21 +61,22 @@ def res_v6only(hostname):
         except ValueError:
             print(f"WARNING: could not parse resolved IP addresses for {hostname}", file=sys.stderr)
 
-    print(f"{ts.isoformat()} res_v6only {hostname} elapsed={elapsed:.2f} status={status} rcode={result.rcode_str.replace(' ', '_')} {(('ips=['+' '.join([str(ip) for ip in ips])+']') if len(ips) >0 else '' )}", file=sys.stderr)
+    print(f"{ts.isoformat()} res_v6only {hostname} elapsed={elapsed:.2f} status={status} rcode={rcode_str.replace(' ', '_')} {(('ips=['+' '.join([str(ip) for ip in ips])+']') if len(ips) >0 else '' )}", file=sys.stderr)
 
-    result = {
+    jsres = {
         'hostname': hostname,
         'success': bool(status==0 and result.havedata),
-        'rcode': result.rcode_str,
-        'nxdomain': bool(result.nxdomain),
+        'rcode': rcode_str,
         'time_elapsed': elapsed,
         'ts': ts,
     }
+    if result:
+        jsres['nxdomain'] = bool(result.nxdomain)
+        jsres['canonical_name'] = result.canonname
     if len(ips)>0:
-        result['aaaa_records'] = [str(ip) for ip in ips]
+        jsres['aaaa_records'] = [str(ip) for ip in ips]
 
-    return result
-
+    return jsres
 
 def create_http_app():
     """ Start HTTP API server to serve host information.
