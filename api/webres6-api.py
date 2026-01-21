@@ -60,7 +60,7 @@ screenshot_modes  = ['none', 'small', 'medium', 'full']
 
 # load custom modules (allows overrides in serverconfig directory)
 sys.path.insert(0, srvconfig_dir)
-from webres6_storage import StorageManager, LocalStorageManager, ValkeyStorageManager, ValkeyFileHybridStorageManager, ValkeyS3HybridStorageManager, Scoreboard, export_archived_reports, import_archived_reports
+from webres6_storage import StorageManager, LocalStorageManager, ValkeyStorageManager, ValkeyFileHybridStorageManager, ValkeyS3HybridStorageManager, Scoreboard, export_scoreboard_entries, import_scoreboard_entries, export_archived_reports, import_archived_reports
 from webres6_whois import get_whois_info
 from webres6_extension import check_extension_parameter, get_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl, cleanup_selenium_crawl, finalize_report
 
@@ -1129,7 +1129,7 @@ if __name__ == "__main__":
         if not scoreboard:
             print("Scoreboard is not enabled in this deployment.", file=sys.stderr)
             sys.exit(1)
-        scoreboard.export_entries(args.export_scoreboard)
+        export_scoreboard_entries(storage_manager, args.export_scoreboard)
         sys.exit(0)
 
     # import scoreboard if requested and exit
@@ -1137,7 +1137,7 @@ if __name__ == "__main__":
         if not scoreboard:
             print("Scoreboard is not enabled in this deployment.", file=sys.stderr)
             sys.exit(1)
-        if scoreboard.import_entries(args.import_scoreboard):
+        if import_scoreboard_entries(storage_manager, args.import_scoreboard):
             sys.exit(0)
         else:
             sys.exit(1)
