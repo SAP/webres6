@@ -647,7 +647,7 @@ def add_whois_info(hosts):
 
 
 def gen_json(url, domain=None, hosts={}, ipv6_only_ready=None, score=None, http_score=None, dns_score=None, screenshot=None,
-             report_id=None, timestamp=datetime.now(timezone.utc), timings=None, extension=None, scoreboard_entry=False,
+             report_id=None, timestamp=datetime.now(timezone.utc), timings=None, extension=None, browser_info=None, scoreboard_entry=False,
              error=None, error_code=200):
     """ prepare the hosts dictionary to be dumped as a JSON object.
     """
@@ -676,6 +676,7 @@ def gen_json(url, domain=None, hosts={}, ipv6_only_ready=None, score=None, http_
 
     return { 'ID': report_id,
              'webres6_version': webres6_version,
+             'browser': browser_info,
              'error': error,
              'error_code': error_code,
              'ts': timestamp,
@@ -742,6 +743,12 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     if not driver:
         webres6_tested_results.labels(result='errors').inc()
         return gen_json(url, report_id=report_id, error='Could not initialize selenium with the requested extension', error_code=500), 500
+    browser_info = { 
+            'browserName': driver.capabilities.get('browserName', 'unknown'),
+            'browserVersion': driver.capabilities.get('browserVersion', 'unknown'),
+            'platformName': driver.capabilities.get('platformName', 'unknown'),
+            'acceptInsecureCerts': driver.capabilities.get('acceptInsecureCerts', False),
+        }
     push_timing('init')
 
     # perform crawl
@@ -803,7 +810,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     _, domain = split_hostname(url.hostname)
     report = gen_json(url, domain=domain, report_id=report_id, hosts=hosts, ipv6_only_ready=ipv6_only_ready,
                     score=score, http_score=http_score, dns_score=dns_score,
-                    screenshot=screenshot, timestamp=ts, extension=ext, scoreboard_entry=scoreboard_entry, timings=timings)
+                    screenshot=screenshot, timestamp=ts, extension=ext, scoreboard_entry=scoreboard_entry, browser_info=browser_info, timings=timings)
 
     # call extension finalization if needed
     finalize_report(report, extension=ext, extension_data=extension_data, log_prefix=lp)
