@@ -1,0 +1,87 @@
+{{- if .Values.api.scoreboard.S3backup}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  # SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+  # SPDX-License-Identifier: Apache-2.0
+  name: {{ include "webres6.fullname" . }}-scoreboard-backup
+  labels:
+    {{- include "webres6.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.api.scoreboard.S3backupSchedule | default "5 0 * * *" | quote }}
+  successfulJobsHistoryLimit: {{ .Values.api.scoreboard.backupHistoryLimit | default 3 }}
+  failedJobsHistoryLimit: {{ .Values.api.scoreboard.backupHistoryLimit | default 3 }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "webres6.labels" . | nindent 12 }}
+            app: webres6-scoreboard-backup
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.api.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.api.serviceAccountName }}
+          serviceAccountName: {{ .Values.api.serviceAccountName }}
+          {{- end }}
+          restartPolicy: OnFailure
+          containers:
+            - name: scoreboard-backup
+              image: {{ .Values.api.image.repository | default .Values.image.repository }}{{ .Values.api.image.name | default "webres6-api" }}:{{ .Values.api.image.tag | default .Values.image.tag | default "latest" }}
+              imagePullPolicy: {{ .Values.api.image.pullPolicy | default "IfNotPresent" }}
+              args: [ "--export-scoreboard", "s3:{{ .Values.api.s3Endpoint }}/{{ .Values.api.s3Bucket }}/" ]
+              env:
+                {{- if .Values.api.valkeyURL }}
+                - name: VALKEY_URL
+                  value: {{ .Values.api.valkeyURL | quote }}
+                {{- end }}
+                {{- if .Values.api.s3Bucket }}
+                - name: S3_BUCKET
+                  value: {{ .Values.api.s3Bucket | quote }}
+                {{- end }}
+                {{- if .Values.api.s3Endpoint }}
+                - name: S3_ENDPOINT
+                  value: {{ .Values.api.s3Endpoint | quote }}
+                {{- end }}
+                {{- if .Values.api.awsSecret }}
+                - name: ENABLE_SCOREBOARD
+                  value: "true"
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.api.awsSecret }}
+                      key: accessKeyID
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.api.awsSecret }}
+                      key: secretAccessKey
+                {{- end }}
+              {{- with .Values.api.securityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              {{- with .Values.api.scoreboard.backupResources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

@@ -676,14 +676,16 @@ def export_scoreboard_entries(storage_manager, file=None):
     if file and file.startswith('s3:'):
         endpoint, bucket, key = file[3:].rsplit('/', 2)
         if not bucket or not endpoint:
-            print(f"ERROR: invalid S3 path \"{file}\" for exporting scoreboard entries", file=sys.stderr)
+            print(f"ERROR: invalid S3 path \"{file}\" for exporting scoreboard entries – format is s3:<endpoint>/<bucket>/[<key>]", file=sys.stderr)
             return
         if not key:
-            key = f"scoreboard-{datetime.now(timezone.utc).strftime('%Y-%m-%d-%H-%M-%S-Z')}-{platform.node().split('.')[0]}.json"
+            key = f"scoreboard-{datetime.now(timezone.utc).strftime('%Y-%m-%d-%H%M%SZ')}-{platform.node().split('.')[0]}.json"
         s3_client = boto3.client('s3', endpoint_url=endpoint)
+        print(f"Exporting scoreboard entries to S3 endpoint {endpoint} bucket {bucket} key {key} ...", file=sys.stderr)
         s3_client.put_object(Bucket=bucket, Key=key,
-                             Body=gzip.compress(json.dumps(entries, indent=2, cls=DateTimeEncoder, ensure_ascii=False).encode('utf-8'), compresslevel=8),
+                             Body=gzip.compress(json.dumps(entries, cls=DateTimeEncoder, ensure_ascii=False).encode('utf-8'), compresslevel=8),
                              ContentType='application/json; charset=utf-8', ContentEncoding='gzip')
+        print("Export completed.", file=sys.stderr)
     else:
         with (sys.stdout if file is None else open(file, 'w', encoding='utf-8')) as f:
             f.write(json.dumps(entries, indent=2, cls=DateTimeEncoder, ensure_ascii=False))

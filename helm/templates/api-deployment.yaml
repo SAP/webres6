@@ -94,6 +94,8 @@ spec:
             {{- end }}
             - name: ENABLE_WHOIS
               value: {{ .Values.api.whois.enabled | quote | default "true" }}
+            - name: ENABLE_SCOREBOARD
+              value: {{ .Values.api.scoreboard.enabled | quote | default "true" }}
             - name: WHOIS_CACHE_TTL
               value: {{ .Values.api.whois.cacheTTL | quote }}
             - name: RESULT_CACHE_TTL
