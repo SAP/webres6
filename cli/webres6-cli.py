@@ -33,7 +33,7 @@ color = {
     'fail': "\033[31m"               # red
 }
 
-def fetch_res6_json(api_url, url, ext=None, screenshot='none', whois=False, wait=None, timeout=None):
+def fetch_res6_json(api_url, url, ext=None, screenshot='none', whois=False, wait=None, timeout=None, scoreboard=True):
     params = {}
     if whois:
         params['whois'] = "true"
@@ -45,6 +45,8 @@ def fetch_res6_json(api_url, url, ext=None, screenshot='none', whois=False, wait
         params['screenshot'] = screenshot
     if timeout:
         params['timeout'] = timeout
+    if scoreboard:
+        params['scoreboard'] = "true"
     r = http.request("GET", f"{api_url}/url({encodeURIComponent(url)})", fields=params)
     return r.json()
 
@@ -109,10 +111,10 @@ def gen_fancy_hostlist(hosts, original_host=None, show_proto=False,
         if dns_status is not None:
             max_dns_length = 4
             if dns_status:
-                dns_part = '️✔'  
+                dns_part = 'o'
                 dns_color = color['dns_ok']
             else:
-                dns_part = ' ✘'
+                dns_part = 'x'
                 dns_color = color['dns_not_ok']
         # format IPs
         for ip in sorted(info.get('ips').keys()):
@@ -250,6 +252,9 @@ def display_results(res, args):
     for output_line in output_lines:
         print(output_line)
 
+    if binfo := res.get('browser', {}):
+        print(f"Browser: {binfo.get('browserName', 'n/a')} {binfo.get('browserVersion', 'n/a')}")
+
     # print timings
     if res.get('timings'):
         print_timings(res['timings'])
@@ -278,6 +283,7 @@ def main():
     parser.add_argument("-a", "--show-asn", action="store_true", help="Show AS Number column")
     parser.add_argument("-A", "--show-asd", action="store_true", help="Show AS Description column")
     parser.add_argument("-n", "--show-network", action="store_true", help="Show whois network name")
+    parser.add_argument("-p", "--private", action="store_true", help="Do not add test result to server scoreboard")
     parser.add_argument("-q", "--quiet", action="store_true", help="Do not print the host list to stdout")
     parser.add_argument("url", nargs='?', help="URL to analyze (will be passed to /res6)")
     args = parser.parse_args()
@@ -315,7 +321,7 @@ def main():
         print(f"Fetching results for: {args.url} ...", file=sys.stderr, end=' ', flush=True)
         try:
             res = fetch_res6_json(args.api, args.url, ext=args.extension, screenshot=args.screenshot,
-                                  whois=True, wait=args.wait, timeout=args.timeout)
+                                  whois=True, wait=args.wait, timeout=args.timeout, scoreboard=(not args.private))
             print("done", file=sys.stderr)
         except Exception as e:
             print(f"ERROR: Failed to fetch from {args.api}: {e}", file=sys.stderr)
