@@ -41,6 +41,13 @@ spec:
           env:
             - name: WEBRES6_API_URL
               value: "http://{{ include "webres6.fullname" . }}-api:{{ .Values.api.port | default 6400 }}/"
+            {{- if .Values.dnsprobe.url }}
+            - name: DNSPROBE_API_URL
+              value: {{ .Values.dnsprobe.url | quote }}
+            {{- else if .Values.dnsprobe.enabled }}
+            - name: DNSPROBE_API_URL
+              value: "http://{{ include "webres6.fullname" . }}-dnsprobe:{{ .Values.dnsprobe.service.port }}"
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.viewer.port | default 80 }}

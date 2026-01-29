@@ -50,7 +50,7 @@ services:
     container_name: webres6-viewer
     environment:
       - WEBRES6_API_URL=http://webres6-api:6400/
-#      - WEBRES6_DNSPROBE_URL=http://webres6-dnsprobe:6453/
+      - DNSPROBE_API_URL=http://webres6-dnsprobe:6453/
     networks:
       - webres6-network
     ports:
