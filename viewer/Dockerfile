@@ -5,6 +5,10 @@
 # Use official NGINX mainline image
 FROM nginx:mainline
 
+# Set default environment variables
+ENV WEBRES6_API_URL=http://webres6-api:6400/
+ENV DNSPROBE_API_URL=http://webres6-dnsprobe:6453/
+
 # Copy viewer files
 WORKDIR /usr/share/nginx/html
 COPY viewer/viewer.* viewer/favicon.* ./

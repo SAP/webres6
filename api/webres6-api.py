@@ -28,7 +28,7 @@ from flask import Flask, redirect, request, jsonify, send_from_directory
 from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 
 # config/flag variables
-webres6_version   = "1.3.0"
+webres6_version   = "1.3.2"
 debug_whois       = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo    = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask       = 'flask'    in getenv("DEBUG", '').lower().split(',')
@@ -529,7 +529,7 @@ def add_dnsprobe_info(hosts):
     for hostname, info in hosts.items():
         dnsprobe_data = {}
         try:
-            response = dnsprobe.request('GET', f"{dnsprobe_api_url}/resolve6only({hostname})", timeout=10)
+            response = dnsprobe.request('GET', f"{dnsprobe_api_url}/dnsprobe/resolve6only({hostname})", timeout=10)
             if response.status == 200:
                 dnsprobe_data = response.json()
                 dnsprobe_data['ts'] = datetime.fromisoformat(dnsprobe_data['ts'])

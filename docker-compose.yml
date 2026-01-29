@@ -22,8 +22,10 @@ services:
       - "6400:6400"
     environment:
       - SELENIUM_REMOTE_URL=http://selenium:4444/wd/hub
-      # disable dnsprobe by default as it creates horrible delays if IPv6 in docker is not set up properly
-      # - DNSPROBE_API_URL=http://webres6-dnsprobe:6453/dnsprobe
+      # disable internal dnsprobe by default as it creates horrible delays if IPv6 in docker is not set up properly
+      # - DNSPROBE_API_URL=http://webres6-dnsprobe:6453/
+      # use external dnsprobe
+      - DNSPROBE_API_URL=https://webres6.krautrouting.net/
       - ENABLE_WHOIS=true
       - VALKEY_URL=valkey://webres6-valkey:6379/0
       - WHOIS_CACHE_TTL=3600
@@ -48,6 +50,7 @@ services:
     container_name: webres6-viewer
     environment:
       - WEBRES6_API_URL=http://webres6-api:6400/
+#      - WEBRES6_DNSPROBE_URL=http://webres6-dnsprobe:6453/
     networks:
       - webres6-network
     ports:

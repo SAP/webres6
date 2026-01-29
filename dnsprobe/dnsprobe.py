@@ -21,6 +21,7 @@ webres6_version  = "1.1.0"
 app_home         = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 debug_unbound    = 'unbound'    in getenv("DEBUG", '').lower().split(',')
 unbound_v6_conf  = getenv("UNBOUND_V6ONLY_CONF", os.path.join(app_home, "unbound.v6only.conf"))
+cache_ttl       = int(getenv("DNSPROBE_CACHE_TTL", "60"))
 
 # unbound context
 unbound_v6ctx = unbound.ub_ctx()
@@ -104,7 +105,9 @@ def create_http_app():
     @app.route('/dnsprobe/resolve6only(<string:hostname>)', methods=['GET'])
     def resolve6only(hostname):
         result = res_v6only(hostname)
-        return jsonify(result), 200 
+        resp = jsonify(result)
+        resp.headers['Cache-Control'] = f"public, max-age={cache_ttl}"
+        return resp, 200
 
     return app
 
