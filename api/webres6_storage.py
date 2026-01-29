@@ -698,7 +698,11 @@ def import_scoreboard_entries(storage_manager, file):
         endpoint, bucket, key = file[3:].rsplit('/', 2)
         s3_client = boto3.client('s3', endpoint_url=endpoint)
         response = s3_client.get_object(Bucket=bucket, Key=key)
-        body = response['Body'].read()
+        if response.get('ContentEncoding') == 'gzip':
+            body = gzip.decompress(response['Body'].read())
+        else:
+            body = response['Body'].read()
+        #print(body)
         entries = json.loads(body)
     else:
         with open(file, 'r', encoding='utf-8') as f:
