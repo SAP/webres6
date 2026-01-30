@@ -18,6 +18,11 @@ RUN  apt update --yes\
 # Copy application code
 COPY dnsprobe/docker-entrypoint dnsprobe/dnsprobe.py dnsprobe/unbound.v6only.conf ./
 
+# Create non-root user and switch to it
+RUN groupadd -g 999 app && \
+    useradd -u 999 -M -d /app -g app app
+USER app
+
 # Start the app with Gunicorn
 ENV GUNICORN_CMD_ARGS="--threads 32"
 EXPOSE 6453

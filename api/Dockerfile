@@ -22,13 +22,17 @@ RUN pip install --no-cache-dir -r requirements.txt; \
     pip install --no-cache-dir gunicorn[gthread]
 
 # Don't copy viewer files into api image, viewer is served separately
-# COPY viewer ./viewer/
 
 # create empty server config folder
 RUN mkdir ./serverconfig
 
 # get public suffix list
 RUN curl -O https://publicsuffix.org/list/public_suffix_list.dat
+
+# Create non-root user and switch to it
+RUN groupadd -g 999 app && \
+    useradd -u 999 -M -d /app -g app app
+USER app
 
 # Start the app with Gunicorn
 ENV GUNICORN_CMD_ARGS="--threads 32"
