@@ -39,6 +39,8 @@ spec:
           image: {{ .Values.viewer.image.repository | default "" .Values.image.repository }}{{ .Values.viewer.image.name | default "webres6-viewer" }}:{{ .Values.viewer.image.tag | default "latest" .Values.image.tag }}
           imagePullPolicy: {{ .Values.viewer.image.pullPolicy | default "IfNotPresent" }}
           env:
+            - name: NGINX_PORT
+              value: {{ .Values.viewer.port | default "80" | quote }}
             - name: WEBRES6_API_URL
               value: "http://{{ include "webres6.fullname" . }}-api:{{ .Values.api.port | default 6400 }}/"
             {{- if .Values.dnsprobe.url }}

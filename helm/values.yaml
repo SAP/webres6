@@ -117,7 +117,7 @@ viewer:
     tag: ""
     # This sets the pull policy for images.
     pullPolicy: Always
-  port: 80
+  port: 6480
   service:
     port: 80
     type: ClusterIP

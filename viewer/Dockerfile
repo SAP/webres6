@@ -8,6 +8,7 @@ FROM nginx:mainline
 # Set default environment variables
 ENV WEBRES6_API_URL=http://localhost:6400/
 ENV DNSPROBE_API_URL=http://localhost:6453/
+ENV NGINX_PORT=6480
 
 # Copy viewer files
 WORKDIR /usr/share/nginx/html

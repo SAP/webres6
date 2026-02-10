@@ -2,8 +2,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 server {
-    listen [::]:80;
-    listen 0.0.0.0:80;
+    listen [::]:${NGINX_PORT};
+    listen 0.0.0.0:${NGINX_PORT};
     root /usr/share/nginx/html;
     location / {
         index viewer.html;
@@ -19,25 +19,16 @@ server {
       try_files /res6/report/report-$id.json @api;
     }
     location /res6/ {
-        proxy_pass $WEBRES6_API_URL/res6/;
+        proxy_pass ${WEBRES6_API_URL}/res6/;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
     }
     location @api {
-        proxy_pass $WEBRES6_API_URL/$uri;
+        proxy_pass ${WEBRES6_API_URL}/$uri;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
     }
     location /dnsprobe/ {
-        proxy_pass $DNSPROBE_API_URL/dnsprobe/;
+        proxy_pass ${DNSPROBE_API_URL}/dnsprobe/;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
     }
     error_page  404               /404.html;
     error_page  500 502 503 504   /50x.html;

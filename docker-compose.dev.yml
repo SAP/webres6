@@ -1,0 +1,96 @@
+# SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This is an example file for docker-compose.
+# make sure your docker network has IPv6 enabled.
+# see https://docs.docker.com/engine/daemon/ipv6/
+
+services:
+  webres6-api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+      x-bake:
+        platforms:
+          - linux/amd64
+          - linux/arm64
+    container_name: webres6-api
+    networks:
+      - webres6-network
+    ports:
+      - "6400:6400"
+    environment:
+      - SELENIUM_REMOTE_URL=http://selenium:4444/wd/hub
+      # disable internal dnsprobe by default as it creates horrible delays if IPv6 in docker is not set up properly
+      # - DNSPROBE_API_URL=http://webres6-dnsprobe:6453/
+      # use external dnsprobe
+      - DNSPROBE_API_URL=https://webres6.krautrouting.net/
+      - ENABLE_WHOIS=true
+      - VALKEY_URL=valkey://webres6-valkey:6379/0
+      - WHOIS_CACHE_TTL=3600
+      - RESULT_CACHE_TTL=90
+      - RESULT_ARCHIVE_TTL=3600
+      - ARCHIVE_DIR=/archive
+    volumes:
+      - ./local_cache/reports:/archive
+    depends_on:
+      - selenium
+      - webres6-dnsprobe
+      - valkey
+
+  webres6-viewer:
+    build: 
+      context: .
+      dockerfile: viewer/Dockerfile
+      x-bake:
+        platforms:
+          - linux/amd64
+          - linux/arm64
+    container_name: webres6-viewer
+    environment:
+      - WEBRES6_API_URL=http://webres6-api:6400/
+      - DNSPROBE_API_URL=http://webres6-dnsprobe:6453/
+    networks:
+      - webres6-network
+    ports:
+      - "6480:6480"
+    volumes:
+      - ./local_cache/reports:/usr/share/nginx/html/res6/report:ro
+    depends_on:
+      - webres6-api
+
+  webres6-dnsprobe:
+    build:
+      context: .
+      dockerfile: dnsprobe/Dockerfile
+      x-bake:
+        platforms:
+          - linux/amd64
+          - linux/arm64
+    container_name: webres6-dnsprobe
+    networks:
+      - webres6-network
+    ports:
+      - "6453:6453"
+
+  selenium:
+    image: selenium/standalone-chromium:latest
+    networks:
+      - webres6-network
+    # Uncomment below if you want to expose the Selenium Remote
+    # ports:
+    #   - "4444:4444"
+
+  valkey:
+    image: valkey/valkey:latest
+    container_name: webres6-valkey
+    networks:
+      - webres6-network
+    ports:
+      - "6379:6379"
+
+networks:
+  webres6-network:
+    enable_ipv6: true
+
