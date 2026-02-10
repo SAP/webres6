@@ -7,11 +7,15 @@ SPDX-License-Identifier: Apache-2.0
 <head>
   <meta charset="UTF-8">
   <link rel="x-webres6-api" href="/res6"/>
-  <link rel="stylesheet" href="viewer.css"/>
-  <link rel="shortcut icon" type="image/png" href="favicon.png"/>
   <link rel="preload" href="/res6/serverconfig" as="fetch" crossorigin="anonymous" referrerpolicy="same-origin"/>
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js" crossorigin="anonymous" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="></script>
   <script src="viewer.js"></script>
+  <link rel="stylesheet" href="viewer.css"/>
+  <link rel="preload" href="fonts/72-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous"/>
+  <link rel="preload" href="fonts/72-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous"/>
+  <link rel="preload" href="fonts/72-Condensed.woff2" as="font" type="font/woff2" crossorigin="anonymous"/>
+  <link rel="preload" href="fonts/72Mono-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous"/>
+  <link rel="shortcut icon" type="image/png" href="favicon.png"/>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="same-origin">
   <meta name="description" content="Test whether a web site / web app is IPv6-only ready. This tool uses Selenium to load a web page and analyzes whether all resources are reachable via IPv6 by testing HTTP endpoints as well as DNS chain.">
