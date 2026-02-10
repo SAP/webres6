@@ -473,11 +473,12 @@ async function loadScoreboard(resultsLimit=scoreboardDefaultLimit) {
         // Render scoreboard
         renderScoreboard(data, resultsLimit);
         // Add sorting functionality to table headers
-        $('#scoreboard th.sortable').on('click', function() {
+        $('#scoreboard th.sortable').off('click').on('click', function() {
           const column = $(this).data('sort');
           const reverse = $(this).hasClass('sorted-ascending');
           $('#scoreboard th.sortable').removeClass('sorted-ascending sorted-descending');
           if (reverse) {
+
             $(this).addClass('sorted-descending');
           } else {
             $(this).addClass('sorted-ascending');
@@ -546,7 +547,7 @@ function renderScoreboard(data, resultsLimit) {
     scoreboardContainer.find('#scoreboard-load-more').addClass('hide');
   } else {
     scoreboardContainer.find('#scoreboard-load-more').removeClass('hide');
-    scoreboardContainer.find('#scoreboard-load-more').on('click', async function(e) {
+    scoreboardContainer.find('#scoreboard-load-more').off('click').on('click', async function(e) {
       e.preventDefault();
       await loadScoreboard(resultsLimit * 2);
     });

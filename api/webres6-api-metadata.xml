@@ -10,19 +10,29 @@ SPDX-License-Identifier: Apache-2.0
             
             <EnumType Name="ScreenshotOptions">
                 <Member Name="none" Value="0"/>
-                <Member Name="full" Value="1"/>
-                <Member Name="viewport" Value="2"/>
+                <Member Name="small" Value="1"/>
+                <Member Name="medium" Value="2"/>
+                <Member Name="full" Value="3"/>
             </EnumType>
 
             <!-- Complex Types -->
-            <ComplexType Name="TransportInfo">
-                <Property Name="protocol" Type="String"/>
-                <Property Name="security" Type="String"/>
+            <ComplexType Name="BrowserInfo">
+                <Property Name="browserName" Type="String"/>
+                <Property Name="browserVersion" Type="String"/>
+                <Property Name="platformName" Type="String"/>
+                <Property Name="acceptInsecureCerts" Type="Boolean"/>
             </ComplexType>
-            
+
+            <ComplexType Name="DnsInfo">
+                <Property Name="has_ipv4" Type="Boolean"/>
+                <Property Name="has_ipv6" Type="Boolean"/>
+                <Property Name="ipv4_addrs" Type="Collection(String)"/>
+                <Property Name="ipv6_addrs" Type="Collection(String)"/>
+            </ComplexType>
+
             <ComplexType Name="IpInfo">
                 <Property Name="address_family" Type="String"/>
-                <Property Name="transport" Type="Collection(WebRes6.Models.TransportInfo)"/>
+                <Property Name="transport" Type="Collection(Collection(String))"/>
                 <Property Name="whois" Type="String"/>
             </ComplexType>
             
@@ -31,40 +41,59 @@ SPDX-License-Identifier: Apache-2.0
                 <Property Name="local_part" Type="String"/>
                 <Property Name="subject_alt_names" Type="Collection(String)"/>
                 <Property Name="urls" Type="Collection(String)"/>
-                <Property Name="ips" Type="Collection(WebRes6.Models.IpInfo)"/>
+                <Property Name="ips" Type="Dictionary(String,WebRes6.Models.IpInfo)"/>
+                <Property Name="dns" Type="WebRes6.Models.DnsInfo"/>
             </ComplexType>
             
             <ComplexType Name="UrlResponse">
                 <Property Name="ID" Type="String"/>
-                <Property Name="url" Type="String"/>
+                <Property Name="webres6_version" Type="String"/>
+                <Property Name="browser" Type="WebRes6.Models.BrowserInfo"/>
                 <Property Name="error" Type="String"/>
-                <Property Name="extension" Type="String"/>
-                <Property Name="hosts" Type="Collection(WebRes6.Models.HostInfo)"/>
+                <Property Name="error_code" Type="Integer"/>
+                <Property Name="ts" Type="DateTimeOffset"/>
+                <Property Name="url" Type="String"/>
+                <Property Name="domain" Type="String"/>
                 <Property Name="ipv6_only_ready" Type="Boolean"/>
+                <Property Name="ipv6_only_score" Type="Double"/>
+                <Property Name="ipv6_only_http_score" Type="Double"/>
+                <Property Name="ipv6_only_dns_score" Type="Double"/>
+                <Property Name="hosts" Type="Dictionary(String,WebRes6.Models.HostInfo)"/>
                 <Property Name="screenshot" Type="String"/>
+                <Property Name="extension" Type="String"/>
+                <Property Name="scoreboard_entry" Type="Boolean"/>
+                <Property Name="timings" Type="Dictionary(String,Double)"/>
             </ComplexType>
             
             <!-- Entity Types -->
             <EntityType Name="ServerConfigResponse">
-                <Property Name="extensions" Type="Collection(String)"/>
-                <Property Name="screenshot_modes" Type="Collection(String)"/>
-                <Property Name="whois" Type="Boolean"/>
+                <Property Name="version" Type="String"/>
                 <Property Name="message" Type="String"/>
+                <Property Name="privacy_policy" Type="String"/>
+                <Property Name="max_wait" Type="Integer"/>
+                <Property Name="extensions" Type="Collection(String)"/>
+                <Property Name="whois" Type="Boolean"/>
+                <Property Name="screenshot_modes" Type="Collection(String)"/>
+                <Property Name="archive" Type="Boolean"/>
+                <Property Name="archive_url_template" Type="String"/>
+                <Property Name="scoreboard" Type="Boolean"/>
             </EntityType>
             
             <!-- Entity Container -->
             <EntityContainer Name="DefaultContainer">
                 <!-- Function Imports -->
                 <FunctionImport Name="url" Function="WebRes6.Models.url"/>
-                <EntitySet Name="srvconfig" EntityType="WebRes6.Models.ServerConfigResponse"/>
+                <EntitySet Name="serverconfig" EntityType="WebRes6.Models.ServerConfigResponse"/>
                 
                 <!-- Functions -->
                 <Function Name="url">
                     <Parameter Name="targetUrl" Type="String"/>
-                    <CustomQueryOption Name="ext" Type="String" Nullable="true"/>
-                    <CustomQueryOption Name="timeout" Type="Float" Nullable="true"/>
-                    <CustomQueryOption Name="wait" Type="Float" Nullable="true"/>
-                    <CustomQueryOption Name="screenshot" Type="WebRes6.Models.ScreenshotOptions" Nullable="true"/>
+                    <Parameter Name="ext" Type="String" Nullable="true"/>
+                    <Parameter Name="timeout" Type="Integer" Nullable="true"/>
+                    <Parameter Name="wait" Type="Integer" Nullable="true"/>
+                    <Parameter Name="screenshot" Type="String" Nullable="true"/>
+                    <Parameter Name="whois" Type="Boolean" Nullable="true"/>
+                    <Parameter Name="scoreboard" Type="Boolean" Nullable="true"/>
                     <ReturnType Type="WebRes6.Models.UrlResponse"/>
                 </Function>
             </EntityContainer>

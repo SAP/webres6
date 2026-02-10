@@ -158,6 +158,7 @@ input[type="text"] {
 }
 table.scoreboard-table{
   table-layout: fixed;
+  font-size: small;
 }
 td.scoreboard-ipv6only-score, th.scoreboard-ipv6only-score {
   text-align: left;
@@ -174,7 +175,7 @@ th.scoreboard-target, td.scoreboard-target {
 }
 th.scoreboard-timestamp, td.scoreboard-timestamp {
   text-align: left;
-  width: 23%;
+  width: 20%;
 }
 #scoreboard-load-more {
   float: right;

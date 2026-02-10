@@ -13,6 +13,7 @@ import os
 import signal
 import platform
 import time
+import uuid
 from os import getenv
 from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 from datetime import datetime, timedelta, timezone
@@ -32,6 +33,7 @@ webres6_version   = "1.3.2"
 debug_whois       = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo    = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask       = 'flask'    in getenv("DEBUG", '').lower().split(',')
+debug_viewer      = 'viewer'   in getenv("DEBUG", '').lower().split(',')
 admin_api_key     = getenv("ADMIN_API_KEY", None)
 selenium_remote   = getenv("SELENIUM_REMOTE_URL", None)
 selenium_username = getenv("SELENIUM_USERNAME", None)
@@ -1100,6 +1102,16 @@ def create_http_app():
         def viewer_index():
             return send_from_directory(viewer_dir, 'viewer.html')
 
+        if debug_viewer:
+            print("\t/.well-known/appspecific/com.chrome.devtools.json\n\t                     serve viewer debug info for Chrome DevTools", file=sys.stderr)
+            @app.route('/.well-known/appspecific/com.chrome.devtools.json', methods=['GET'])
+            def viewer_debug():
+                return jsonify({
+                    "workspace": {
+                        "root": f"{viewer_dir}/",
+                        "uuid": uuid.uuid4(),
+                    }}), 200
+
         print("\t/                    redirect to /viewer", file=sys.stderr)
         @app.route('/', methods=['GET'])
         def index():
@@ -1181,6 +1193,7 @@ if __name__ == "__main__":
         debug_hostinfo = True
         debug_whois = True
         debug_flask = True
+        debug_viewer = True
         print("Debugging mode is ON. This will print a lot of information to stderr.", file=sys.stderr)
 
     # register signal handlers
