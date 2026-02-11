@@ -114,7 +114,7 @@ function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
   // Error (if present)
   if (data.error) {
     const errStatus = $('#results-template .overview .status.error').clone();
-    if (data.error.substring('Timed out receiving message from renderer')) {
+    if (data.error.match('Timed out receiving message from renderer')) {
       errStatus.find('.placeholder').text('Timeout while loading the web page in the browser. Increase the wait time and try again.');
     } else {
       errStatus.find('.placeholder').text(data.error);

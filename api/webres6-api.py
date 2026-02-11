@@ -21,7 +21,7 @@ from hashlib import sha256
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.client_config import ClientConfig
-from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import WebDriverException, TimeoutException, NoSuchElementException
 from urllib.parse import urlparse
 import urllib3
 import flask
@@ -289,11 +289,19 @@ def init_webdriver(log_prefix='', implicit_wait=0.5, extension=None, extension_d
         driver.execute_cdp_cmd("Network.enable", {})
         driver.execute_cdp_cmd("Network.setBlockedURLs", {"urls": url_blocklist })
 
+    except urllib3.exceptions.MaxRetryError as e:
+        print(f"{log_prefix}ERROR: Could not connect to Selenium server at {selenium_remote}: {e}", file=sys.stderr)
+        return None, "Could not connect to selenium"
+
+    except TimeoutException as e:
+        print(f"{log_prefix}ERROR: Selenium WebDriver initialization timed out: {e.msg}", file=sys.stderr)
+        return None, "Timeout getting selenium instance"
+
     except WebDriverException as e:
         print(f"{log_prefix}ERROR: failed initializing Selenium WebDriver: {e.msg}", file=sys.stderr)
-        driver = None
+        return None, "Selenium initialization failed"
 
-    return driver
+    return driver, None
 
 
 def crawl_page(url, driver=None, extension=None, extension_data=None, wait=2, timeout=10, log_prefix=''):
@@ -741,10 +749,10 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
 
     # initialize webdriver
     extension_data = {}
-    driver = init_webdriver(log_prefix=lp, extension=ext, extension_data=extension_data)
+    driver, err = init_webdriver(log_prefix=lp, extension=ext, extension_data=extension_data)
     if not driver:
         webres6_tested_results.labels(result='errors').inc()
-        return gen_json(url, report_id=report_id, error='Could not initialize selenium with the requested extension', error_code=500), 500
+        return gen_json(url, report_id=report_id, error=f'Could not initialize selenium: {err}', error_code=500), 500
     browser_info = { 
             'browserName': driver.capabilities.get('browserName', 'unknown'),
             'browserVersion': driver.capabilities.get('browserVersion', 'unknown'),
