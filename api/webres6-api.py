@@ -795,7 +795,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
 
     # report statistics
     score, http_score, dns_score, ipv6_only_ready = get_ipv6_only_score(hosts)
-    print(f"{lp}website is {'' if ipv6_only_ready else 'NOT '}ipv6-only ready (http={http_score*100:.1f}%, dns={f"{dns_score*100:.1f}%" if dns_score is not None else 'N/A'})", file=sys.stderr)
+    print(f"{lp}website is {'' if ipv6_only_ready else 'NOT '}ipv6-only ready (overall={f"{score*100:.1f}%" if score is not None else 'N/A'}, http={f"{http_score*100:.1f}%" if http_score is not None else 'N/A'}, dns={f"{dns_score*100:.1f}%" if dns_score is not None else 'N/A'})", file=sys.stderr)
     if ipv6_only_ready is True:
         webres6_tested_results.labels(result='ipv6_only_ready').inc()
     else:
