@@ -3,14 +3,16 @@
 # SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
 # SPDX-License-Identifier: Apache-2.0
 #
-
+if [ -z "$LISTEN_ADDR" ]; then
+  LISTEN_ADDR='[::]'
+fi
 if [ -z "$PORT" ]; then
   PORT=6400
 fi
 if [ -z "$TIMEOUT" ]; then
   TIMEOUT=180
 fi
-export PORT TIMEOUT
+export LISTEN_ADDR PORT TIMEOUT
 
 # Set locale
 export LANG='C.utf8'
@@ -23,8 +25,8 @@ export PYTHONUNBUFFERED=1
 set -e
 
 if [ -z "$1" ]; then
-  echo "Starting webres6-api via gunicorn on port ${PORT} with timeout ${TIMEOUT}..." >&2
-  gunicorn --bind "[::]:${PORT}" --timeout ${TIMEOUT} $@ 'webres6-api:create_http_app()'
+  echo "Starting webres6-api via gunicorn on ${LISTEN_ADDR}:${PORT} with timeout ${TIMEOUT}..." >&2
+  gunicorn --bind "${LISTEN_ADDR}:${PORT}" --timeout ${TIMEOUT} $@ 'webres6-api:create_http_app()'
 else
   echo "Starting webres6-api with custom arguments: $@" >&2
   ./webres6-api.py $@
