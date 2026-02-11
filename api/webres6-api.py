@@ -543,7 +543,9 @@ def add_dnsprobe_info(hosts):
             if response.status == 200:
                 dnsprobe_data = response.json()
                 dnsprobe_data['ts'] = datetime.fromisoformat(dnsprobe_data['ts'])
-            total += 1
+                total += 1
+            else:
+                print(f"\tWARNING: DNSProbe lookup failed for {hostname}: HTTP {response.status}", file=sys.stderr)
             if dnsprobe_data.get('success', False):
                 success += 1
                 dnsprobe_data['ipv6_only_ready'] = True
@@ -1198,8 +1200,6 @@ if __name__ == "__main__":
 
     # Process store-only arguments
     if args.debug:
-        debug_hostinfo = True
-        debug_whois = True
         debug_flask = True
         debug_viewer = True
         print("Debugging mode is ON. This will print a lot of information to stderr.", file=sys.stderr)
