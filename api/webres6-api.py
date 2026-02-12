@@ -754,7 +754,7 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     driver, err = init_webdriver(log_prefix=lp, extension=ext, extension_data=extension_data)
     if not driver:
         webres6_tested_results.labels(result='errors').inc()
-        return gen_json(url, report_id=report_id, error=f'Could not initialize selenium: {err}', error_code=500), 500
+        return gen_json(url, report_id=report_id, error=f'Could not initialize selenium: {err}', error_code=503), 503
     browser_info = { 
             'browserName': driver.capabilities.get('browserName', 'unknown'),
             'browserVersion': driver.capabilities.get('browserVersion', 'unknown'),
@@ -924,10 +924,17 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
                     'data': "crawl in progress - please come back later"}
     storage_manager.put_result_cacheline(cache_key, sentinel, max_timeout, False)
 
-    # Perform actual crawl and cache the result
+    # Perform actual crawl
     json_result, error_code = crawl_and_analyze_url(url, wait=wait, timeout=timeout, ext=ext, scoreboard_entry=scoreboard_entry,
                                    screenshot_mode=screenshot_mode,
                                    lookup_whois=lookup_whois, report_id=report_id, report_node=report_node)
+
+    # Handle internal errors where crawl logic faild to prevent caching of error results as valid reports.
+    # Non-exisiting URLs still prodce a valid crawl (200) with error details in the JSON result.
+    if error_code != 200:
+        # remove sentinel in case of crawl error to allow retries
+        storage_manager.delete_result_cacheline(cache_key)
+        return json_result, error_code
 
     # Archive the result in storage
     archived = storage_manager.archive_result(report_id, json_result)
