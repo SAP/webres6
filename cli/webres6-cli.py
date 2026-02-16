@@ -10,11 +10,13 @@ import sys
 import argparse
 import json
 from ipaddress import ip_address, ip_network
+from time import sleep
 import urllib3 
 from urllib.parse import urlparse, quote_plus as encodeURIComponent
 
 api_url = environ.get('WEBRES6_API_URL', 'http://localhost:6400/res6')
 http = urllib3.PoolManager(happy_eyeballs=True)
+max_retries = 5
 
 # Define ANSI color codes for terminal output
 color = {
@@ -33,7 +35,8 @@ color = {
     'fail': "\033[31m"               # red
 }
 
-def fetch_res6_json(api_url, url, ext=None, screenshot='none', whois=False, wait=None, timeout=None, scoreboard=True):
+
+def fetch_res6_json(api_url, url, ext=None, screenshot='none', whois=False, wait=None, timeout=None, scoreboard=True, retry_count=0):
     params = {}
     if whois:
         params['whois'] = "true"
@@ -47,12 +50,30 @@ def fetch_res6_json(api_url, url, ext=None, screenshot='none', whois=False, wait
         params['timeout'] = timeout
     if scoreboard:
         params['scoreboard'] = "true"
+
     r = http.request("GET", f"{api_url}/url({encodeURIComponent(url)})", fields=params)
-    return r.json()
+
+    if r.status == 200:
+        return r.json()
+    elif r.status == 202 or r.status == 503:
+        # retry with exponential backoff
+        if retry_count < max_retries:
+            wait_time = 15 * 2 ** retry_count
+            print(f"Server busy {r.status}, retrying in {wait_time}s... (retry {retry_count+1}/{max_retries})", file=sys.stderr)
+            sleep(wait_time)
+            return fetch_res6_json(api_url, url, ext=ext, screenshot=screenshot, whois=whois, wait=wait, timeout=timeout, scoreboard=scoreboard, retry_count=retry_count+1)
+        else:
+            print(f"ERROR: Server busy after {max_retries} retries. Please try again later.", file=sys.stderr)
+            return None
+    else:
+        print(f"ERROR: Server returned status {r.status} with message: {r.data.decode('utf-8')}", file=sys.stderr)
+        return None
+
 
 def fetch_res6_serverconfig(api_url):
     r = http.request("GET", f"{api_url}/serverconfig")
     return r.json()
+
 
 def gen_fancy_hostlist(hosts, original_host=None, show_proto=False, 
                          show_asn=True, show_asd=True, show_prfxinfo=False):
@@ -340,14 +361,15 @@ def main():
 
     if res.get('error'):
         print(f"ERROR: {res['error']}", file=sys.stderr)
-        sys.exit(2)
 
     # display results unless quiet
     if not args.quiet:
         display_results(res, args)
 
     # exit code 0 if ipv6-only ready, 1 otherwise
-    if res.get('ipv6_only_ready'):
+    if res.get('error'):
+        sys.exit(2)
+    elif res.get('ipv6_only_ready'):
         sys.exit(0)
     else:
         sys.exit(1)

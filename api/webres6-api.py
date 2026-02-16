@@ -308,6 +308,7 @@ def crawl_page(url, driver=None, extension=None, extension_data=None, wait=2, ti
     """ Fetches the web page at the given URL using Selenium WebDriver.
     """
 
+    start_time = None
     try:
         # initialize page load timeout
         driver.set_page_load_timeout(timeout)
@@ -335,6 +336,8 @@ def crawl_page(url, driver=None, extension=None, extension_data=None, wait=2, ti
                 break
             time.sleep(0.5)
 
+    except TimeoutException as e:
+        return False, f"Page rendering timed out after {time.time() - start_time:.2f} seconds"
     except WebDriverException as e:
         return False, e.msg.replace('unknown error: ', '')
     except Exception as e:
