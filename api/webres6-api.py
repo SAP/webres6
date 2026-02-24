@@ -29,7 +29,7 @@ from flask import Flask, redirect, request, jsonify, send_from_directory
 from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 
 # config/flag variables
-webres6_version   = "1.3.3"
+webres6_version   = "1.3.5"
 debug_whois       = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo    = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask       = 'flask'    in getenv("DEBUG", '').lower().split(',')
@@ -64,7 +64,7 @@ screenshot_modes  = ['none', 'small', 'medium', 'full']
 sys.path.insert(0, srvconfig_dir)
 from webres6_storage import StorageManager, LocalStorageManager, ValkeyStorageManager, ValkeyFileHybridStorageManager, ValkeyS3HybridStorageManager, Scoreboard, export_scoreboard_entries, import_scoreboard_entries, export_archived_reports, import_archived_reports
 from webres6_whois import get_whois_info
-from webres6_extension import check_extension_parameter, get_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl, cleanup_selenium_crawl, finalize_report
+from webres6_extension import check_extension_parameter, get_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl, cleanup_selenium_crawl, finalize_report, health_check
 
 # get nodename for report id
 report_node = platform.node().split('.')[0]

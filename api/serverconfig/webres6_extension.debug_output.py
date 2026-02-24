@@ -42,6 +42,7 @@ def finalize_report(report, extension=None, extension_data=None, log_prefix=""):
     return
 
 def health_check(log_prefix="", status={}):
+    status['webres6_extension'] = 'ok loaded'
     print(f"{log_prefix}health check:", file=sys.stderr)
     for line in json.dumps(status, cls=DateTimeEncoder, indent=2, sort_keys=True).splitlines():
         print(f"{log_prefix}| {line}", file=sys.stderr)
