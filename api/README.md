@@ -48,7 +48,8 @@ Environment variables:
   RESULT_ARCHIVE_TTL          Expiry time for result archive
 
 API endpoints:
-  /ping                       liveness probe endpoint
+  /ping                       liveliness probe endpoint (just answers ok)
+  /healthz                    readiness probe endpoint (checks backend availability)    
   /res6/$metadata             get OData metadata document
   /res6/srvconfig             list available extensions, screenshot-modes, whois support, ...
   /res6/url(URL)              get JSON results for URL provided

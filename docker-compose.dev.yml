@@ -38,6 +38,12 @@ services:
       - selenium
       - webres6-dnsprobe
       - valkey
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6400/healthz"]
+      interval: 60s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   webres6-viewer:
     build: 
@@ -73,6 +79,12 @@ services:
       - webres6-network
     ports:
       - "6453:6453"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6453/healthz"]
+      interval: 60s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   selenium:
     image: selenium/standalone-chromium:latest

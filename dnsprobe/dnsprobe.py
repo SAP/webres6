@@ -98,6 +98,7 @@ def create_http_app():
 
     print("\t/ping                         liveliness probe endpoint", file=sys.stderr)
     @app.route('/ping', methods=['GET'])
+    @app.route('/dnsprobe/ping', methods=['GET'])
     def ping():
         return jsonify({'status': 'ok', 'ts': datetime.now(timezone.utc).isoformat()}), 200
 
@@ -108,6 +109,14 @@ def create_http_app():
         resp = jsonify(result)
         resp.headers['Cache-Control'] = f"public, max-age={cache_ttl}"
         return resp, 200
+
+    print("\t/healthz             check health of services", file=sys.stderr)
+    @app.route('/healthz', methods=['GET'])
+    def health():
+        result = res_v6only('www.google.com')
+        if not result['success']:
+            return jsonify({'status': 'error', 'ts': datetime.now(timezone.utc).isoformat(), 'details': result}), 503
+        return jsonify({'status': 'ok', 'ts': datetime.now(timezone.utc).isoformat()}), 200
 
     return app
 

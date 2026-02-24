@@ -117,14 +117,28 @@ spec:
             - name: http
               containerPort: {{ .Values.api.port }}
               protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.api.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 6
           readinessProbe:
             httpGet:
-              path: /ping
+              path: /healthz
               port: {{ .Values.api.port }}
+            timeoutSeconds: 20
+            periodSeconds: 60
+            failureThreshold: 2
           livenessProbe:
             httpGet:
               path: /ping
               port: {{ .Values.api.port }}
+            periodSeconds: 60
+            timeoutSeconds: 30
+            failureThreshold: 5
           volumeMounts:
             - name: serverconfig
               mountPath: /app/serverconfig

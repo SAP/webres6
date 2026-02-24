@@ -529,6 +529,20 @@ def cleanup_crawl(driver, extension=None, extension_data=None, log_prefix=''):
         print(f"{log_prefix}ERROR: failed quitting WebDriver: {e.msg}", file=sys.stderr)
     return
 
+def check_selenium(log_prefix=''):
+    """ Checks if Selenium is available and working properly.
+    """
+    try:
+        driver, err = init_webdriver(log_prefix=log_prefix, implicit_wait=0.5)
+        if driver:
+            browser_name = driver.capabilities.get('browserName', 'unknown')
+            browser_version = driver.capabilities.get('browserVersion', 'unknown')
+            cleanup_crawl(driver, log_prefix=log_prefix)
+            return True, f'ok: {browser_name} {browser_version}'
+        else:
+            return False, f'error: {err}'
+    except Exception as e:
+        return False, f'error: {str(e)}'
 
 def add_dnsprobe_info(hosts):
     """ Adds DNSProbe information for each unique IP address in the hosts dictionary.
@@ -542,13 +556,14 @@ def add_dnsprobe_info(hosts):
     for hostname, info in hosts.items():
         dnsprobe_data = {}
         try:
-            response = dnsprobe.request('GET', f"{dnsprobe_api_url}/dnsprobe/resolve6only({hostname})", timeout=10)
+            request_url = f"{dnsprobe_api_url}/dnsprobe/resolve6only({hostname})"
+            response = dnsprobe.request('GET', request_url, timeout=10)
             if response.status == 200:
                 dnsprobe_data = response.json()
                 dnsprobe_data['ts'] = datetime.fromisoformat(dnsprobe_data['ts'])
                 total += 1
             else:
-                print(f"\tWARNING: DNSProbe lookup failed for {hostname}: HTTP {response.status}", file=sys.stderr)
+                print(f"\tWARNING: DNSProbe lookup failed for {hostname}: GET {request_url} => {response.status}", file=sys.stderr)
             if dnsprobe_data.get('success', False):
                 success += 1
                 dnsprobe_data['ipv6_only_ready'] = True
@@ -970,6 +985,53 @@ def check_auth(request):
     return False
 
 
+def check_backend_health():
+    """ Check health of all backend services (storage, DNS, selenium).
+
+    Returns:
+        tuple: (status_dict, all_healthy)
+    """
+    ts = datetime.now(timezone.utc)
+    status = {'ts': ts}
+    lp = f"{int(ts.timestamp()):x}-health "
+    all_healthy = True
+
+    # Check storage availability
+    try:
+        if storage_manager:
+            storage_manager.check_health()
+            status['storage'] = 'ok'
+        else:
+            status['storage'] = 'not configured'
+    except Exception as e:
+        status['storage'] = f'error: {str(e)}'
+        all_healthy = False
+
+    # Check DNS probe availability
+    if dnsprobe_api_url and dnsprobe:
+        try:
+            response = dnsprobe.request('GET', f"{dnsprobe_api_url}/dnsprobe/ping", timeout=5)
+            if response.status == 200:
+                status['dnsprobe'] = 'ok'
+            else:
+                status['dnsprobe'] = f'error: HTTP {response.status}'
+                all_healthy = False
+        except Exception as e:
+            status['dnsprobe'] = f'error: {str(e)}'
+            all_healthy = False
+    else:
+        status['dnsprobe'] = 'not configured'
+
+    # Check selenium availability
+    selenium_ok,  status['selenium'] = check_selenium(log_prefix=lp)
+    if not selenium_ok:
+        all_healthy = False
+
+    print(f"{lp}{'OK' if all_healthy else 'DEGRADED'} (selenium: {status['selenium']}, storage: {status['storage']}, dnsprobe: {status['dnsprobe']})", file=sys.stderr)
+
+    return status, all_healthy
+
+
 def create_http_app():
     """ Start HTTP API server to serve host information.
 
@@ -988,8 +1050,21 @@ def create_http_app():
 
     print("creating endpoints:", file=sys.stderr)
 
-    print("\t/ping                liveliness probe endpoint", file=sys.stderr)
+    print("\t/healthz             readiness endpoint (checks health of backend services storage, DNS, selenium)", file=sys.stderr)
+    @app.route('/healthz', methods=['GET'])
+    def health():
+        status, all_healthy = check_backend_health()
+        if all_healthy:
+            status['status'] = 'ok'
+            return jsonify(status), 200
+        else:
+            status['status'] = 'degraded'
+            return jsonify(status), 503
+
+    print("\t/ping                liveliness endpoint", file=sys.stderr)
+    print("\t/res6/ping           liveliness endpoint", file=sys.stderr)
     @app.route('/ping', methods=['GET'])
+    @app.route('/res6/ping', methods=['GET'])
     def ping():
         return jsonify({'status': 'ok', 'ts': datetime.now(timezone.utc).isoformat()}), 200
 
@@ -1221,6 +1296,7 @@ if __name__ == "__main__":
     # Check if URL is provided and valid
     print(f"Starting HTTP API server on port {args.port}", file=sys.stderr)
     app = create_http_app()
+    check_backend_health()
     app.run(debug=debug_flask, host='::1', port=args.port, threaded=False)
 
 

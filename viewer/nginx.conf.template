@@ -5,6 +5,7 @@ server {
     listen [::]:${NGINX_PORT};
     listen 0.0.0.0:${NGINX_PORT};
     merge_slashes off;
+    rewrite ^/+(.*)$ /$1;
     root /usr/share/nginx/html;
     location / {
         index viewer.html;

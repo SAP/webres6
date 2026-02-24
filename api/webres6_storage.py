@@ -65,6 +65,14 @@ class StorageManager:
     def whois_cache_size(self):
         pass
 
+    def check_health(self):
+        """Check if the storage backend is healthy and accessible.
+
+        Returns:
+            bool: True if healthy, raises exception if not
+        """
+        pass
+
     def put_scorecard(self, scorecard):
         pass
 
@@ -197,6 +205,20 @@ class LocalStorageManager(StorageManager):
 
     def whois_cache_size(self):
         return len(self.whois_cache)
+
+    def check_health(self):
+        """Check if the local storage is healthy and accessible.
+
+        Returns:
+            bool: True if healthy, raises exception if not
+        """
+        # Check if we can access the archive directory
+        if self.local_archive_dir and not os.path.isdir(self.local_archive_dir):
+            raise Exception(f"Archive directory {self.local_archive_dir} is not accessible")
+        # Check if we can access the cache directory
+        if self.local_cache_dir and not os.path.isdir(self.local_cache_dir):
+            raise Exception(f"Cache directory {self.local_cache_dir} is not accessible")
+        return True
 
     def put_scorecard(self, scorecard):
         self.scorecards.append(scorecard)
@@ -467,7 +489,21 @@ class ValkeyStorageManager(StorageManager):
 
     def whois_cache_size(self):
         return len(self.whois_mem_cache)
-    
+
+    def check_health(self):
+        """Check if the Valkey connection is healthy.
+
+        Returns:
+            bool: True if healthy, raises exception if not
+        """
+        if not self.valkey_client:
+            raise Exception("Valkey client is not initialized")
+        # Try to ping the Valkey server
+        result = self.valkey_client.ping()
+        if not result:
+            raise Exception("Valkey ping returned False")
+        return True
+
     def put_scorecard(self, scorecard):
         try:
             self.valkey_client.lpush("webres6:scorecards", json.dumps(scorecard, cls=DateTimeEncoder).encode('utf-8'))
@@ -554,6 +590,9 @@ class ValkeyFileHybridStorageManager(ValkeyStorageManager):
         expired += self.local_storage_manager.expire()
         return expired
 
+    def check_health(self):
+        return super().check_health() and self.local_storage_manager.check_health()
+
 
 class ValkeyS3HybridStorageManager(ValkeyStorageManager):
     """ Hybrid storage manager that uses Valkey for cache and S3 for archive.
@@ -635,6 +674,19 @@ class ValkeyS3HybridStorageManager(ValkeyStorageManager):
         except Exception as e:
             print(f"WARNING: failed getting presigned archive url for {report_id} from S3: {e}", file=sys.stderr)
             return None
+
+    def check_health(self):
+        # Check Valkey connection
+        if not super().check_health():
+            return False
+
+        # Check S3 connection by listing bucket
+        if self.s3_client and self.s3_bucket:
+            try:
+                self.s3_client.head_bucket(Bucket=self.s3_bucket)
+            except Exception as e:
+                raise Exception(f"S3 bucket {self.s3_bucket} is not accessible: {e}")
+        return True
 
 
 # Scoreboard management
