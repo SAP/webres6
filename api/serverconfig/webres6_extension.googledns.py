@@ -38,3 +38,6 @@ def cleanup_selenium_crawl(driver, extension=None, extension_data=None, log_pref
 def finalize_report(report, extension=None, extension_data=None, log_prefix=""):
     report['doh_template'] = doh_template
     return
+
+def health_check(log_prefix="", status={}):
+    return True

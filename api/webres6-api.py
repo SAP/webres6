@@ -985,8 +985,8 @@ def check_auth(request):
     return False
 
 
-def check_backend_health():
-    """ Check health of all backend services (storage, DNS, selenium).
+def check_component_health():
+    """ Check health of all backend services (storage, DNS, selenium) and extensions.
 
     Returns:
         tuple: (status_dict, all_healthy)
@@ -1027,6 +1027,12 @@ def check_backend_health():
     if not selenium_ok:
         all_healthy = False
 
+    # check extensions health if needed
+    extension_health_check = globals().get('health_check')
+    if extension_health_check and callable(extension_health_check):
+        if not extension_health_check(log_prefix=lp, status=status):
+            all_healthy = False
+
     print(f"{lp}{'OK' if all_healthy else 'DEGRADED'} (selenium: {status['selenium']}, storage: {status['storage']}, dnsprobe: {status['dnsprobe']})", file=sys.stderr)
 
     return status, all_healthy
@@ -1053,7 +1059,7 @@ def create_http_app():
     print("\t/healthz             readiness endpoint (checks health of backend services storage, DNS, selenium)", file=sys.stderr)
     @app.route('/healthz', methods=['GET'])
     def health():
-        status, all_healthy = check_backend_health()
+        status, all_healthy = check_component_health()
         if all_healthy:
             status['status'] = 'ok'
             return jsonify(status), 200
@@ -1296,9 +1302,8 @@ if __name__ == "__main__":
     # Check if URL is provided and valid
     print(f"Starting HTTP API server on port {args.port}", file=sys.stderr)
     app = create_http_app()
-    check_backend_health()
+    check_component_health()
     app.run(debug=debug_flask, host='::1', port=args.port, threaded=False)
-
 
 # vim: set ts=4 sw=4 et:
 # vim: set fileencoding=utf-8:

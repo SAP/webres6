@@ -87,3 +87,13 @@ def finalize_report(report, extension=None, extension_data=None, log_prefix=""):
             log_prefix (str): prefix for logging messages
     """
     return
+
+def health_check(log_prefix="", status={}):
+    """ Perform health check for the extension.
+        Args:
+            log_prefix (str): prefix for logging messages
+            status (dict): dictionary to store health check status information
+        Returns:
+            bool: True if healthy, False otherwise
+    """
+    return True
