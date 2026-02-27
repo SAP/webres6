@@ -6,6 +6,7 @@
 #
 
 from os import environ
+import re
 import sys
 import argparse
 import json
@@ -73,6 +74,52 @@ def fetch_res6_json(api_url, url, ext=None, screenshot='none', whois=False, wait
 def fetch_res6_serverconfig(api_url):
     r = http.request("GET", f"{api_url}/serverconfig")
     return r.json()
+
+def print_server_config(res):
+
+    # Server information
+    print("Server Configuration:")
+
+    # Basic info
+    if version := res.get('version'):
+        print(f"  Version: {version}")
+
+    # Server message (if present)
+    if message := res.get('message'):
+        print(f"  Server Message: available ({len(message)} characters)")
+        clean_message = re.sub(r"<.*?>", "", message)
+        for line in clean_message.splitlines():
+            print(f"    {line}")
+
+    if max_wait := res.get('max_wait'):
+        print(f"  Max wait time: {max_wait}s")
+
+    print(f"  WHOIS lookups: {'enabled' if res.get('whois') else 'disabled'}")
+
+    print(f"  Archiving: {'enabled' if res.get('archive') else 'disabled'}")
+    if res.get('archive') and (url_template := res.get('archive_url_template')):
+        print(f"    URL template: {url_template}")
+
+    print(f"  Scoreboard: {'enabled' if res.get('scoreboard') else 'disabled'}")
+
+    screenshot_modes = res.get('screenshot_modes', [])
+    if screenshot_modes:
+        print(f"  Screenshot Modes:")
+        for mode in res.get('screenshot_modes', []):
+            print(f"    - {mode}")
+
+    # Available extensions
+    if exts := res.get('extensions', []):
+        print(f"\nAvailable Extensions:")
+        for ext in exts:
+            print(f"  - {ext}")
+
+    # Privacy policy
+    if privacy := res.get('privacy_policy'):
+        print(f"  Privacy Policy: available ({len(privacy)} characters)")
+        clean_privacy = re.sub(r"<.*?>", "", privacy)
+        for line in clean_privacy.splitlines():
+            print(f"    {line}")
 
 
 def gen_fancy_hostlist(hosts, original_host=None, show_proto=False, 
@@ -292,7 +339,7 @@ def main():
     parser = argparse.ArgumentParser(
         description=" IPv6 Web Resource Checker CLI client. Uses /res6 api and renders host info locally.")
     parser.add_argument("--api", default=api_url, help=f"Base API endpoint overriding WEBRES6_API_URL env (default: {api_url})")
-    parser.add_argument("--serverconfig", action="store_true", help="Show server configuration - incl. supported extensions and screenshot modes - and exit")
+    parser.add_argument("-V", "--serverconfig", action="store_true", help="Show server configuration - incl. supported extensions and screenshot modes - and exit")
     parser.add_argument("-r", "--read-json", type=str, metavar="FILE.json", help="Read JSON input from file ignoring URL argument")
     parser.add_argument("-o", "--save-json", action="append", type=str, metavar="FILE.json", help="Save JSON output to file")
     parser.add_argument("-w", "--wait", type=float, help="Wait time for page settle (seconds)")
@@ -322,7 +369,7 @@ def main():
     if args.serverconfig:
         try:
             res = fetch_res6_serverconfig(args.api)
-            json.dump(res, sys.stdout, sort_keys=False, indent=4, default=str)
+            print_server_config(res)
             sys.exit(0)
         except Exception as e:
             print(f"ERROR: Failed to fetch server config from {args.api}: {e}", file=sys.stderr)

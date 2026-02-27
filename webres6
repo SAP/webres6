@@ -31,8 +31,6 @@ if [ -z ${WEBRES6_API_URL} ]; then
   echo "Started webres6-api with PID $SPID" >&2
   sleep 1
   trap "if [ ! -z $SPID ]; then kill $SPID; fi" EXIT
-else
-  echo "Using remote webres6-api at $WEBRES6_API_URL"
 fi
 
 # Check if virtual environment is existing
