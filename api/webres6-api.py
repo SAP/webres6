@@ -359,6 +359,15 @@ def take_screenshot(driver, mode='full', log_prefix=''):
             # get the page scroll dimensions
             width = driver.execute_script("return document.body.parentNode.scrollWidth")
             height = driver.execute_script("return document.body.parentNode.scrollHeight")
+            # set the window size to the scroll dimensions (with some reasonable limits to avoid OOM issues)
+            if width < 1:
+                width = 2048
+            elif width > 16384:
+                width = 16384 
+            if height < 1:
+                height = 1152
+            elif height > 32768:
+                height = 32768
             driver.set_window_size(width, height)
             # get the full body element
             full_body_element = driver.find_element(By.TAG_NAME, "body")
