@@ -976,6 +976,62 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
         return json_result, error_code
 
 
+def validate_url(url):
+    """Validate URL with security and format checks.
+
+    Args:
+        url: URL string to validate
+
+    Returns:
+        tuple: (parsed_url, error_message) where error_message is None on success
+    """
+
+    # Length check (prevent DoS)
+    if len(url) > 2048:
+        return None, 'URL too long (max 2048 characters)'
+
+    # Parse URL
+    try:
+        parsed_url = urlparse(url)
+    except Exception as e:
+        return None, f'Invalid URL format: {e}'
+
+    # Scheme validation
+    if not parsed_url.scheme or parsed_url.scheme not in ['http', 'https']:
+        return None, 'Invalid URL scheme. Only http:// and https:// are supported'
+
+    # Netloc validation
+    if not parsed_url.netloc:
+        return None, 'Invalid URL: missing hostname'
+
+    if parsed_url.netloc.startswith(':') or '//' in parsed_url.netloc:
+        return None, 'Invalid URL: malformed hostname'
+
+    # Extract hostname and port
+    hostname = parsed_url.hostname
+
+    # Port validation (urlparse.port raises ValueError for invalid ports)
+    try:
+        port = parsed_url.port
+    except ValueError as e:
+        return None, f'Invalid URL: {str(e)}'
+
+    # Hostname validation
+    if not hostname:
+        return None, 'Invalid URL: missing hostname'
+
+    # Check for spaces or control characters in hostname
+    if any(c.isspace() or ord(c) < 32 for c in hostname):
+        return None, 'Invalid URL: hostname contains invalid characters'
+
+    # Port validation (additional range check if port is present)
+    if port is not None:
+        if port < 1 or port > 65535:
+            return None, f'Invalid URL: port {port} out of range (1-65535)'
+
+    return parsed_url, None
+
+
 def check_auth(request):
     """ Check if the request is authorized.
     """
@@ -1101,16 +1157,12 @@ def create_http_app():
         # parse url
         if not url:
             return jsonify({'error': 'URL parameter is required'}), 400
-        try:
-            parsed_url = urlparse(url)
-            if parsed_url.scheme == '':
-                # try adding https scheme if missing
-                parsed_url = urlparse('https://' + url)
-            if not parsed_url.scheme or parsed_url.scheme not in ['http', 'https'] or not parsed_url.netloc:
-                print(f"ERROR: invalid URL provided: {url} --> {parsed_url}", file=sys.stderr)
-                return jsonify({'error': 'Invalid URL provided'}), 400
-        except Exception as e:
-            return jsonify({'error': f'Invalid URL provided: {e}'}), 400
+
+        parsed_url, error = validate_url(url)
+        if error:
+            print(f"ERROR: invalid URL provided: {url} --> {error}", file=sys.stderr)
+            return jsonify({'error': error}), 400
+
         # parse other parameters
         wait = float(request.args.get('wait')) if request.args.get('wait') else 2
         if wait > max_wait:

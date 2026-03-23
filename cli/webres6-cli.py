@@ -385,10 +385,24 @@ def main():
             print(f"ERROR: Failed to read JSON from {args.read_json}: {e}", file=sys.stderr)
             sys.exit(2)
     else:
+        # Validate and normalize URL
+        url = args.url.strip()
+
+        # Check if URL has a scheme
+        scheme_match = re.match(r'^([a-z][a-z0-9+.-]*):\/\/', url, re.IGNORECASE)
+        if scheme_match:
+            scheme = scheme_match.group(1).lower()
+            if scheme not in ['http', 'https']:
+                print(f"ERROR: Invalid URL scheme '{scheme}://'. Only http:// and https:// are supported.", file=sys.stderr)
+                sys.exit(2)
+        else:
+            # Add https:// if no scheme is present
+            url = 'https://' + url
+
         print(f"API endpoint: {args.api}", file=sys.stderr)
-        print(f"Fetching results for: {args.url} ...", file=sys.stderr, end=' ', flush=True)
+        print(f"Fetching results for: {url} ...", file=sys.stderr, end=' ', flush=True)
         try:
-            res = fetch_res6_json(args.api, args.url, ext=args.extension, screenshot=args.screenshot,
+            res = fetch_res6_json(args.api, url, ext=args.extension, screenshot=args.screenshot,
                                   whois=True, wait=args.wait, timeout=args.timeout, scoreboard=(not args.private))
             print("done", file=sys.stderr)
         except Exception as e:
