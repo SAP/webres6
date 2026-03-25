@@ -225,6 +225,16 @@ function renderHostsTable(data, hostsContainer) {
           dnsCell.addClass('dns-status-not-ipv6-only-ready');
           dnsCell.text('✘');
           dnsCell.attr('title', 'Hostname cannot be resolved from an IPv6-only resolver');
+          if (info.dns.unbound_trace) {
+            dnsCell.css('cursor', 'pointer');
+            dnsCell.on('click', function() {
+              const traceWindow = window.open('', '_blank');
+              traceWindow.document.title = `Unbound debug trace for ${hostname}`;
+              const body = $(traceWindow.document.body);
+              body.append('<h1>Unbound debug trace for ' + hostname + '</h1>');
+              body.append('<pre>' + atob(info.dns.unbound_trace) + '</pre>');
+            });
+          }
         }
       }
       // contruct rows for IPs

@@ -4,16 +4,13 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-if [ -z "$LISTEN_ADDR" ]; then
-  LISTEN_ADDR='[::]'
-fi
 if [ -z "$PORT" ]; then
   PORT=6453
 fi
 if [ -z "$TIMEOUT" ]; then
   TIMEOUT=30
 fi
-export LISTEN_ADDR PORT TIMEOUT
+export PORT TIMEOUT
 
 # Set locale
 export LANG='C.utf8'
@@ -21,5 +18,4 @@ export LC_ALL='C.utf8'
 
 set -e
 
-echo "Starting DNSProbe via gunicorn on ${LISTEN_ADDR}:${PORT} with timeout ${TIMEOUT}...\n" >&2
-gunicorn --bind "${LISTEN_ADDR}:${PORT}" --timeout ${TIMEOUT} $@ 'dnsprobe:create_http_app()'
+gunicorn --bind "[::]:${PORT}" --timeout ${TIMEOUT} $@ 'dnsprobe:create_http_app()'

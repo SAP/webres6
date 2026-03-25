@@ -12,22 +12,20 @@ import os
 from os import getenv
 from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 from datetime import datetime, timezone, timedelta
+from time import sleep
+from base64 import b64encode
+from tempfile import NamedTemporaryFile
 import flask
 from flask import Flask, jsonify
 import unbound
 
 # config/flag variables
 webres6_version  = "1.1.0"
-app_home         = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
-debug_unbound    = 'unbound'    in getenv("DEBUG", '').lower().split(',')
-unbound_v6_conf  = getenv("UNBOUND_V6ONLY_CONF", os.path.join(app_home, "unbound.v6only.conf"))
-cache_ttl       = int(getenv("DNSPROBE_CACHE_TTL", "60"))
-
-# unbound context
-unbound_v6ctx = unbound.ub_ctx()
-if debug_unbound:
-    unbound_v6ctx.debuglevel(2)
-unbound_v6ctx.config(unbound_v6_conf)
+app_home            = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
+debug_unbound       = 'unbound'    in getenv("DEBUG", '').lower().split(',')
+unbound_v6_conf     = getenv("UNBOUND_V6ONLY_CONF", os.path.join(app_home, "unbound.v6only.conf"))
+unbound_debug_level = int(getenv("UNBOUND_DEBUG_LEVEL", "3"))
+cache_ttl           = int(getenv("DNSPROBE_CACHE_TTL", "60"))
 
 # custom json provider
 class FlaskJSONProvider(flask.json.provider.DefaultJSONProvider):
@@ -49,11 +47,24 @@ def res_v6only(hostname):
     """
 
     stat = datetime.now(timezone.utc)
-    status, result = unbound_v6ctx.resolve(hostname, unbound.RR_TYPE_AAAA, unbound.RR_CLASS_IN)
 
+    # set up unbound context
+    debug_temp_file = NamedTemporaryFile(mode='w+', delete=True, buffering=1)
+    unbound_v6ctx = unbound.ub_ctx()
+    unbound_v6ctx.config(unbound_v6_conf)
+    unbound_v6ctx.set_option('logfile:', debug_temp_file.name)
+    unbound_v6ctx.debuglevel(unbound_debug_level)
+
+    # do query and close context
+    status, result = unbound_v6ctx.resolve(hostname, unbound.RR_TYPE_AAAA, unbound.RR_CLASS_IN)
+    unbound_v6ctx.process()
+    unbound_v6ctx = None
+
+    # record elapsed time 
     ts = datetime.now(timezone.utc)
     elapsed = (ts - stat).total_seconds()
 
+    # prepare output information
     rcode_str = result.rcode_str if result else unbound.ub_strerror(status)
     ips = []
     if status==0 and result.havedata:
@@ -62,8 +73,16 @@ def res_v6only(hostname):
         except ValueError:
             print(f"WARNING: could not parse resolved IP addresses for {hostname}", file=sys.stderr)
 
+    # log information to stderr
     print(f"{ts.isoformat()} res_v6only {hostname} elapsed={elapsed:.2f} status={status} rcode={rcode_str.replace(' ', '_')} {(('ips=['+' '.join([str(ip) for ip in ips])+']') if len(ips) >0 else '' )}", file=sys.stderr)
+    if debug_unbound:
+        print(f"{ts.isoformat()} res_v6only {hostname} >>> unbound debug output >>>", file=sys.stderr)
+        debug_temp_file.seek(0)
+        for line in debug_temp_file:
+            print("\t" + line, end='', file=sys.stderr)
+        print(f"\n{ts.isoformat()} res_v6only {hostname} <<< unbound debug output <<<", file=sys.stderr)
 
+    # construct result dict
     jsres = {
         'hostname': hostname,
         'success': bool(status==0 and result.havedata),
@@ -76,6 +95,16 @@ def res_v6only(hostname):
         jsres['canonical_name'] = result.canonname
     if len(ips)>0:
         jsres['aaaa_records'] = [str(ip) for ip in ips]
+    if rcode_str in ['serv fail'] or debug_unbound:
+        debug_temp_file.seek(0)
+        debug_trace_stripped = ''
+        for line in debug_temp_file:
+            parts = line.split(' ')
+            if len(parts) > 3:
+                debug_trace_stripped += parts[0] + ' ' + ' '.join(parts[3:])
+            else:
+                debug_trace_stripped += line
+        jsres['unbound_trace'] = b64encode((debug_trace_stripped).encode('utf-8')).decode('ascii')
 
     return jsres
 
@@ -110,7 +139,7 @@ def create_http_app():
         resp.headers['Cache-Control'] = f"public, max-age={cache_ttl}"
         return resp, 200
 
-    print("\t/healthz             check health of services", file=sys.stderr)
+    print("\t/healthz                      check health of services", file=sys.stderr)
     @app.route('/healthz', methods=['GET'])
     def health():
         result = res_v6only('www.google.com')
