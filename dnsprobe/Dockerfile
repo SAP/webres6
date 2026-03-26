@@ -10,13 +10,16 @@ WORKDIR /app
 RUN  apt update --yes\
   && apt upgrade --yes \
   && apt install --no-install-recommends --yes -o DPkg::options::="--force-overwrite" -o Dpkg::Options::="--force-confdef" \
-                  bash ldnsutils \
+                  bash ldnsutils curl ca-certificates \
                   python3 python3-unbound python3-flask gunicorn python3-gunicorn \
   && apt clean \
   && rm -rf /var/lib/apt/lists/*
 
 # Copy application code
 COPY dnsprobe/docker-entrypoint dnsprobe/dnsprobe.py dnsprobe/unbound.v6only.conf ./
+
+# Load root hints for unbound
+RUN curl -o /app/named.cache https://www.internic.net/domain/named.cache
 
 # Create non-root user and switch to it
 RUN groupadd -g 999 app && \

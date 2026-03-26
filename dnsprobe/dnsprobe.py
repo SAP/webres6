@@ -24,7 +24,8 @@ webres6_version  = "1.1.0"
 app_home            = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 debug_unbound       = 'unbound'    in getenv("DEBUG", '').lower().split(',')
 unbound_v6_conf     = getenv("UNBOUND_V6ONLY_CONF", os.path.join(app_home, "unbound.v6only.conf"))
-unbound_debug_level = int(getenv("UNBOUND_DEBUG_LEVEL", "3"))
+# log algorithm choices by default – see https://unbound.docs.nlnetlabs.nl/en/latest/manpages/unbound.conf.html#unbound-conf-verbosity
+unbound_debug_level = int(getenv("UNBOUND_DEBUG_LEVEL", "4")) 
 cache_ttl           = int(getenv("DNSPROBE_CACHE_TTL", "60"))
 
 # custom json provider
