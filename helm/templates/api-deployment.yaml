@@ -113,6 +113,26 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.adminSecret.name | default (include "webres6.fullname" .) }}
                   key: admin-key
+            {{- if .Values.otel.enabled }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.otel.serviceName | default "webres6-api" | quote }}
+            - name: OTEL_SERVICE_VERSION
+              value: "1.3.6"
+            - name: OTEL_DEPLOYMENT_ENVIRONMENT
+              value: {{ .Values.otel.environment | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.otel.endpoint | quote }}
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_TRACES_SAMPLER
+              value: {{ .Values.otel.sampler | quote }}
+            {{- if .Values.otel.samplerArg }}
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: {{ .Values.otel.samplerArg | quote }}
+            {{- end }}
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: {{ .Values.otel.resourceAttributes | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.api.port }}

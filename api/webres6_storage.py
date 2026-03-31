@@ -13,7 +13,20 @@ import platform
 from datetime import datetime, timezone, timedelta
 from ipaddress import ip_address
 import valkey
-import boto3 
+import boto3
+
+# OpenTelemetry imports
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
+from opentelemetry.instrumentation.botocore import BotocoreInstrumentor
+from opentelemetry.instrumentation.redis import RedisInstrumentor  # Works with Valkey --- IGNORE ---
+
+# Get tracer instance & instrument libraries
+tracer = trace.get_tracer(__name__) 
+if tracer:
+    BotocoreInstrumentor().instrument()
+    RedisInstrumentor().instrument()
+
 
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -129,6 +142,25 @@ class LocalStorageManager(StorageManager):
         return self.local_archive_dir is not None
 
     def archive_result(self, report_id, data):
+        if tracer:
+            with tracer.start_as_current_span("storage.archive_result") as span:
+                span.set_attributes({
+                    "webres6.report_id": report_id,
+                    "webres6.storage.backend": "local",
+                    "webres6.storage.operation": "archive",
+                })
+                try:
+                    result = self._archive_result_impl(report_id, data)
+                    span.set_attribute("webres6.storage.success", result)
+                    return result
+                except Exception as e:
+                    span.record_exception(e)
+                    span.set_status(Status(StatusCode.ERROR, str(e)))
+                    raise
+        else:
+            return self._archive_result_impl(report_id, data)
+
+    def _archive_result_impl(self, report_id, data):
         if not self.local_archive_dir:
             return False
         try:
@@ -153,6 +185,20 @@ class LocalStorageManager(StorageManager):
             return []
 
     def retrieve_result(self, report_id):
+        if tracer:
+            with tracer.start_as_current_span("storage.retrieve_result") as span:
+                span.set_attributes({
+                    "webres6.report_id": report_id,
+                    "webres6.storage.backend": "local",
+                    "webres6.storage.operation": "retrieve",
+                })
+                result = self._retrieve_result_impl(report_id)
+                span.set_attribute("webres6.storage.found", result is not None)
+                return result
+        else:
+            return self._retrieve_result_impl(report_id)
+
+    def _retrieve_result_impl(self, report_id):
         if not self.local_archive_dir:
             return None
         try:
@@ -369,6 +415,7 @@ class ValkeyStorageManager(StorageManager):
         self.whois_cache_ttl = whois_cache_ttl
         self.result_archive_ttl = result_archive_ttl
         self.whois_mem_cache_size_max = whois_mem_cache_size_max
+
         # initialize valkey client if valkey url is set
         if valkey_url and valkey_url.strip() != '':
             self.valkey_client = valkey.from_url(valkey_url, decode_responses=False)
@@ -380,6 +427,25 @@ class ValkeyStorageManager(StorageManager):
         return True
 
     def archive_result(self, report_id, data):
+        if tracer:
+            with tracer.start_as_current_span("storage.archive_result") as span:
+                span.set_attributes({
+                    "webres6.report_id": report_id,
+                    "webres6.storage.backend": "valkey",
+                    "webres6.storage.operation": "archive",
+                })
+                try:
+                    result = self._archive_result_impl(report_id, data)
+                    span.set_attribute("webres6.storage.success", result)
+                    return result
+                except Exception as e:
+                    span.record_exception(e)
+                    span.set_status(Status(StatusCode.ERROR, str(e)))
+                    raise
+        else:
+            return self._archive_result_impl(report_id, data)
+
+    def _archive_result_impl(self, report_id, data):
         try:
             self.valkey_client.set(f"webres6:archive:{report_id}", json.dumps(data, cls=DateTimeEncoder).encode('utf-8'), ex=self.result_archive_ttl)
             return True
@@ -397,6 +463,20 @@ class ValkeyStorageManager(StorageManager):
             return []
 
     def retrieve_result(self, report_id):
+        if tracer:
+            with tracer.start_as_current_span("storage.retrieve_result") as span:
+                span.set_attributes({
+                    "webres6.report_id": report_id,
+                    "webres6.storage.backend": "valkey",
+                    "webres6.storage.operation": "retrieve",
+                })
+                result = self._retrieve_result_impl(report_id)
+                span.set_attribute("webres6.storage.found", result is not None)
+                return result
+        else:
+            return self._retrieve_result_impl(report_id)
+
+    def _retrieve_result_impl(self, report_id):
         try:
             cached_data = self.valkey_client.get(f"webres6:archive:{report_id}")
             if cached_data:
@@ -410,6 +490,20 @@ class ValkeyStorageManager(StorageManager):
             return None
 
     def put_result_cacheline(self, cache_key, data, ttl, overwrite=True):
+        if tracer:
+            with tracer.start_as_current_span("storage.put_cache") as span:
+                span.set_attributes({
+                    "webres6.cache_key": cache_key,
+                    "webres6.storage.backend": "valkey",
+                    "webres6.storage.ttl": ttl,
+                })
+                result = self._put_result_cacheline_impl(cache_key, data, ttl, overwrite)
+                span.set_attribute("webres6.storage.success", result)
+                return result
+        else:
+            return self._put_result_cacheline_impl(cache_key, data, ttl, overwrite)
+
+    def _put_result_cacheline_impl(self, cache_key, data, ttl, overwrite):
         try:
             self.valkey_client.set(f"webres6:cache:{cache_key}", json.dumps(data, cls=DateTimeEncoder).encode('utf-8'), ex=ttl, nx=(not overwrite))
             return True
@@ -426,6 +520,19 @@ class ValkeyStorageManager(StorageManager):
             return False
 
     def get_result_cacheline(self, cache_key):
+        if tracer:
+            with tracer.start_as_current_span("storage.get_cache") as span:
+                span.set_attributes({
+                    "webres6.cache_key": cache_key,
+                    "webres6.storage.backend": "valkey",
+                })
+                result = self._get_result_cacheline_impl(cache_key)
+                span.set_attribute("webres6.cache_hit", result is not None)
+                return result
+        else:
+            return self._get_result_cacheline_impl(cache_key)
+
+    def _get_result_cacheline_impl(self, cache_key):
         try:
             cached_data = self.valkey_client.get(f"webres6:cache:{cache_key}")
             if cached_data:

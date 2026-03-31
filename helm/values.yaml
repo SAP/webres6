@@ -6,7 +6,6 @@
 nameOverride: ""
 fullnameOverride: ""
 
-
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: 
 - name: hyperspace-docker
@@ -104,6 +103,15 @@ seleniumHub:
 # Prometheteus Operator configuration
 prometheus:
   enabled: true
+
+# OpenTelemetry configuration
+otel:
+  enabled: false
+  endpoint: "http://otel-collector:4318"
+  environment: "production"
+  sampler: "always_on"
+  samplerArg: "1.0"
+  resourceAttributes: "service.namespace=webres6"
 
 # Viewer (static content) configuration
 viewer:

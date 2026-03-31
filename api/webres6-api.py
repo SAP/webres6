@@ -28,6 +28,16 @@ import flask
 from flask import Flask, redirect, request, jsonify, send_from_directory
 from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 
+# OpenTelemetry imports
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION, DEPLOYMENT_ENVIRONMENT
+from opentelemetry.instrumentation.flask import FlaskInstrumentor
+from opentelemetry.instrumentation.urllib3 import URLLib3Instrumentor
+from opentelemetry.trace import Status, StatusCode
+
 # config/flag variables
 webres6_version   = "1.3.6"
 debug_whois       = 'whois'    in getenv("DEBUG", '').lower().split(',')
@@ -60,17 +70,88 @@ enable_scoreboard = getenv("ENABLE_SCOREBOARD", 'true').lower() in ['true', '1',
 scoreboard_request_limit = int(getenv("SCOREBOARD_REQUEST_LIMIT", 1024))
 screenshot_modes  = ['none', 'small', 'medium', 'full']
 
+# OpenTelemetry configuration
+debug_trace        = 'trace' in getenv("DEBUG", '').lower().split(',')
+otel_endpoint      = getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", getenv("OTEL_EXPORTER_OTLP_ENDPOINT", None))
+otel_enabled       = getenv("OTEL_TRACING_ENABLED", "true" if otel_endpoint else "false").lower() in ['true', '1', 'yes']
+otel_console       = getenv("OTEL_CONSOLE_EXPORTER_ENABLED", "true" if debug_trace else "false").lower() in ['true', '1', 'yes']
+otel_service_name  = getenv("OTEL_SERVICE_NAME", "webres6-api")
+
+# get nodename for report
+report_node = platform.node().split('.')[0]
+if len(report_node) >12 or '-' in report_node:
+    report_node = sha256(report_node.encode()).hexdigest()[:12]
+print(f"report node is set to '{report_node}'.", file=sys.stderr)
+
+# Initialize OpenTelemetry tracing
+def init_tracing():
+    """Initialize OpenTelemetry tracing."""
+    if not otel_enabled:
+        print("OpenTelemetry tracing is disabled.", file=sys.stderr)
+        return None
+
+    try:
+        # Create resource with service information
+        resource = Resource.create({
+            SERVICE_NAME: otel_service_name,
+            SERVICE_VERSION: webres6_version,
+            DEPLOYMENT_ENVIRONMENT: getenv("OTEL_DEPLOYMENT_ENVIRONMENT", "production"),
+            "service.namespace": "webres6",
+            "host.name": report_node,
+        })
+
+        # Create tracer provider
+        provider = TracerProvider(resource=resource)
+
+        # Add OTLP exporter if endpoint configured
+        if otel_endpoint:
+            # Let OTLPSpanExporter read from environment variables
+            # It will automatically use OTEL_EXPORTER_OTLP_TRACES_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT
+            otlp_exporter = OTLPSpanExporter()
+            provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+            print(f"OpenTelemetry OTLP exporter configured: {otel_endpoint}", file=sys.stderr)
+
+        # Add console exporter if debugging
+        if otel_console:
+            console_exporter = ConsoleSpanExporter()
+            provider.add_span_processor(BatchSpanProcessor(console_exporter))
+            print("OpenTelemetry console exporter enabled", file=sys.stderr)
+
+        # Set global tracer provider
+        trace.set_tracer_provider(provider)
+
+        # Auto-instrument libraries
+        URLLib3Instrumentor().instrument()
+
+        print("OpenTelemetry tracing initialized successfully", file=sys.stderr)
+        return trace.get_tracer(__name__)
+
+    except Exception as e:
+        print(f"WARNING: Failed to initialize OpenTelemetry: {e}", file=sys.stderr)
+        return None
+
+# Initialize tracing
+tracer = init_tracing()
+
+# Prometheus metrics
+disable_created_metrics()
+webres6_tested_total = Counter('webres6_tested_total', 'Total number of checks performed')
+webres6_tested_results = Counter('webres6_results_total', 'Total number of results for checks performed', ['result'])
+webres6_scores_total = Histogram('webres6_scores_total', 'Histogram of scores results ', ['score_type'], buckets=(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0))
+webres6_cache_hits_total = Counter('webres6_cache_hits_total', 'Total number of cache hits')
+webres6_archive_total = Counter('webres6_archive_hits_total', 'Total number of archive hits', ['result'])
+webres6_time_spent = Counter('webres6_time_spent_seconds_total', 'Time spent in different processing phases', ['phase'])
+webres6_response_time = Histogram('webres6_response_time_seconds_total', 'Response time for checks performed', ['whois', 'screenshot'], buckets=(0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 90, 120, 150, 180))
+webres6_hostinfo_parsed = Counter('webres6_hostinfo_parsed_total', 'Total number of hostinfo entries parsed', ['type'])
+webres6_resources_total = Counter('webres6_resources_total', 'Total number of resources per protocol', ['protocol'])
+webres6_whois_cache_size = Gauge('webres6_whois_cache_size_total', 'Number of entries in whois cache')
+webres6_whois_cache_size.set_function(lambda: storage_manager.whois_cache_size() if storage_manager else 0)
+
 # load custom modules (allows overrides in serverconfig directory)
 sys.path.insert(0, srvconfig_dir)
 from webres6_storage import StorageManager, LocalStorageManager, ValkeyStorageManager, ValkeyFileHybridStorageManager, ValkeyS3HybridStorageManager, Scoreboard, export_scoreboard_entries, import_scoreboard_entries, export_archived_reports, import_archived_reports
 from webres6_whois import get_whois_info
 from webres6_extension import check_extension_parameter, get_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl, cleanup_selenium_crawl, finalize_report, health_check
-
-# get nodename for report id
-report_node = platform.node().split('.')[0]
-if len(report_node) >12 or '-' in report_node:
-    report_node = sha256(report_node.encode()).hexdigest()[:12]
-print(f"report node is set to '{report_node}'.", file=sys.stderr)
 
 # load NAT64 prefixes
 for nat64 in [ip_network(p) for p in getenv("NAT64_PREFIXES", "").split(",") if p]:
@@ -147,7 +228,6 @@ scoreboard = None
 if storage_manager.can_archive() and enable_scoreboard:
     scoreboard = Scoreboard(storage_manager=storage_manager)
 
-
 # create connection pool for dnsprobe if needed
 dnsprobe = None
 if dnsprobe_api_url:
@@ -160,19 +240,6 @@ if dnsprobe_api_url:
 # whois enabled?
 print(f"whois lookups are {'enabled with TTL ' + str(whois_cache_ttl) + 's' if enable_whois else 'disabled'}.", file=sys.stderr)
 
-# Prometheus metrics
-disable_created_metrics()
-webres6_tested_total = Counter('webres6_tested_total', 'Total number of checks performed')
-webres6_tested_results = Counter('webres6_results_total', 'Total number of results for checks performed', ['result'])
-webres6_scores_total = Histogram('webres6_scores_total', 'Histogram of scores results ', ['score_type'], buckets=(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0))
-webres6_cache_hits_total = Counter('webres6_cache_hits_total', 'Total number of cache hits')
-webres6_archive_total = Counter('webres6_archive_hits_total', 'Total number of archive hits', ['result'])
-webres6_time_spent = Counter('webres6_time_spent_seconds_total', 'Time spent in different processing phases', ['phase'])
-webres6_response_time = Histogram('webres6_response_time_seconds_total', 'Response time for checks performed', ['whois', 'screenshot'], buckets=(0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 90, 120, 150, 180))
-webres6_hostinfo_parsed = Counter('webres6_hostinfo_parsed_total', 'Total number of hostinfo entries parsed', ['type'])
-webres6_resources_total = Counter('webres6_resources_total', 'Total number of resources per protocol', ['protocol'])
-webres6_whois_cache_size = Gauge('webres6_whois_cache_size_total', 'Number of entries in whois cache')
-webres6_whois_cache_size.set_function(lambda: storage_manager.whois_cache_size() if storage_manager else 0)
 
 # patch ip address object to support NAT64 detection
 def _is_nat64(self):
@@ -252,6 +319,36 @@ class FlaskJSONProvider(flask.json.provider.DefaultJSONProvider):
 def init_webdriver(log_prefix='', implicit_wait=0.5, extension=None, extension_data=None):
     """ Initializes the Selenium WebDriver with the necessary options.
     """
+    if tracer:
+        with tracer.start_as_current_span("selenium.init_webdriver") as span:
+            span.set_attributes({
+                "webres6.selenium.remote": selenium_remote is not None,
+                "webres6.selenium.headless": headless_selenium,
+                "webres6.extension": extension or "none",
+            })
+            try:
+                driver, err = _init_webdriver_impl(log_prefix, implicit_wait, extension, extension_data, span)
+                if driver:
+                    caps = driver.capabilities
+                    span.set_attributes({
+                        "webres6.browser.name": caps.get('browserName', 'unknown'),
+                        "webres6.browser.version": caps.get('browserVersion', 'unknown'),
+                        "webres6.browser.platform": caps.get('platformName', 'unknown'),
+                    })
+                else:
+                    span.set_status(Status(StatusCode.ERROR, err or "Unknown error"))
+                return driver, err
+            except Exception as e:
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                raise
+    else:
+        return _init_webdriver_impl(log_prefix, implicit_wait, extension, extension_data, None)
+
+
+def _init_webdriver_impl(log_prefix, implicit_wait, extension, extension_data, parent_span):
+    """ Internal implementation of init_webdriver.
+    """
     options = webdriver.ChromeOptions()
     options.enable_bidi = True
     options.enable_webextensions = True
@@ -308,39 +405,82 @@ def crawl_page(url, driver=None, extension=None, extension_data=None, wait=2, ti
     """ Fetches the web page at the given URL using Selenium WebDriver.
     """
 
+    if tracer:
+        with tracer.start_as_current_span("selenium.crawl_page") as span:
+            span.set_attributes({
+                "webres6.url": url,
+                "webres6.wait_time": wait,
+                "webres6.timeout": timeout,
+                "webres6.extension": extension or "none",
+            })
+            try:
+                success, err = _crawl_page_impl(url, driver, extension, extension_data, wait, timeout, log_prefix, span)
+                if not success:
+                    span.set_status(Status(StatusCode.ERROR, err or "Unknown error"))
+                return success, err
+            except Exception as e:
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                raise
+    else:
+        return _crawl_page_impl(url, driver, extension, extension_data, wait, timeout, log_prefix, None)
+
+
+def _crawl_page_impl(url, driver, extension, extension_data, wait, timeout, log_prefix, parent_span):
+    """ Internal implementation of crawl_page.
+    """
+
     start_time = None
     try:
         # initialize page load timeout
         driver.set_page_load_timeout(timeout)
 
         # prepare for crawl
+        if parent_span:
+            parent_span.add_event("prepare_selenium_crawl")
         success, err = prepare_selenium_crawl(driver, url, extension=extension, extension_data=extension_data, log_prefix=log_prefix)
         if not success:
             return False, err
 
         # start crawl
+        if parent_span:
+            parent_span.add_event("page_load_start")
         start_time = time.time()
         driver.get(url)
 
         # wait requested settle time
+        if parent_span:
+            parent_span.add_event("settle_wait_start", {"wait_seconds": wait})
         time.sleep(wait)
 
         # operate after crawl
+        if parent_span:
+            parent_span.add_event("operate_selenium_crawl")
         success, err = operate_selenium_crawl(driver, url, extension=extension, extension_data=extension_data, log_prefix=log_prefix)
         if not success:
             return False, err
 
         # wait for page load complete if time budget allows
+        if parent_span:
+            parent_span.add_event("wait_for_page_ready")
         while time.time() - start_time < timeout:
             if driver.execute_script("return document.readyState") == "complete":
+                if parent_span:
+                    parent_span.add_event("page_ready", {"elapsed_seconds": time.time() - start_time})
                 break
             time.sleep(0.5)
 
     except TimeoutException as e:
+        if parent_span:
+            parent_span.add_event("timeout_exception", {"elapsed_seconds": time.time() - start_time if start_time else 0})
         return False, f"Page rendering timed out after {time.time() - start_time:.2f} seconds"
     except WebDriverException as e:
+        if parent_span:
+            parent_span.add_event("webdriver_exception", {"error": e.msg})
         return False, e.msg.replace('unknown error: ', '')
     except Exception as e:
+        if parent_span:
+            parent_span.add_event("exception", {"error": str(e)})
         return False, str(e)
 
     return True, None
@@ -556,7 +696,6 @@ def check_selenium(log_prefix=''):
 def add_dnsprobe_info(hosts):
     """ Adds DNSProbe information for each unique IP address in the hosts dictionary.
     """
-
     total = 0
     success = 0
     noerror = 0
@@ -566,13 +705,39 @@ def add_dnsprobe_info(hosts):
         dnsprobe_data = {}
         try:
             request_url = f"{dnsprobe_api_url}/dnsprobe/resolve6only({hostname})"
-            response = dnsprobe.request('GET', request_url, timeout=10)
-            if response.status == 200:
-                dnsprobe_data = response.json()
-                dnsprobe_data['ts'] = datetime.fromisoformat(dnsprobe_data['ts'])
-                total += 1
+
+            # Add explicit span for individual DNS probe request
+            if tracer:
+                with tracer.start_as_current_span("dnsprobe.resolve6only") as span:
+                    span.set_attributes({
+                        "dnsprobe.hostname": hostname,
+                        "dnsprobe.request_url": request_url,
+                    })
+                    response = dnsprobe.request('GET', request_url, timeout=10)
+                    span.set_attribute("http.status_code", response.status)
+
+                    if response.status == 200:
+                        dnsprobe_data = response.json()
+                        dnsprobe_data['ts'] = datetime.fromisoformat(dnsprobe_data['ts'])
+                        total += 1
+                        span.set_attributes({
+                            "dnsprobe.success": dnsprobe_data.get('success', False),
+                            "dnsprobe.rcode": dnsprobe_data.get('rcode', 'unknown'),
+                            "dnsprobe.aaaa_count": len(dnsprobe_data.get('aaaa_records', [])),
+                            "dnsprobe.elapsed": dnsprobe_data.get('time_elapsed', -1),
+                        })
+                    else:
+                        span.set_status(Status(StatusCode.ERROR, f"HTTP {response.status}"))
+                        print(f"\tWARNING: DNSProbe lookup failed for {hostname}: GET {request_url} => {response.status}", file=sys.stderr)
             else:
-                print(f"\tWARNING: DNSProbe lookup failed for {hostname}: GET {request_url} => {response.status}", file=sys.stderr)
+                response = dnsprobe.request('GET', request_url, timeout=10)
+                if response.status == 200:
+                    dnsprobe_data = response.json()
+                    dnsprobe_data['ts'] = datetime.fromisoformat(dnsprobe_data['ts'])
+                    total += 1
+                else:
+                    print(f"\tWARNING: DNSProbe lookup failed for {hostname}: GET {request_url} => {response.status}", file=sys.stderr)
+
             if dnsprobe_data.get('success', False):
                 success += 1
                 dnsprobe_data['ipv6_only_ready'] = True
@@ -755,6 +920,41 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     """ Crawls and analyzes the given URL, returning the results as a JSON object.
     """
 
+    # Start OpenTelemetry span
+    if tracer:
+        with tracer.start_as_current_span("crawl_and_analyze_url") as span:
+            span.set_attributes({
+                "webres6.url": url.geturl(),
+                "webres6.wait_time": wait,
+                "webres6.timeout": timeout,
+                "webres6.screenshot_mode": screenshot_mode or "none",
+                "webres6.whois_enabled": lookup_whois,
+                "webres6.extension": ext or "none",
+                "webres6.scoreboard_entry": scoreboard_entry,
+            })
+            try:
+                result, status_code = _crawl_and_analyze_url_impl(
+                    url, wait, timeout, scoreboard_entry, ext, screenshot_mode,
+                    lookup_whois, report_id, report_node, span
+                )
+                return result, status_code
+            except Exception as e:
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                raise
+    else:
+        return _crawl_and_analyze_url_impl(
+            url, wait, timeout, scoreboard_entry, ext, screenshot_mode,
+            lookup_whois, report_id, report_node, None
+        )
+
+
+def _crawl_and_analyze_url_impl(url, wait, timeout, scoreboard_entry, ext,
+                                 screenshot_mode, lookup_whois, report_id,
+                                 report_node, parent_span):
+    """ Internal implementation of crawl_and_analyze_url with optional span parameter.
+    """
+
     # collect timing stats
     timings = {}
     ts = datetime.now(timezone.utc)
@@ -862,6 +1062,19 @@ def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
     push_timing('finalize')
     print(f"{lp}time spent: total={sum(timings.values()):.2f}s " +
           ' '.join([f"{k}={v:.3f}s" for k, v in timings.items()]), file=sys.stderr)
+
+    # Add span attributes for the results
+    if parent_span:
+        parent_span.set_attributes({
+            "webres6.report_id": report_id,
+            "webres6.ipv6_only_ready": ipv6_only_ready if ipv6_only_ready is not None else False,
+            "webres6.ipv6_score": score if score is not None else 0,
+            "webres6.http_score": http_score if http_score is not None else 0,
+            "webres6.dns_score": dns_score if dns_score is not None else 0,
+            "webres6.hosts_found": len(hosts),
+            "webres6.browser.name": browser_info.get('browserName', 'unknown'),
+            "webres6.browser.version": browser_info.get('browserVersion', 'unknown'),
+        })
 
     # send response
     return report, 200
@@ -1118,6 +1331,11 @@ def create_http_app():
     app.config['JSON_AS_ASCII'] = False
     app.json_provider_class = FlaskJSONProvider
     app.json = app.json_provider_class(app)
+
+    # Instrument Flask with OpenTelemetry
+    if otel_enabled and tracer:
+        FlaskInstrumentor().instrument_app(app)
+        print("\tOpenTelemetry Flask instrumentation enabled", file=sys.stderr)
 
     print("creating endpoints:", file=sys.stderr)
 

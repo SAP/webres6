@@ -10,10 +10,44 @@ from ipaddress import ip_network
 from ipwhois import IPWhois
 from prometheus_client import Counter
 
+# OpenTelemetry imports
+from opentelemetry import trace
+from opentelemetry.instrumentation.redis import RedisInstrumentor  # Works with Valkey --- IGNORE ---
+
+
+# Get tracer instance
+tracer = trace.get_tracer(__name__)
+
 webres6_whois_lookups = Counter('webres6_whois_lookups_total', 'WHOIS lookups performed', ['type'])
 
 def get_whois_info(ip, local_cache, storage_manager, debug=False):
     """ Fetches WHOIS information for the given IP address using local and global caches.
+
+    Args:
+        ip (ipaddress.IPv4Address or ipaddress.IPv6Address): The IP address to look up
+
+    Returns:
+        dict: The WHOIS information for the IP address, or None if not found.
+    """
+
+    if tracer:
+        with tracer.start_as_current_span("whois.lookup") as span:
+            span.set_attributes({
+                "whois.ip": str(ip),
+                "whois.ip_version": ip.version,
+            })
+            result, source = _get_whois_info_impl(ip, local_cache, storage_manager, debug, span)
+            span.set_attributes({
+                "whois.source": source,
+                "whois.success": result is not None,
+            })
+            return result, source
+    else:
+        return _get_whois_info_impl(ip, local_cache, storage_manager, debug, None)
+
+
+def _get_whois_info_impl(ip, local_cache, storage_manager, debug, parent_span):
+    """ Internal implementation of get_whois_info.
 
     Args:
         ip (ipaddress.IPv4Address or ipaddress.IPv6Address): The IP address to look up

@@ -32,12 +32,20 @@ services:
       - RESULT_CACHE_TTL=90
       - RESULT_ARCHIVE_TTL=3600
       - ARCHIVE_DIR=/archive
+      # OpenTelemetry configuration
+      - OTEL_SERVICE_NAME=webres6-api
+      - OTEL_SERVICE_VERSION=1.3.6
+      - OTEL_DEPLOYMENT_ENVIRONMENT=development
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4318/v1/traces
+      - OTEL_TRACES_SAMPLER=always_on
+      - OTEL_RESOURCE_ATTRIBUTES=service.namespace=webres6
     volumes:
       - ./local_cache/reports:/archive
     depends_on:
       - selenium
       - webres6-dnsprobe
       - valkey
+      - otel-collector
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:6400/healthz"]
       interval: 60s
@@ -101,6 +109,30 @@ services:
       - webres6-network
     ports:
       - "6379:6379"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    networks:
+      - webres6-network
+    ports:
+      - "4318:4318"  # OTLP HTTP receiver
+      - "4317:4317"  # OTLP gRPC receiver
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    networks:
+      - webres6-network
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14250:14250"  # gRPC receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
 
 networks:
   webres6-network:
