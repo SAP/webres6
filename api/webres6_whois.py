@@ -12,11 +12,16 @@ from prometheus_client import Counter
 
 # OpenTelemetry imports
 from opentelemetry import trace
-from opentelemetry.instrumentation.redis import RedisInstrumentor  # Works with Valkey --- IGNORE ---
-
+from opentelemetry.instrumentation.urllib import URLLibInstrumentor
 
 # Get tracer instance
 tracer = trace.get_tracer(__name__)
+
+# instrument urllib
+
+if tracer:
+    from opentelemetry.instrumentation.urllib import URLLibInstrumentor
+    URLLibInstrumentor().instrument()
 
 webres6_whois_lookups = Counter('webres6_whois_lookups_total', 'WHOIS lookups performed', ['type'])
 

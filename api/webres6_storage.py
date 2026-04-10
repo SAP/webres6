@@ -19,14 +19,14 @@ import boto3
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 from opentelemetry.instrumentation.botocore import BotocoreInstrumentor
-from opentelemetry.instrumentation.redis import RedisInstrumentor  # Works with Valkey --- IGNORE ---
+from opentelemetry.instrumentation.valkey import ValkeyInstrumentor
+
 
 # Get tracer instance & instrument libraries
 tracer = trace.get_tracer(__name__) 
 if tracer:
     BotocoreInstrumentor().instrument()
-    RedisInstrumentor().instrument()
-
+    ValkeyInstrumentor().instrument()
 
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):

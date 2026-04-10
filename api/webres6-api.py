@@ -8,6 +8,7 @@
 # load system modules
 import sys
 import argparse
+import functools
 import json
 import os
 import signal
@@ -132,6 +133,26 @@ def init_tracing():
 
 # Initialize tracing
 tracer = init_tracing()
+
+def traced(span_name):
+    """ Decorator that wraps a function in an OTEL span. The function can call
+    trace.get_current_span() to add attributes or events to the active span.
+    """
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            if not tracer:
+                return fn(*args, **kwargs)
+            with tracer.start_as_current_span(span_name) as span:
+                try:
+                    return fn(*args, **kwargs)
+                except Exception as e:
+                    span.record_exception(e)
+                    span.set_status(Status(StatusCode.ERROR, str(e)))
+                    raise
+        return wrapper
+    return decorator
+
 
 # Prometheus metrics
 disable_created_metrics()
@@ -316,39 +337,17 @@ class FlaskJSONProvider(flask.json.provider.DefaultJSONProvider):
         return super().default(obj)
 
 
+@traced("selenium.init_webdriver")
 def init_webdriver(log_prefix='', implicit_wait=0.5, extension=None, extension_data=None):
     """ Initializes the Selenium WebDriver with the necessary options.
     """
-    if tracer:
-        with tracer.start_as_current_span("selenium.init_webdriver") as span:
-            span.set_attributes({
-                "webres6.selenium.remote": selenium_remote is not None,
-                "webres6.selenium.headless": headless_selenium,
-                "webres6.extension": extension or "none",
-            })
-            try:
-                driver, err = _init_webdriver_impl(log_prefix, implicit_wait, extension, extension_data, span)
-                if driver:
-                    caps = driver.capabilities
-                    span.set_attributes({
-                        "webres6.browser.name": caps.get('browserName', 'unknown'),
-                        "webres6.browser.version": caps.get('browserVersion', 'unknown'),
-                        "webres6.browser.platform": caps.get('platformName', 'unknown'),
-                    })
-                else:
-                    span.set_status(Status(StatusCode.ERROR, err or "Unknown error"))
-                return driver, err
-            except Exception as e:
-                span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, str(e)))
-                raise
-    else:
-        return _init_webdriver_impl(log_prefix, implicit_wait, extension, extension_data, None)
+    span = trace.get_current_span()
+    span.set_attributes({
+        "webres6.selenium.remote": selenium_remote is not None,
+        "webres6.selenium.headless": headless_selenium,
+        "webres6.extension": extension or "none",
+    })
 
-
-def _init_webdriver_impl(log_prefix, implicit_wait, extension, extension_data, parent_span):
-    """ Internal implementation of init_webdriver.
-    """
     options = webdriver.ChromeOptions()
     options.enable_bidi = True
     options.enable_webextensions = True
@@ -386,49 +385,42 @@ def _init_webdriver_impl(log_prefix, implicit_wait, extension, extension_data, p
         driver.execute_cdp_cmd("Network.enable", {})
         driver.execute_cdp_cmd("Network.setBlockedURLs", {"urls": url_blocklist })
 
+        caps = driver.capabilities
+        span.set_attributes({
+            "webres6.browser.name": caps.get('browserName', 'unknown'),
+            "webres6.browser.version": caps.get('browserVersion', 'unknown'),
+            "webres6.browser.platform": caps.get('platformName', 'unknown'),
+        })
+
     except urllib3.exceptions.MaxRetryError as e:
         print(f"{log_prefix}ERROR: Could not connect to Selenium server at {selenium_remote}: {e}", file=sys.stderr)
+        span.set_status(Status(StatusCode.ERROR, "Could not connect to selenium"))
         return None, "Could not connect to selenium"
 
     except TimeoutException as e:
         print(f"{log_prefix}ERROR: Selenium WebDriver initialization timed out: {e.msg}", file=sys.stderr)
+        span.set_status(Status(StatusCode.ERROR, "Timeout getting selenium instance"))
         return None, "Timeout getting selenium instance"
 
     except WebDriverException as e:
         print(f"{log_prefix}ERROR: failed initializing Selenium WebDriver: {e.msg}", file=sys.stderr)
+        span.set_status(Status(StatusCode.ERROR, "Selenium initialization failed"))
         return None, "Selenium initialization failed"
 
     return driver, None
 
 
+@traced("selenium.crawl_page")
 def crawl_page(url, driver=None, extension=None, extension_data=None, wait=2, timeout=10, log_prefix=''):
     """ Fetches the web page at the given URL using Selenium WebDriver.
     """
-
-    if tracer:
-        with tracer.start_as_current_span("selenium.crawl_page") as span:
-            span.set_attributes({
-                "webres6.url": url,
-                "webres6.wait_time": wait,
-                "webres6.timeout": timeout,
-                "webres6.extension": extension or "none",
-            })
-            try:
-                success, err = _crawl_page_impl(url, driver, extension, extension_data, wait, timeout, log_prefix, span)
-                if not success:
-                    span.set_status(Status(StatusCode.ERROR, err or "Unknown error"))
-                return success, err
-            except Exception as e:
-                span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, str(e)))
-                raise
-    else:
-        return _crawl_page_impl(url, driver, extension, extension_data, wait, timeout, log_prefix, None)
-
-
-def _crawl_page_impl(url, driver, extension, extension_data, wait, timeout, log_prefix, parent_span):
-    """ Internal implementation of crawl_page.
-    """
+    span = trace.get_current_span()
+    span.set_attributes({
+        "webres6.url": url,
+        "webres6.wait_time": wait,
+        "webres6.timeout": timeout,
+        "webres6.extension": extension or "none",
+    })
 
     start_time = None
     try:
@@ -436,56 +428,52 @@ def _crawl_page_impl(url, driver, extension, extension_data, wait, timeout, log_
         driver.set_page_load_timeout(timeout)
 
         # prepare for crawl
-        if parent_span:
-            parent_span.add_event("prepare_selenium_crawl")
+        span.add_event("prepare_selenium_crawl")
         success, err = prepare_selenium_crawl(driver, url, extension=extension, extension_data=extension_data, log_prefix=log_prefix)
         if not success:
+            span.set_status(Status(StatusCode.ERROR, err or "Unknown error"))
             return False, err
 
         # start crawl
-        if parent_span:
-            parent_span.add_event("page_load_start")
+        span.add_event("page_load_start")
         start_time = time.time()
         driver.get(url)
 
         # wait requested settle time
-        if parent_span:
-            parent_span.add_event("settle_wait_start", {"wait_seconds": wait})
+        span.add_event("settle_wait_start", {"wait_seconds": wait})
         time.sleep(wait)
 
         # operate after crawl
-        if parent_span:
-            parent_span.add_event("operate_selenium_crawl")
+        span.add_event("operate_selenium_crawl")
         success, err = operate_selenium_crawl(driver, url, extension=extension, extension_data=extension_data, log_prefix=log_prefix)
         if not success:
+            span.set_status(Status(StatusCode.ERROR, err or "Unknown error"))
             return False, err
 
         # wait for page load complete if time budget allows
-        if parent_span:
-            parent_span.add_event("wait_for_page_ready")
+        span.add_event("wait_for_page_ready")
         while time.time() - start_time < timeout:
             if driver.execute_script("return document.readyState") == "complete":
-                if parent_span:
-                    parent_span.add_event("page_ready", {"elapsed_seconds": time.time() - start_time})
+                span.add_event("page_ready", {"elapsed_seconds": time.time() - start_time})
                 break
             time.sleep(0.5)
 
     except TimeoutException as e:
-        if parent_span:
-            parent_span.add_event("timeout_exception", {"elapsed_seconds": time.time() - start_time if start_time else 0})
+        span.record_exception(e)
+        span.set_status(Status(StatusCode.ERROR, "page rendering timed out"))
         return False, f"Page rendering timed out after {time.time() - start_time:.2f} seconds"
     except WebDriverException as e:
-        if parent_span:
-            parent_span.add_event("webdriver_exception", {"error": e.msg})
+        span.record_exception(e)
+        span.set_status(Status(StatusCode.ERROR, e.msg))
         return False, e.msg.replace('unknown error: ', '')
     except Exception as e:
-        if parent_span:
-            parent_span.add_event("exception", {"error": str(e)})
+        span.record_exception(e)
+        span.set_status(Status(StatusCode.ERROR, str(e)))
         return False, str(e)
 
     return True, None
 
-
+@traced("selenium.take_screenshot")
 def take_screenshot(driver, mode='full', log_prefix=''):
     """ takes a screenshot of the current page and returns it as a base64-encoded string.
     """
@@ -503,7 +491,7 @@ def take_screenshot(driver, mode='full', log_prefix=''):
             if width < 1:
                 width = 2048
             elif width > 16384:
-                width = 16384 
+                width = 16384
             if height < 1:
                 height = 1152
             elif height > 32768:
@@ -544,9 +532,12 @@ def split_hostname(hostname):
 
     return local_part, domain_part
 
+@traced("selenium.get_hostinfo")
 def get_hostinfo(driver, log_prefix=''):
     """ extracts host information using Selenium/Chromium network performance logs.
     """
+
+    span = trace.get_current_span()
 
     # Ask selenium for performance logs
     try:
@@ -567,6 +558,7 @@ def get_hostinfo(driver, log_prefix=''):
             obj = json.loads(msg)
         except Exception as e:
             print(f"{log_prefix}ERROR: failed parsing log entry: {e}", file=sys.stderr)
+            span.add_event("log.parse_error", {"log_entry": str(e)})
             webres6_hostinfo_parsed.labels(type='error').inc()
             continue
 
@@ -582,6 +574,7 @@ def get_hostinfo(driver, log_prefix=''):
             webres6_hostinfo_parsed.labels(type='without_ip').inc()
             if debug_hostinfo:
                 print(f"{log_prefix}WARNING: No valid IP address found in {response}", file=sys.stderr)
+                span.add_event("log.missing_ip", {"response": str(response)})
             continue
         # Strip brackets from IPv6 addresses
         if remote_ip and remote_ip.startswith('[') and remote_ip.endswith(']'):
@@ -593,6 +586,7 @@ def get_hostinfo(driver, log_prefix=''):
         except ValueError as e:
             webres6_hostinfo_parsed.labels(type='invalid_ip').inc()
             print(f"{log_prefix}WARNING: Error parsing IP address: {remote_ip} - {e}", file=sys.stderr)
+            span.add_event("log.invalid_ip", {"ip_address": remote_ip, "error": str(e)})
             ip = None
         # add resource statistics
         match ip.version:
@@ -630,6 +624,7 @@ def get_hostinfo(driver, log_prefix=''):
             webres6_hostinfo_parsed.labels(type='without_hostname').inc()
             if debug_hostinfo:
                 print(f"{log_prefix}WARNING: No valid hostname found in URL {response.get('url')}", file=sys.stderr)
+                span.add_event("log.missing_hostname", {"url": response.get('url')})
             continue
 
         # Create a new host entry if it does not exist yet
@@ -643,6 +638,9 @@ def get_hostinfo(driver, log_prefix=''):
                 'protocols': {},
                 'subject_alt_names': set()
             }
+            span.add_event("host.new", {"hostname": url.hostname, "domain_part": domain_part, "local_part": local_part})
+        else:
+            span.add_event("host.update", {"hostname": url.hostname})
 
         # Add the URLs and additional IPs
         hosts[url.hostname]['urls'].add(url.geturl())
@@ -658,7 +656,7 @@ def get_hostinfo(driver, log_prefix=''):
 
     return hosts
 
-
+@traced("selenium.cleanup_crawl")
 def cleanup_crawl(driver, extension=None, extension_data=None, log_prefix=''):
     """Cleans up the Selenium WebDriver instance by safely quitting it.
 
@@ -678,6 +676,7 @@ def cleanup_crawl(driver, extension=None, extension_data=None, log_prefix=''):
         print(f"{log_prefix}ERROR: failed quitting WebDriver: {e.msg}", file=sys.stderr)
     return
 
+@traced("check_selenium")
 def check_selenium(log_prefix=''):
     """ Checks if Selenium is available and working properly.
     """
@@ -693,6 +692,7 @@ def check_selenium(log_prefix=''):
     except Exception as e:
         return False, f'error: {str(e)}'
 
+@traced("add_dnsprobe_info")
 def add_dnsprobe_info(hosts):
     """ Adds DNSProbe information for each unique IP address in the hosts dictionary.
     """
@@ -701,57 +701,44 @@ def add_dnsprobe_info(hosts):
     noerror = 0
     servfail = 0
 
-    for hostname, info in hosts.items():
-        dnsprobe_data = {}
+    @traced("dnsprobe.resolve6only")
+    def _dnsprobe_resolve6only(hostname):
+        span = trace.get_current_span()
+        request_url = f"{dnsprobe_api_url}/dnsprobe/resolve6only({hostname})"
         try:
-            request_url = f"{dnsprobe_api_url}/dnsprobe/resolve6only({hostname})"
-
-            # Add explicit span for individual DNS probe request
-            if tracer:
-                with tracer.start_as_current_span("dnsprobe.resolve6only") as span:
-                    span.set_attributes({
-                        "dnsprobe.hostname": hostname,
-                        "dnsprobe.request_url": request_url,
-                    })
-                    response = dnsprobe.request('GET', request_url, timeout=10)
-                    span.set_attribute("http.status_code", response.status)
-
-                    if response.status == 200:
-                        dnsprobe_data = response.json()
-                        dnsprobe_data['ts'] = datetime.fromisoformat(dnsprobe_data['ts'])
-                        total += 1
-                        span.set_attributes({
-                            "dnsprobe.success": dnsprobe_data.get('success', False),
-                            "dnsprobe.rcode": dnsprobe_data.get('rcode', 'unknown'),
-                            "dnsprobe.aaaa_count": len(dnsprobe_data.get('aaaa_records', [])),
-                            "dnsprobe.elapsed": dnsprobe_data.get('time_elapsed', -1),
-                        })
-                    else:
-                        span.set_status(Status(StatusCode.ERROR, f"HTTP {response.status}"))
-                        print(f"\tWARNING: DNSProbe lookup failed for {hostname}: GET {request_url} => {response.status}", file=sys.stderr)
+            response = dnsprobe.request('GET', request_url, timeout=10)
+            if response.status == 200:
+                dnsprobe_data = response.json()
+                dnsprobe_data['ts'] = datetime.fromisoformat(dnsprobe_data['ts'])
+                span.set_attributes({
+                    "dnsprobe.success": dnsprobe_data.get('success', False),
+                    "dnsprobe.rcode": dnsprobe_data.get('rcode', 'unknown'),
+                    "dnsprobe.aaaa_count": len(dnsprobe_data.get('aaaa_records', [])),
+                    "dnsprobe.elapsed": dnsprobe_data.get('time_elapsed', -1),
+                })
+                return dnsprobe_data
             else:
-                response = dnsprobe.request('GET', request_url, timeout=10)
-                if response.status == 200:
-                    dnsprobe_data = response.json()
-                    dnsprobe_data['ts'] = datetime.fromisoformat(dnsprobe_data['ts'])
-                    total += 1
-                else:
-                    print(f"\tWARNING: DNSProbe lookup failed for {hostname}: GET {request_url} => {response.status}", file=sys.stderr)
-
-            if dnsprobe_data.get('success', False):
-                success += 1
-                dnsprobe_data['ipv6_only_ready'] = True
-            elif dnsprobe_data.get('rcode', '') == 'no error':
-                noerror += 1
-                dnsprobe_data['ipv6_only_ready'] = True
-            elif dnsprobe_data.get('rcode', '') == 'serv fail':
-                servfail += 1
-                dnsprobe_data['ipv6_only_ready'] = False
+                span.set_status(Status(StatusCode.ERROR, f"HTTP {response.status}"))
+                print(f"\tWARNING: DNSProbe lookup failed for {hostname}: GET {request_url} => {response.status}", file=sys.stderr)
+                return {}
         except Exception as e:
+            span.record_exception(e)
+            span.set_status(Status(StatusCode.ERROR, f"Exception during DNSProbe lookup: {str(e)}"))
             print(f"\tWARNING: DNSProbe lookup failed for {hostname}: {e}", file=sys.stderr)
-            dnsprobe_data = None
+            return {}
 
-        # Add DNSProbe data to host info
+    for hostname, info in hosts.items():
+        total += 1
+        dnsprobe_data = _dnsprobe_resolve6only(hostname)
+        if dnsprobe_data.get('success', False):
+            success += 1
+            dnsprobe_data['ipv6_only_ready'] = True
+        elif dnsprobe_data.get('rcode', '') == 'no error':
+            noerror += 1
+            dnsprobe_data['ipv6_only_ready'] = True
+        elif dnsprobe_data.get('rcode', '') == 'serv fail':
+            servfail += 1
+            dnsprobe_data['ipv6_only_ready'] = False
         info['dns'] = dnsprobe_data
 
     return total, success, noerror, servfail
@@ -803,7 +790,7 @@ def get_ipv6_only_score(hosts):
 
     return overall_score, http_score, dns_score, ipv6_only_ready
 
-
+@traced("add_whois_info")
 def add_whois_info(hosts):
     """Adds WHOIS information for each unique IP address in the hosts dictionary.
 
@@ -914,46 +901,24 @@ def gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, re
     return f"{int(ts.timestamp()):x}-{subject}-{report_node}"
 
 
-def crawl_and_analyze_url(url, wait=2, timeout=10, scoreboard_entry=False,
-                          ext=None, screenshot_mode=None,
-                          lookup_whois=False, report_id = None, report_node='unknown'):
-    """ Crawls and analyzes the given URL, returning the results as a JSON object.
-    """
-
-    # Start OpenTelemetry span
-    if tracer:
-        with tracer.start_as_current_span("crawl_and_analyze_url") as span:
-            span.set_attributes({
-                "webres6.url": url.geturl(),
-                "webres6.wait_time": wait,
-                "webres6.timeout": timeout,
-                "webres6.screenshot_mode": screenshot_mode or "none",
-                "webres6.whois_enabled": lookup_whois,
-                "webres6.extension": ext or "none",
-                "webres6.scoreboard_entry": scoreboard_entry,
-            })
-            try:
-                result, status_code = _crawl_and_analyze_url_impl(
-                    url, wait, timeout, scoreboard_entry, ext, screenshot_mode,
-                    lookup_whois, report_id, report_node, span
-                )
-                return result, status_code
-            except Exception as e:
-                span.record_exception(e)
-                span.set_status(Status(StatusCode.ERROR, str(e)))
-                raise
-    else:
-        return _crawl_and_analyze_url_impl(
-            url, wait, timeout, scoreboard_entry, ext, screenshot_mode,
-            lookup_whois, report_id, report_node, None
-        )
-
-
-def _crawl_and_analyze_url_impl(url, wait, timeout, scoreboard_entry, ext,
-                                 screenshot_mode, lookup_whois, report_id,
-                                 report_node, parent_span):
+@traced("crawl_and_analyze_url")
+def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
+                          screenshot_mode, lookup_whois,
+                          report_id, report_node):
     """ Internal implementation of crawl_and_analyze_url with optional span parameter.
     """
+
+    # initialize otel span
+    span = trace.get_current_span()
+    span.set_attributes({
+        "webres6.url": url.geturl(),
+        "webres6.wait_time": wait,
+        "webres6.timeout": timeout,
+        "webres6.screenshot_mode": screenshot_mode or "none",
+        "webres6.whois_enabled": lookup_whois,
+        "webres6.extension": ext or "none",
+        "webres6.scoreboard_entry": scoreboard_entry,
+    })
 
     # collect timing stats
     timings = {}
@@ -962,6 +927,7 @@ def _crawl_and_analyze_url_impl(url, wait, timeout, scoreboard_entry, ext,
 
     def push_timing(key):
         nonlocal last_ts
+        nonlocal span
         now = datetime.now(timezone.utc)
         spent = (now - last_ts).total_seconds()
         timings[key] = spent
@@ -971,6 +937,7 @@ def _crawl_and_analyze_url_impl(url, wait, timeout, scoreboard_entry, ext,
     # init logging
     if not report_id:
         report_id = gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, report_node)
+    span.set_attribute("webres6.report_id", report_id)
     lp = f"res6 {report_id:.25} "
     webres6_tested_total.inc()
     print(f"{lp}testing {url.geturl().translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
@@ -982,12 +949,19 @@ def _crawl_and_analyze_url_impl(url, wait, timeout, scoreboard_entry, ext,
     if not driver:
         webres6_tested_results.labels(result='errors').inc()
         return gen_json(url, report_id=report_id, error=f'Could not initialize selenium: {err}', error_code=503), 503
-    browser_info = { 
+    browser_info = {
             'browserName': driver.capabilities.get('browserName', 'unknown'),
             'browserVersion': driver.capabilities.get('browserVersion', 'unknown'),
             'platformName': driver.capabilities.get('platformName', 'unknown'),
             'acceptInsecureCerts': driver.capabilities.get('acceptInsecureCerts', False),
         }
+    span.set_attributes({
+        "webres6.browser.name": browser_info.get('browserName', 'unknown'),
+        "webres6.browser.version": browser_info.get('browserVersion', 'unknown'),
+        "webres6.browser.platform": browser_info.get('platformName', 'unknown'),
+        "webres6.browser.accept_insecure_certs": browser_info.get('acceptInsecureCerts', False),
+    })
+
     push_timing('init')
 
     # perform crawl
@@ -1035,15 +1009,20 @@ def _crawl_and_analyze_url_impl(url, wait, timeout, scoreboard_entry, ext,
     print(f"{lp}website is {'' if ipv6_only_ready else 'NOT '}ipv6-only ready (overall={f"{score*100:.1f}%" if score is not None else 'N/A'}, http={f"{http_score*100:.1f}%" if http_score is not None else 'N/A'}, dns={f"{dns_score*100:.1f}%" if dns_score is not None else 'N/A'})", file=sys.stderr)
     if ipv6_only_ready is True:
         webres6_tested_results.labels(result='ipv6_only_ready').inc()
+        span.set_attribute("webres6.ipv6_only_ready", True)
     else:
         webres6_tested_results.labels(result='not_ipv6_only_ready').inc()
+        span.set_attribute("webres6.ipv6_only_ready", False)
 
     if http_score is not None:
         webres6_scores_total.labels(score_type='http').observe(http_score)
+        span.set_attribute("webres6.http_score", http_score)
     if dns_score is not None:
         webres6_scores_total.labels(score_type='dns').observe(dns_score)
+        span.set_attribute("webres6.dns_score", dns_score)
     if score is not None:
         webres6_scores_total.labels(score_type='overall').observe(score)
+        span.set_attribute("webres6.overall_score", score)
 
     # generate final report
     _, domain = split_hostname(url.hostname)
@@ -1062,19 +1041,6 @@ def _crawl_and_analyze_url_impl(url, wait, timeout, scoreboard_entry, ext,
     push_timing('finalize')
     print(f"{lp}time spent: total={sum(timings.values()):.2f}s " +
           ' '.join([f"{k}={v:.3f}s" for k, v in timings.items()]), file=sys.stderr)
-
-    # Add span attributes for the results
-    if parent_span:
-        parent_span.set_attributes({
-            "webres6.report_id": report_id,
-            "webres6.ipv6_only_ready": ipv6_only_ready if ipv6_only_ready is not None else False,
-            "webres6.ipv6_score": score if score is not None else 0,
-            "webres6.http_score": http_score if http_score is not None else 0,
-            "webres6.dns_score": dns_score if dns_score is not None else 0,
-            "webres6.hosts_found": len(hosts),
-            "webres6.browser.name": browser_info.get('browserName', 'unknown'),
-            "webres6.browser.version": browser_info.get('browserVersion', 'unknown'),
-        })
 
     # send response
     return report, 200
@@ -1129,6 +1095,9 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
         rr.headers['Cache-Control'] = f"private, max-age={ttl:.0f}"
         return rr, 303
 
+    # initialize otel
+    span = trace.get_current_span()
+
     # Try to lookup in Valkey cache first if available
     cache_key = sha256(f"{url}:{wait}:{timeout}:{ext}:{screenshot_mode}:{lookup_whois}".encode('utf-8')).hexdigest()
     json_result = storage_manager.get_result_cacheline(cache_key)
@@ -1144,6 +1113,12 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
         data = json_result.get('data', None)
         print(f"{lp}sending cached {type} age={cache_age.total_seconds():.1f}s {url.geturl().translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
         print(f"{lp}options: wait={wait}s, timeout={timeout}s, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
+        span.add_event("webres6.cache_hit", {
+            "webres6.cache_hit_type": type,
+            "webres6.cache_age_seconds": cache_age.total_seconds(),
+        })
+        span.set_attribute("webres6.report_id", report_id)
+
         if type == 'sentinel':
             response = jsonify({ 'error': 'Crawl in progress - please come back later', 'report_id': report_id })
             response.headers['Refresh'] = '15'
@@ -1158,6 +1133,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
     ts = datetime.now(timezone.utc)
     report_id = gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, report_node)
     lp = f"res6 {report_id} "
+    span.set_attribute("webres6.report_id", report_id)
 
     # Put a sentinel entry into the cache to avoid multiple concurrent crawls for the same URL
     sentinel = { 'type': 'sentinel', 'ts': ts, 'report_id': report_id,
@@ -1174,10 +1150,12 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
     if error_code != 200:
         # remove sentinel in case of crawl error to allow retries
         storage_manager.delete_result_cacheline(cache_key)
+        span.add_event("webres6.crawl_error", {"error_code": error_code})
         return json_result, error_code
 
     # Archive the result in storage
     archived = storage_manager.archive_result(report_id, json_result)
+    span.add_event("webres6.crawl_success", attributes={"archived": archived})
 
     # Cache the result in storage if archiving was successful
     storage_manager.delete_result_cacheline(cache_key)  # remove sentinel
@@ -1192,9 +1170,11 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
             scoreboard.enter(json_result)
 
         # redirect to report URL to improve client caching
+        span.add_event("webres6.redirect_to_archive", {"report_id": report_id, "result_cache_ttl": result_cache_ttl})
         return redirect_to_report(report_id, result_cache_ttl, storage_manager)
 
     else:
+        span.add_event("webres6.return_result_direct", {"report_id": report_id, "error_code": error_code})
         return json_result, error_code
 
 
