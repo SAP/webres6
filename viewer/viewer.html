@@ -63,7 +63,7 @@ SPDX-License-Identifier: Apache-2.0
           <input type="checkbox" id="scoreboardSwitch" name="scoreboard" value="true" checked>
         </div>
         <div class="input-parameter-container" id="submit-button">
-          <button type="submit">Analyze</button>
+          <button type="submit" class="clickable">Analyze</button>
         </div>
       </form>
     </div>
@@ -79,9 +79,9 @@ SPDX-License-Identifier: Apache-2.0
         </colgroup>
         <thead>
           <tr>
-            <th class="scoreboard-ipv6only-score sortable" data-sort="ipv6_only_score" style="cursor: pointer;">Score</th>
-            <th class="scoreboard-url sortable" data-sort="url" style="cursor: pointer;">URL</th>
-            <th class="scoreboard-timestamp sortable" data-sort="ts" style="cursor: pointer;">Last Tested</th>
+            <th class="scoreboard-ipv6only-score sortable clickable" data-sort="ipv6_only_score">Score</th>
+            <th class="scoreboard-url sortable clickable" data-sort="url"">URL</th>
+            <th class="scoreboard-timestamp sortable clickable" data-sort="ts">Last Tested</th>
           </tr>
         </thead>
         <tbody>
@@ -117,7 +117,7 @@ SPDX-License-Identifier: Apache-2.0
         <div class="overview-item status error" class="overview-item">
           <strong>Error: <span class="placeholder"/></strong>
         </div>
-        <div class="overview-item status ipv6only-score">
+        <div class="overview-item status ipv6only-score clickable">
           <strong>IPv6-Only Score: </strong><progress class="ipv6only-score" max="1"></progress> <span class="percentage"></span>
         </div>
         <div class="overview-item status hide hidden-score ipv6only-http-score">
@@ -168,10 +168,10 @@ SPDX-License-Identifier: Apache-2.0
         <div class="timings template">
           <strong>Time spent:</strong> <span class="placeholder"/>
         </div>
-        <div class="archivelink template">
+        <div class="archivelink template clickable">
           <a target="_blank">Archive Link</a>
         </div>
-        <div class="rawdata template">
+        <div class="rawdata template clickable" >
           <a target="_blank">Download JSON</a>
         </div>
       </div>
@@ -179,14 +179,14 @@ SPDX-License-Identifier: Apache-2.0
     <div class="contents-container">
       <div class="contents-container-header">
         <h2>Introduction / Help</h2>
-        <div class="help-hide-button" style="float: right; cursor: pointer; color: lightgray;" onclick="$(this).closest('.contents-container').hide()">&#x2715;</div>
+        <div class="help-hide-button clickable" style="float: right; color: lightgray;" onclick="$(this).closest('.contents-container').hide()">&#x2715;</div>
       </div>
       <p>This is the <i>IPv6 Web Resource Checker (webres6)</i>. It checks IPv6-only readiness of a Web page or app 
         by crawling a given URL using Selenium and analyzes whether all page resources have been loaded via IPv6.</p>
       <p>The IPv6-only Scores show the proportion of resources that could successfully be loaded IPv6-only based on HTTP and DNS transactions.</p>
       <p><i>Webres6</i> was inspired by Paul Marks' <i><a href="https://github.com/pmarks-net/ipvfoo">IPvFoo</a></i> browser extension.
         While <i>IPvFoo</i> is more flexible and interactive, <i>Webres6</i> can be run as a service and allows IPv6-only testing without installation or IPv6 on the users' client as well as automated analysis.</p>
-      <p>Further documentation can be found on the <a href="https://github.com/sap/webres6">IPv6 Web Resource Checker</a> project page on GitHub.</p>
+      <p>Several elements in the result are clickable to see further details or toggle information displayed. Further documentation can be found on the <a href="https://github.com/sap/webres6">IPv6 Web Resource Checker</a> project page on GitHub.</p>
       <h3>Limitations</h3>
       <p>The Selenium automation just loads the URL in a "fresh" browser.
           No efforts are taken to hide this being a robot.

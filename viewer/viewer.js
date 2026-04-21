@@ -226,7 +226,7 @@ function renderHostsTable(data, hostsContainer) {
           dnsCell.text('✘');
           dnsCell.attr('title', 'Hostname cannot be resolved from an IPv6-only resolver');
           if (info.dns.unbound_trace) {
-            dnsCell.css('cursor', 'pointer');
+            dnsCell.addClass('clickable')
             dnsCell.on('click', function() {
               const traceWindow = window.open('', '_blank');
               traceWindow.document.title = `Unbound debug trace for ${hostname}`;
@@ -266,11 +266,15 @@ function renderHostsTable(data, hostsContainer) {
           // fill data
           asnCell.text(info.ips[ip].whois.asn || '');
           asnCell.attr('title', info.ips[ip].whois.asn || '');
+          asnCell.addClass('clickable');
           asDescrCell.text(info.ips[ip].whois.asn_description || '');
           asDescrCell.attr('title', info.ips[ip].whois.network.name || '');
+          asDescrCell.addClass('clickable');
           ipNetnameCell.text(info.ips[ip].whois.network.name || '');
           ipNetnameCell.attr('title', ip);
+          ipNetnameCell.addClass('clickable');
           ipCell.attr('title', info.ips[ip].whois.network.name || '');
+          ipCell.addClass('clickable');
           // add toggles
           asnCell.on('click', function(e) { asnCell.addClass('hide'); asDescrCell.removeClass('hide'); } );
           asDescrCell.on('click', function(e) { asDescrCell.addClass('hide'); asnCell.removeClass('hide'); } );
@@ -311,7 +315,7 @@ function renderHostsTable(data, hostsContainer) {
         });
         hostInfoDiv.append(sanList);
       }
-      hostsTableBlock.find('td.hostname').on('click', function(e) {
+      hostsTableBlock.find('td.hostname').addClass('clickable').on('click', function(e) {
         row.toggle();
       });
       hostsTableBlock.append(row);
@@ -548,6 +552,7 @@ function renderScoreboard(data, resultsLimit) {
     resultLink.attr('href', `#report:${entry.report_id}`);
     resultLink.text(entry.url);
     resultLink.attr('title', entry.url);
+    resultLink.addClass('clickable')
     resultLink.on('click', async function(e) { e.preventDefault(); await analyzeReport(entry.report_id); window.location.hash = `report:${entry.report_id}`; });
     row.find('.scoreboard-timestamp').text(new Date(entry.ts).toLocaleString('en-UK', timeFormatOptions));
     scoreboardTableBody.append(row);
