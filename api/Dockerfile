@@ -30,8 +30,10 @@ RUN mkdir ./serverconfig
 RUN curl -O https://publicsuffix.org/list/public_suffix_list.dat
 
 # Create non-root user and switch to it
-RUN groupadd -g 999 app && \
-    useradd -u 999 -M -d /app -g app app
+RUN mkdir /app/run && \
+    chown 999:999 /app/run && \
+    groupadd -g 999 app && \
+    useradd -u 999 -M -d /app/run -g app app 
 USER app
 
 # Start the app with Gunicorn

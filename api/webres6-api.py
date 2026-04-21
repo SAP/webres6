@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 import urllib3
 import flask
 from flask import Flask, redirect, request, jsonify, send_from_directory
-from prometheus_client import Counter, Gauge, Histogram ,disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry, multiprocess, disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 
 # OpenTelemetry imports
 from opentelemetry import trace
@@ -1422,7 +1422,9 @@ def create_http_app():
     @app.route('/metrics', methods=['GET'])
     def metrics():
         if check_auth(request):
-            return app.response_class(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+            registry = CollectorRegistry()
+            multiprocess.MultiProcessCollector(registry)
+            return app.response_class(generate_latest(registry), mimetype=CONTENT_TYPE_LATEST)
         else:
             return app.response_class('Authentication required', mimetype='text/plain', status=401, headers={'WWW-Authenticate': 'Basic realm="webres6 admin"'})
 
@@ -1486,6 +1488,11 @@ def signal_handler(sig, frame):
         print("Persisting local cache to disk...", file=sys.stderr)
         storage_manager.persist()
     sys.exit(0)
+
+# hadnle worker exit in gunicorn
+def child_exit(server, worker):
+    # tell prometheus client
+    multiprocess.mark_process_dead(worker.pid)
 
 # main entry point
 if __name__ == "__main__":
