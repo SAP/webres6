@@ -20,7 +20,7 @@ from flask import Flask, jsonify
 import unbound
 
 # config/flag variables
-webres6_version  = "1.1.0"
+webres6_version  = "1.4.0"
 app_home            = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 debug_unbound       = 'unbound'    in getenv("DEBUG", '').lower().split(',')
 unbound_v6_conf     = getenv("UNBOUND_V6ONLY_CONF", os.path.join(app_home, "unbound.v6only.conf"))
@@ -74,6 +74,32 @@ def res_v6only(hostname):
         except ValueError:
             print(f"WARNING: could not parse resolved IP addresses for {hostname}", file=sys.stderr)
 
+    # initialize result dict
+    jsres = {
+        'hostname': hostname,
+        'success': bool(status==0 and result.havedata),
+        'time_elapsed': elapsed,
+        'ts': ts,
+    }
+
+    # check unbound debug log for additional information in case of SERVFAIL or if debugging is enabled
+    if rcode_str in ['serv fail'] or debug_unbound:
+        debug_temp_file.seek(0)
+        debug_trace_stripped = ''
+        for line in debug_temp_file:
+            # check unbound log for nxdomain fallback limit exceeded message indicating
+            # inconclusive results due to too many IPv4-only nameservers in the rotation
+            if 'request has exceeded the maximum number of fallback nxdomain nameserver lookups' in line \
+            or 'request has exceeded the maximum number of nxdomain nameserver lookups' in line:
+                rcode_str = 'nameserver nxdomain limit exceeded'
+            # strip log
+            parts = line.split(' ')
+            if len(parts) > 3:
+                debug_trace_stripped += parts[0] + ' ' + ' '.join(parts[3:])
+            else:
+                debug_trace_stripped += line
+        jsres['unbound_trace'] = b64encode((debug_trace_stripped).encode('utf-8')).decode('ascii')
+
     # log information to stderr
     print(f"{ts.isoformat()} res_v6only {hostname} elapsed={elapsed:.2f} status={status} rcode={rcode_str.replace(' ', '_')} {(('ips=['+' '.join([str(ip) for ip in ips])+']') if len(ips) >0 else '' )}", file=sys.stderr)
     if debug_unbound:
@@ -83,29 +109,13 @@ def res_v6only(hostname):
             print("\t" + line, end='', file=sys.stderr)
         print(f"\n{ts.isoformat()} res_v6only {hostname} <<< unbound debug output <<<", file=sys.stderr)
 
-    # construct result dict
-    jsres = {
-        'hostname': hostname,
-        'success': bool(status==0 and result.havedata),
-        'rcode': rcode_str,
-        'time_elapsed': elapsed,
-        'ts': ts,
-    }
+    # add additional information to result dict
+    jsres['rcode'] = rcode_str
     if result:
         jsres['nxdomain'] = bool(result.nxdomain)
         jsres['canonical_name'] = result.canonname
     if len(ips)>0:
         jsres['aaaa_records'] = [str(ip) for ip in ips]
-    if rcode_str in ['serv fail'] or debug_unbound:
-        debug_temp_file.seek(0)
-        debug_trace_stripped = ''
-        for line in debug_temp_file:
-            parts = line.split(' ')
-            if len(parts) > 3:
-                debug_trace_stripped += parts[0] + ' ' + ' '.join(parts[3:])
-            else:
-                debug_trace_stripped += line
-        jsres['unbound_trace'] = b64encode((debug_trace_stripped).encode('utf-8')).decode('ascii')
 
     return jsres
 

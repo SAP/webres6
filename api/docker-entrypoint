@@ -25,13 +25,14 @@ export PYTHONUNBUFFERED=1
 
 # Directory for gunicorn and prometheus
 export XDG_RUNTIME_DIR="/app/run"
+mkdir -p "${XDG_RUNTIME_DIR}"
 export PROMETHEUS_MULTIPROC_DIR="/app/run/prometheus-mp"
+mkdir -p "${PROMETHEUS_MULTIPROC_DIR}"
 
 set -e
 
 if [ -z "$1" ]; then
   echo "Starting webres6-api via gunicorn on ${LISTEN_ADDR}:${PORT} with timeout ${TIMEOUT}..." >&2
-  mkdir -p "${PROMETHEUS_MULTIPROC_DIR}"
   gunicorn -k gthread --bind "${LISTEN_ADDR}:${PORT}" --timeout ${TIMEOUT} $@ 'webres6-api:create_http_app()'
 else
   echo "Starting webres6-api with custom arguments: $@" >&2

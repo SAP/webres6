@@ -215,16 +215,21 @@ function renderHostsTable(data, hostsContainer) {
       row.append(dnsCell);
       const hostsTableBlockHead = row.find('td');
       // set DNS status
-      if (info.dns && info.dns.ipv6_only_ready !== undefined) {
+      if (info.dns) {
         hasDNSInfo = true;
-        if (info.dns.ipv6_only_ready === true) {
+        if (info.dns.ipv6_only_ready) {
           dnsCell.addClass('dns-status-ipv6-only-ready');
           dnsCell.text('✔');
           dnsCell.attr('title', 'Hostname can be resolved from an IPv6-only resolver');
         } else {
-          dnsCell.addClass('dns-status-not-ipv6-only-ready');
-          dnsCell.text('✘');
-          dnsCell.attr('title', 'Hostname cannot be resolved from an IPv6-only resolver');
+          if (info.dns.ipv6_only_ready === undefined) {
+            dnsCell.addClass('dns-status-ipv6-only-unknown');
+            dnsCell.text('?');
+          } else {
+            dnsCell.addClass('dns-status-not-ipv6-only-ready');
+            dnsCell.text('✘');
+          }
+          dnsCell.attr('title', (info.dns.rcode ? info.dns.rcode : '') + ' - Hostname cannot be resolved from an IPv6-only resolver:');
           if (info.dns.unbound_trace) {
             dnsCell.addClass('clickable')
             dnsCell.on('click', function() {

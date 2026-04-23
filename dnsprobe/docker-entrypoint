@@ -16,6 +16,12 @@ export PORT TIMEOUT
 export LANG='C.utf8'
 export LC_ALL='C.utf8'
 
+# Directory for gunicorn and prometheus
+export XDG_RUNTIME_DIR="/app/run"
+mkdir -p "${XDG_RUNTIME_DIR}"
+chown app:app "${XDG_RUNTIME_DIR}"
+export HOME="${XDG_RUNTIME_DIR}"
+
 set -e
 
-gunicorn --bind "[::]:${PORT}" --timeout ${TIMEOUT} $@ 'dnsprobe:create_http_app()'
+gunicorn -k gthread --bind "[::]:${PORT}" --timeout ${TIMEOUT} $@ 'dnsprobe:create_http_app()'
