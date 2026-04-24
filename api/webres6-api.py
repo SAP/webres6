@@ -19,6 +19,8 @@ from os import getenv
 from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
+from tempfile import mkdtemp
+from shutil import rmtree
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.client_config import ClientConfig
@@ -155,6 +157,7 @@ def traced(span_name):
 
 
 # Prometheus metrics
+prometheus_mp_temp_dir = None
 disable_created_metrics()
 webres6_tested_total = Counter('webres6_tested_total', 'Total number of checks performed')
 webres6_tested_results = Counter('webres6_results_total', 'Total number of results for checks performed', ['result'])
@@ -167,6 +170,7 @@ webres6_hostinfo_parsed = Counter('webres6_hostinfo_parsed_total', 'Total number
 webres6_resources_total = Counter('webres6_resources_total', 'Total number of resources per protocol', ['protocol'])
 webres6_whois_cache_size = Gauge('webres6_whois_cache_size_total', 'Number of entries in whois cache')
 webres6_whois_cache_size.set_function(lambda: storage_manager.whois_cache_size() if storage_manager else 0)
+webres6_dnsprobe_results_total = Counter('webres6_dnsprobe_results_total', 'Total number of DNSProbe results', ['rcode'])
 
 # load custom modules (allows overrides in serverconfig directory)
 sys.path.insert(0, srvconfig_dir)
@@ -693,13 +697,14 @@ def check_selenium(log_prefix=''):
         return False, f'error: {str(e)}'
 
 @traced("add_dnsprobe_info")
-def add_dnsprobe_info(hosts):
+def add_dnsprobe_info(hosts, log_prefix=''):
     """ Adds DNSProbe information for each unique IP address in the hosts dictionary.
     """
     total = 0
     success = 0
     noerror = 0
     servfail = 0
+    other_rcode = 0
 
     @traced("dnsprobe.resolve6only")
     def _dnsprobe_resolve6only(hostname):
@@ -719,17 +724,18 @@ def add_dnsprobe_info(hosts):
                 return dnsprobe_data
             else:
                 span.set_status(Status(StatusCode.ERROR, f"HTTP {response.status}"))
-                print(f"\tWARNING: DNSProbe lookup failed for {hostname}: GET {request_url} => {response.status}", file=sys.stderr)
+                print(f"{log_prefix}WARNING: dnsprobe lookup failed for {hostname}: GET {request_url} => {response.status}", file=sys.stderr)
                 return {}
         except Exception as e:
             span.record_exception(e)
             span.set_status(Status(StatusCode.ERROR, f"Exception during DNSProbe lookup: {str(e)}"))
-            print(f"\tWARNING: DNSProbe lookup failed for {hostname}: {e}", file=sys.stderr)
+            print(f"{log_prefix}WARNING: dnsprobe lookup failed for {hostname}: {e}", file=sys.stderr)
             return {}
 
     for hostname, info in hosts.items():
         total += 1
         dnsprobe_data = _dnsprobe_resolve6only(hostname)
+        webres6_dnsprobe_results_total.labels(rcode=dnsprobe_data.get('rcode', 'unknown')).inc()
         if dnsprobe_data.get('success', False):
             success += 1
             dnsprobe_data['ipv6_only_ready'] = True
@@ -739,9 +745,13 @@ def add_dnsprobe_info(hosts):
         elif dnsprobe_data.get('rcode', '') == 'serv fail':
             servfail += 1
             dnsprobe_data['ipv6_only_ready'] = False
+        else:
+            other_rcode += 1
+            # inconclusive answer, don't set ipv6_only_ready flag
         info['dns'] = dnsprobe_data
 
-    return total, success, noerror, servfail
+    print(f"{log_prefix}dnsprobe lookups completed: {total} total, {noerror} no error, {success} success, {servfail} servfail, {other_rcode} inconclusive", file=sys.stderr)
+    return total
 
 
 def get_ipv6_only_score(hosts):
@@ -995,8 +1005,7 @@ def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
 
     # add dnsprobe info if configured
     if dnsprobe:
-        total, success, noerror, servfail = add_dnsprobe_info(hosts)
-        print(f"{lp}dnsprobe lookups completed: {total} total, {noerror} no error, {success} success, {servfail} servfail", file=sys.stderr)
+        add_dnsprobe_info(hosts, log_prefix=lp)
         push_timing('dnsprobe')
 
     if lookup_whois and enable_whois:
@@ -1487,6 +1496,9 @@ def signal_handler(sig, frame):
     if storage_manager and storage_manager.can_persist():
         print("Persisting local cache to disk...", file=sys.stderr)
         storage_manager.persist()
+    if prometheus_mp_temp_dir:
+        print(f"Removing temporary directory {prometheus_mp_temp_dir}", file=sys.stderr)
+        rmtree(prometheus_mp_temp_dir)
     sys.exit(0)
 
 # hadnle worker exit in gunicorn
@@ -1564,6 +1576,12 @@ if __name__ == "__main__":
     # register signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
+
+    # set PROMETHEUS_MULTIPROC_DIR to temp dir if not set
+    if not os.getenv('PROMETHEUS_MULTIPROC_DIR'):
+        prometheus_mp_temp_dir = mkdtemp(prefix=f"webres6-{os.getpid()}-prometheus-")
+        os.environ['PROMETHEUS_MULTIPROC_DIR'] = prometheus_mp_temp_dir
+        print(f"Set PROMETHEUS_MULTIPROC_DIR to temporary directory {prometheus_mp_temp_dir}", file=sys.stderr)
 
     # Check if URL is provided and valid
     print(f"Starting HTTP API server on port {args.port}", file=sys.stderr)
