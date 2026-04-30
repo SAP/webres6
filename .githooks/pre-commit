@@ -1,0 +1,35 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 SAP SE and IPv6 Web Resource Checker contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# Verify that VERSION, api/webres6-api.py, dnsprobe/dnsprobe.py, and
+# helm/Chart.yaml all declare the same version before every commit.
+
+cd "$(git rev-parse --show-toplevel)"
+
+VERSION=$(cat VERSION)
+
+fail() {
+    echo "error: version mismatch in $1: expected $VERSION, got $2" >&2
+    echo "       Update all version strings or fix VERSION." >&2
+    exit 1
+}
+
+check() {
+    [ "$2" = "$VERSION" ] || fail "$1" "$2"
+}
+
+check "api/webres6-api.py" \
+    "$(grep 'webres6_version' api/webres6-api.py | head -1 | sed 's/.*"\(.*\)".*/\1/')"
+
+check "dnsprobe/dnsprobe.py" \
+    "$(grep 'webres6_version' dnsprobe/dnsprobe.py | head -1 | sed 's/.*"\(.*\)".*/\1/')"
+
+check "helm/Chart.yaml (version)" \
+    "$(grep '^version:' helm/Chart.yaml | awk '{print $2}')"
+
+check "helm/Chart.yaml (appVersion)" \
+    "$(grep '^appVersion:' helm/Chart.yaml | sed 's/appVersion:[[:space:]]*"\(.*\)"/\1/')"
+
+echo "pre-commit: version check passed ($VERSION)"

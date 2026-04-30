@@ -11,6 +11,7 @@ on:
       - 'api/**'
       - 'viewer/**'
       - 'dnsprobe/**'
+    tags: ['v*']
   pull_request:
     branches: [main]
     paths:
@@ -65,6 +66,8 @@ jobs:
         with:
           images: ${{ matrix.image }}
           tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 

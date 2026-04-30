@@ -16,6 +16,9 @@ function create_venv() {
   fi
 }
 
+# Register the shared hooks directory so git picks up pre-commit etc.
+git -C "$SCRIPT_DIR" config core.hooksPath .githooks
+
 # Create virtual environment if not existing
 if [ ! -d "$SCRIPT_DIR/api/.venv" ]; then
   create_venv "$SCRIPT_DIR/api"
