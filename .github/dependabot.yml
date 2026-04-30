@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /api
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+    groups:
+      opentelemetry:
+        patterns: ["opentelemetry-*"]
+
+  - package-ecosystem: docker
+    directory: /api
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+
+  - package-ecosystem: pip
+    directory: /dnsprobe
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+
+  - package-ecosystem: docker
+    directory: /dnsprobe
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+
+  - package-ecosystem: docker
+    directory: /viewer
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+
+  - package-ecosystem: pip
+    directory: /cli
+    schedule:
+      interval: weekly
+    labels: [dependencies]

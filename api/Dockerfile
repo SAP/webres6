@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Use official debian trixie based Python image as base
-FROM python:3.14-slim-trixie
+FROM python:3.14.4-slim-trixie
 WORKDIR /app
 
 # Install non-python dependencies

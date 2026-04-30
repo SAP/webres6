@@ -3,11 +3,12 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ── Stage 1: build unbound with Python bindings ──────────────────────────────
-FROM debian:trixie-slim AS builder
+FROM debian:13.4-slim AS builder
 WORKDIR /build
 
 # Set MAX_TARGET_NX to 25 (upstream: 5) to work around CDN issues with many IPv4-only DNS servers
 ARG MAX_TARGET_NX=25
+ARG UNBOUND_IMAGE="https://nlnetlabs.nl/downloads/unbound/unbound-1.25.0.tar.gz"
 
 RUN apt-get update -q \
   && apt upgrade -q --yes \
@@ -19,7 +20,7 @@ RUN apt-get update -q \
   && rm -rf /var/lib/apt/lists/*
 
 # Fetch and verify the latest unbound source
-RUN curl -fsSL https://nlnetlabs.nl/downloads/unbound/unbound-latest.tar.gz \
+RUN curl -fsSL "$UNBOUND_IMAGE" \
       -o unbound.tar.gz \
   && tar xzf unbound.tar.gz \
   && mv unbound-* unbound
@@ -42,7 +43,7 @@ RUN ./configure \
   && make install
 
 # ── Stage 2: runtime image ────────────────────────────────────────────────────
-FROM debian:trixie-slim
+FROM debian:13.4-slim
 WORKDIR /app
 
 # Install non-python dependencies

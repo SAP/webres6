@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Use official NGINX mainline image
-FROM nginx:mainline
+FROM nginx:1.29.8
 
 # Set default environment variables
 ENV WEBRES6_API_URL=http://localhost:6400/
