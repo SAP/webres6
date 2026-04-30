@@ -102,15 +102,17 @@ Containerized setup requires IPv6 being enabled in the container runtime. This c
 First, you need to have Selenium installed or 
 available as a service and have ```SELENIUM_REMOTE_URL``` environment variable pointing to it.
 
-Run the following script to build virtualenvs for API and CLI: ```bash create-virtualenvs.sh ```
-
 The *api*, *cli*, *viewer* and *dnsprobe* code can be found in the respective folders.
 
-For *api* and *cli*, run ```bash source .venv/bin/activate``` within the respective folder before trying to execute the python code.
+Run the following script to build virtualenvs for *api*, *dnsprobe*, and *cli*: ```bash create-virtualenvs.sh ```
+
+For *api*, *dnsprobe*, and *cli*, run ```bash source .venv/bin/activate``` within the respective folder before trying to execute the python code.
 The *viewer* is also served from the *api* development environment. 
 
-The *dnsprobe* is a little more tricky, it is strongly recommend running it in docker or a debian based VM with *Debian Trixie* and Debian managed python. 
-Please see the Dockerfile in the *dnsprobe* folder for the package dependencies.
+The *dnsprobe* is a little tricky, as it needs a custom *pyunbound* build to work.
+Please see the `Dockerfile` and `create_venv.sh` in the *dnsprobe* folder for details.
+
+The `webres6` script in the top folder launches *api* and *dnsprobe* first and then passes the arguments to the *cli* to check a single URL.
 
 ## Setup (docker compose):
 
