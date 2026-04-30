@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 SAP SE and IPv6 Web Resource Checker contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Testing requirements for webres6-api
+# Install with: pip install -r requirements-test.txt
+
+# Include base requirements
+-r requirements.txt
+
+# Testing frameworks
+pytest>=8.0.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+
+# Mocking and fixtures
+responses>=0.24.0
+freezegun>=1.4.0
