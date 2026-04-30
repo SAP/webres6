@@ -2,8 +2,11 @@
 .vscode/
 */.venv/
 **/__pycache__/
+*/.coverage
 deploy/*-secret.yaml
 local_cache/
 pyvenv.cfg
 api/public_suffix_list.dat
 api/serverconfig/*.crx
+api/TEST*
+dnsprobe/named.cache

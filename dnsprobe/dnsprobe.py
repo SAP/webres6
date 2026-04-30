@@ -23,6 +23,7 @@ import unbound
 webres6_version  = "1.4.0"
 app_home            = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 debug_unbound       = 'unbound'    in getenv("DEBUG", '').lower().split(',')
+debug_flask         = 'flask'      in getenv("DEBUG", '').lower().split(',')
 unbound_v6_conf     = getenv("UNBOUND_V6ONLY_CONF", os.path.join(app_home, "unbound.v6only.conf"))
 # log algorithm choices by default – see https://unbound.docs.nlnetlabs.nl/en/latest/manpages/unbound.conf.html#unbound-conf-verbosity
 unbound_debug_level = int(getenv("UNBOUND_DEBUG_LEVEL", "4")) 
@@ -165,7 +166,7 @@ if __name__ == "__main__":
         formatter_class=argparse.RawTextHelpFormatter,
         description="A dns probe using unbound's python DNS library",
             epilog="For production use, consider running in gunicorn behind a reverse proxy.\n")
-    parser.add_argument("--port", type=int, metavar='6453', help="start a simple HTTP API server at given port")
+    parser.add_argument("--port", type=int, default='6453', help="start a simple HTTP API server at given port (default: 6453)")
     parser.add_argument("--debug", action="store_true", help="enable flask debugging output for the HTTP API server")
     args = parser.parse_args()
 

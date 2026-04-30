@@ -26,6 +26,7 @@ color = {
     'domain_part': "\033[0m",        # reset
     'dns_ok': "\033[32m",            # green
     'dns_not_ok': "\033[31m",        # red
+    'dns_unknown': "\033[33m",       # yellow
     'proto': "\033[90m",             # dark gray
     'highlight_local': "\033[36m",   # dark cyan
     'highlight_domain': "\033[96m",  # bright cyan
@@ -174,16 +175,21 @@ def gen_fancy_hostlist(hosts, original_host=None, show_proto=False,
         max_domain_length = max(max_domain_length, len(domain_part))
         local_part = info.get('local_part')
         max_local_length = max(max_local_length, len(local_part))
-        dns_status = info.get('dns', {}).get('ipv6_only_ready', None)
+        dns = info.get('dns', {})
+        dns_status = dns.get('ipv6_only_ready', None) if dns else None
         dns_part = ''
+        dns_color = ''
         if dns_status is not None:
             max_dns_length = 4
             if dns_status:
-                dns_part = 'o'
+                dns_part = '✓'
                 dns_color = color['dns_ok']
             else:
                 dns_part = 'x'
                 dns_color = color['dns_not_ok']
+        else:
+            dns_part = '?'
+            dns_color = color['dns_unknown']
         # format IPs
         for ip in sorted(info.get('ips').keys()):
             ip_str = str(ip)

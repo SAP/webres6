@@ -1586,7 +1586,6 @@ if __name__ == "__main__":
     # Check if URL is provided and valid
     print(f"Starting HTTP API server on port {args.port}", file=sys.stderr)
     app = create_http_app()
-    check_component_health()
     app.run(debug=debug_flask, host='::1', port=args.port, threaded=False)
 
 # vim: set ts=4 sw=4 et:
