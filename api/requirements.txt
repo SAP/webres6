@@ -19,4 +19,4 @@ opentelemetry-instrumentation-urllib3==0.62b1
 opentelemetry-python-contrib-external-valkey==0.62b1
 opentelemetry-instrumentation-botocore==0.62b1
 opentelemetry-exporter-otlp-proto-http==1.41.1
-opentelemetry-semantic-conventions==0.62br
+opentelemetry-semantic-conventions==0.62b1
