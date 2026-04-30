@@ -3,4 +3,4 @@
 # SPDX-License-Identifier: Apache-2.0
 
 urllib3==2.6.3
-urllib3-future==2.14.900
+urllib3-future==2.19.913
