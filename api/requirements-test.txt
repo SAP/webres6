@@ -9,7 +9,7 @@
 -r requirements.txt
 
 # Testing frameworks
-pytest>=8.0.0
+pytest>=9.0.3
 pytest-cov>=7.1.0
 pytest-mock>=3.15.1
 
