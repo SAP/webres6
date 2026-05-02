@@ -355,16 +355,17 @@ def init_webdriver(log_prefix='', implicit_wait=0.5, extension=None, extension_d
     options = webdriver.ChromeOptions()
     options.enable_bidi = True
     options.enable_webextensions = True
-    options.add_argument("--disable-gpu")
-    options.add_argument("--disable-webrtc")
-    options.add_argument("--disable-notifications")
-    # options.add_argument("--start-maximized")
+    options.page_load_strategy = 'normal'
+    options.unhandled_prompt_behavior = 'dismiss'
+    options.add_argument('--disable-gpu')
+    options.add_argument('--disable-webrtc')
+    options.add_argument('--disable-notifications')
     options.add_experimental_option('perfLoggingPrefs', { 'enableNetwork' : True })
     options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
 
     if headless_selenium:
         options.headless = True
-        options.add_argument("--headless=new")
+        options.add_argument('--headless=new')
 
     # initialize extension if needed
     if not init_selenium_options(options, extension, extension_data=extension_data, log_prefix=log_prefix):
