@@ -65,6 +65,7 @@ As modern Web pages tend to be complex, this will most likely result in many res
 
 Without *dnsprobe*, it ignores DNS aspects: Even if this tool reports green, it is still necessary to check the whole DNS delegation chain of all hosts involved for IPv6-only realness.
 With the *dnsprobe* microservice included in the project, DNS testing is fully supported.
+In case of errors, an *unbound* trace is generated and can be accessed by clicking on the red x in the Web app.
 If the tool reports a problem, a more thorough DNS IPv6-only analysis with a tool like [ready.chair6.net](/https://ready.chair6.net/) is recommended.
 
 Containerized setup requires IPv6 being enabled in the container runtime. This can be challenging especially under MacOS.
@@ -75,7 +76,7 @@ Containerized setup requires IPv6 being enabled in the container runtime. This c
 ### API server (webres6-api)
 <a id="api"/>
 
-- Python 3.7+  
+- Python 3.11+  
 - Flask 3.1.2+
 - Selenium 4.33+ with [ChromeDriver](https://chromedriver.chromium.org/) and Python support
 - A dual-stack or IPv6-only host with NAT64 connectivity to run Selenium on
@@ -83,8 +84,8 @@ Containerized setup requires IPv6 being enabled in the container runtime. This c
 ### CLI Client
 <a id="cli"/>
 
-- Python 3.7+  
-- URLib3 2.5.0+ with URLlib3-future 2.13.906+
+- Python 3.11+  
+- URLib3 2.6.3+ with URLlib3-future 2.19.913+
 
 ### Web App 
 
@@ -93,9 +94,14 @@ Containerized setup requires IPv6 being enabled in the container runtime. This c
 
 ### DNS probe
 
+- Python 3.11+  
 - libunbound with python bindings
 - Flask 3.1.2+
 - A dual-stack or IPv6-only host with clean outbound DNS connectivity / no DNS mingling
+
+## Setup (CLI only):
+
+You can install the CLI by using `uv tool install --from 'git+https://github.com/SAP/webres6#subdirectory=cli' webres6`. This needs the API running elsewhere and defaults to using [http://webres6.dev.sap/].
 
 ## Setup (development):
 

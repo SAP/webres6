@@ -15,7 +15,7 @@ from time import sleep
 import urllib3 
 from urllib.parse import urlparse, quote_plus as encodeURIComponent
 
-api_url = environ.get('WEBRES6_API_URL', 'http://localhost:6400/res6')
+api_url = environ.get('WEBRES6_API_URL', 'https://webres6.dev.sap').rstrip("/").rstrip("/res6") + "/res6"
 http = urllib3.PoolManager(happy_eyeballs=True)
 max_retries = 5
 
