@@ -137,24 +137,31 @@ There is a helm chart available in the `helm` directory with a deployment exampl
 ./webres6-cli.py [options] URL
 
 Options:
-  -h, --help                Show this help message and exit
-      --api API             Base API endpoint overriding WEBRES6_API_URL env
-      --srvconfig           Show server configuration - incl. supported extensions and screenshot modes - and exit
-  -r, --read-json FILE.json Read JSON input from file ignoring URL argument
-  -o, --save-json FILE.json Save JSON output to file
-  -w, --wait WAIT           Wait time for page settle (seconds)
-  -t, --timeout TIMEOUT     Timeout for page load (seconds)
-  -e, --extension EXTENSION Extension to use (must be available on server)
-  -s, --screenshot MODE     Request a screenshot from the server (default: none)
-  -S, --display-screenshot  Display screenshot in terminal (implies --screenshot)
-  -m, --hide-proto          Hide protocol columns
-  -a, --show-asn            Show AS Number column
-  -A, --show-asd            Show AS Description column
-  -n, --show-network        Show whois network name
-  -q, --quiet               Do not print the host list to stdout
+positional arguments:
+  url                            URL to analyze (will be passed to /res6)
+
+options:
+  -h, --help                     Show this help message and exit
+  --api API                      Base API endpoint overriding WEBRES6_API_URL env (default: https://webres6.dev.sap/res6)
+  -V, --serverconfig             Show server configuration - incl. supported extensions and screenshot modes - and exit
+  -R, --get-report REPORT_ID     Get a previously generated report by ID and display it
+  -r, --read-json FILE.json      Read JSON input from file ignoring URL argument
+  -o, --save-json FILE.json      Save JSON output to file
+  -j, --json-only                Suppress regular output and send JSON to stdout
+  -w, --wait WAIT                Wait time for page settle (seconds)
+  -t, --timeout TIMEOUT          Timeout for page load (seconds)
+  -e, --extension EXTENSION      Extension to use (must be available on server)
+  -s, --screenshot MODE          Request a screenshot from the server (default: none)
+  -S, --display-screenshot MODE  Display screenshot in terminal (implies --screenshot)
+  -m, --hide-proto               Hide protocol columns
+  -a, --show-asn                 Show AS Number column
+  -A, --show-asd                 Show AS Description column
+  -n, --show-network             Show whois network name
+  -p, --private                  Do not add test result to server scoreboard
+  -q, --quiet                    Do not print the host list to stdout
 
 Environment variables:
-  WEBRES6_API_URL           Override the default API endpoint
+  WEBRES6_API_URL                Override the default API endpoint
 
 Exit codes:
    0 - Success: All hosts are IPv6-only

@@ -71,6 +71,13 @@ def fetch_res6_json(api_url, url, ext=None, screenshot='none', whois=False, wait
         print(f"ERROR: Server returned status {r.status} with message: {r.data.decode('utf-8')}", file=sys.stderr)
         return None
 
+def fetch_res6_report(api_url, report_id):
+    r = http.request("GET", f"{api_url}/report/{report_id}")
+    if r.status == 200:
+        return r.json()
+    else:
+        print(f"ERROR: Failed to fetch report {report_id}. Server returned status {r.status} with message: {r.data.decode('utf-8')}", file=sys.stderr)
+        return None
 
 def fetch_res6_serverconfig(api_url):
     r = http.request("GET", f"{api_url}/serverconfig")
@@ -167,6 +174,9 @@ def gen_fancy_hostlist(hosts, original_host=None, show_proto=False,
     max_asn_length = 6 if show_asn else 0
     max_asd_length = 8 if show_asd else 0
 
+    # record dns traces
+    dns_traces = []
+
     # Prepare the output lines
     lines = []
     for hostname, info in sorted(hosts.items(), key=host_sort_key):
@@ -190,6 +200,9 @@ def gen_fancy_hostlist(hosts, original_host=None, show_proto=False,
         else:
             dns_part = '?'
             dns_color = color['dns_unknown']
+        # check for DNS trace
+        if dns and dns.get('unbound_trace'):
+            dns_traces.append(hostname)
         # format IPs
         for ip in sorted(info.get('ips').keys()):
             ip_str = str(ip)
@@ -261,6 +274,10 @@ def gen_fancy_hostlist(hosts, original_host=None, show_proto=False,
                   f"{ip_color}{ip}{color['asn']}{prfx}{color['reset']}")
     yield("-" * rule_length)
 
+    # print DNS traces if available
+    for hostname in dns_traces:
+        yield(f"  DNS trace available for {hostname} - you may use `-j | jq -r '.hosts[\"{hostname}\"].dns.unbound_trace' | base64 -d` to view it")
+
 
 def display_image_in_iterm2(image_data, filename="screenshot", width=None):
     """Display an image using the imgcat protocol.
@@ -299,6 +316,10 @@ def print_timings(timings):
 
 def display_results(res, args):
     """Display the results from the API response"""
+
+    if res.get('ID'):
+        print(f"Report ID: {res['ID']}")
+
     if res.get('ts'):
         print(f"Timestamp: {res['ts']}")
 
@@ -346,8 +367,10 @@ def main():
         description=" IPv6 Web Resource Checker CLI client. Uses /res6 api and renders host info locally.")
     parser.add_argument("--api", default=api_url, help=f"Base API endpoint overriding WEBRES6_API_URL env (default: {api_url})")
     parser.add_argument("-V", "--serverconfig", action="store_true", help="Show server configuration - incl. supported extensions and screenshot modes - and exit")
+    parser.add_argument("-R", "--get-report", type=str, metavar="REPORT_ID", help="Get a previously generated report by ID and display it")
     parser.add_argument("-r", "--read-json", type=str, metavar="FILE.json", help="Read JSON input from file ignoring URL argument")
     parser.add_argument("-o", "--save-json", action="append", type=str, metavar="FILE.json", help="Save JSON output to file")
+    parser.add_argument("-j", "--json-only", action="store_true", help="Suppress regular output and send JSON to stdout")
     parser.add_argument("-w", "--wait", type=float, help="Wait time for page settle (seconds)")
     parser.add_argument("-t", "--timeout", type=float, help="Timeout for page load (seconds)")
     parser.add_argument("-e", "--extension", type=str, help="Extension to use (must be available on server)")
@@ -361,11 +384,6 @@ def main():
     parser.add_argument("-q", "--quiet", action="store_true", help="Do not print the host list to stdout")
     parser.add_argument("url", nargs='?', help="URL to analyze (will be passed to /res6)")
     args = parser.parse_args()
-
-    # check arguments
-    if not args.read_json and not args.serverconfig and not args.url:
-        print("ERROR: URL argument is required.", file=sys.stderr)
-        sys.exit(2)
 
     # implied arguments
     if args.display_screenshot and not args.screenshot:
@@ -390,11 +408,24 @@ def main():
         except Exception as e:
             print(f"ERROR: Failed to read JSON from {args.read_json}: {e}", file=sys.stderr)
             sys.exit(2)
+    elif args.get_report:
+        print(f"Fetching report with ID {args.get_report} from {args.api} ...", file=sys.stderr, end=' ', flush=True)
+        try:
+            res = fetch_res6_report(args.api, args.get_report)
+            if res:
+                print("done", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR: Failed to fetch report from {args.api}: {e}", file=sys.stderr)
+            sys.exit(2)
     else:
+
+        # check arguments
+        if not args.url:
+            print("ERROR: URL argument is required.", file=sys.stderr)
+            sys.exit(2)
+
         # Validate and normalize URL
         url = args.url.strip()
-
-        # Check if URL has a scheme
         scheme_match = re.match(r'^([a-z][a-z0-9+.-]*):\/\/', url, re.IGNORECASE)
         if scheme_match:
             scheme = scheme_match.group(1).lower()
@@ -429,8 +460,12 @@ def main():
     if res.get('error'):
         print(f"ERROR: {res['error']}", file=sys.stderr)
 
-    # display results unless quiet
-    if not args.quiet:
+    # display results unless json only or quiet
+    if args.json_only:
+        print(json.dumps(res, indent=2))
+    elif args.quiet:
+        pass
+    else:
         display_results(res, args)
 
     # exit code 0 if ipv6-only ready, 1 otherwise
