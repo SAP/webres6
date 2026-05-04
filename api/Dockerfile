@@ -15,10 +15,10 @@ RUN apt update --yes \
   && rm -rf /var/lib/apt/lists/*
 
 # Copy application code
-COPY api/requirements.txt api/docker-entrypoint api/webres6-api.py api/webres6_*.py api/webres6-api-metadata.xml ./
+COPY api/pyproject.toml api/docker-entrypoint api/webres6_api.py api/webres6_*.py api/webres6-api-metadata.xml ./
 
 # Install python dependencies
-RUN pip install --no-cache-dir -r requirements.txt; \
+RUN pip install --no-cache-dir . ; \
     pip install --no-cache-dir gunicorn[gthread]
 
 # Don't copy viewer files into api image, viewer is served separately

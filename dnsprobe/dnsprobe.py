@@ -20,7 +20,7 @@ from flask import Flask, jsonify
 import unbound
 
 # config/flag variables
-webres6_version  = "1.4.0"
+webres6_version  = "1.4.1"
 app_home            = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 debug_unbound       = 'unbound'    in getenv("DEBUG", '').lower().split(',')
 debug_flask         = 'flask'      in getenv("DEBUG", '').lower().split(',')

@@ -6,7 +6,7 @@
 #
 
 """
-Unit tests for webres6-api.py
+Unit tests for webres6_api.py
 
 These tests cover the main API endpoints and functionality.
 They use mocks for external services (Selenium, DNSProbe) to allow
@@ -36,12 +36,8 @@ test_env = {
 for key, value in test_env.items():
     os.environ[key] = value
 
-# Import the API module (rename from webres6-api.py to webres6_api for import)
-import importlib.util
-spec = importlib.util.spec_from_file_location("webres6_api", "webres6-api.py")
-webres6_api = importlib.util.module_from_spec(spec)
-sys.modules['webres6_api'] = webres6_api
-spec.loader.exec_module(webres6_api)
+# Import the API module
+import webres6_api
 
 from webres6_api import create_http_app, check_component_health, gen_report_id, gen_json, get_ipv6_only_score
 

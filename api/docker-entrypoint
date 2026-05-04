@@ -33,8 +33,8 @@ set -e
 
 if [ -z "$1" ]; then
   echo "Starting webres6-api via gunicorn on ${LISTEN_ADDR}:${PORT} with timeout ${TIMEOUT}..." >&2
-  gunicorn -k gthread --bind "${LISTEN_ADDR}:${PORT}" --timeout ${TIMEOUT} $@ 'webres6-api:create_http_app()'
+  gunicorn -k gthread --bind "${LISTEN_ADDR}:${PORT}" --timeout ${TIMEOUT} $@ 'webres6_api:create_http_app()'
 else
   echo "Starting webres6-api with custom arguments: $@" >&2
-  ./webres6-api.py $@
+  ./webres6_api.py $@
 fi

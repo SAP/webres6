@@ -72,7 +72,7 @@ echo ""
 # Check if pytest is installed
 if ! command -v pytest &> /dev/null; then
     echo -e "${YELLOW}pytest not found. Installing test dependencies...${NC}"
-    pip install -r requirements-test.txt
+    pip install -e ".[test]"
 fi
 
 # Build pytest command

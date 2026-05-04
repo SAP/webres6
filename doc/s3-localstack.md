@@ -63,6 +63,6 @@ Start the API server
 ```bash
 cd api
 source ./.venv/bin/activate
-S3_ENDPOINT="http://127.0.0.1:4566" S3_BUCKET="webres6-test" VALKEY_URL="valkey://localhost:6379/0" ./webres6-api.py
+S3_ENDPOINT="http://127.0.0.1:4566" S3_BUCKET="webres6-test" VALKEY_URL="valkey://localhost:6379/0" ./webres6_api.py
 ```
 

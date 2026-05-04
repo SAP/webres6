@@ -17,7 +17,7 @@ For overall setup & requirements, please see [top level README.md](../README.md)
 
 ```bash
 # Start web service
-./webres6-server.py [options]
+./webres6_api.py [options]
 
 Options:
   -h, --help                  Show this help message and exit
@@ -72,7 +72,7 @@ All configuration is either done by environment variables (see above) or files i
 
 The API server is built with Flask and uses Selenium WebDriver to crawl web pages and analyze their IPv6 readiness. It consists of several key components:
 
-- **Main API endpoints** (`webres6-api.py`) - Flask application providing REST endpoints
+- **Main API endpoints** (`webres6_api.py`) - Flask application providing REST endpoints
 - **Storage management** (`webres6_storage.py`) - Handles result caching and persistence  
 - **WHOIS integration** (`webres6_whois.py`) - Provides IP address ownership information
 - **Custom extensions** (`webres6_extension.py`) - Hooks to modify browser automation framework

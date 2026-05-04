@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Run the API server locally
 ```bash
 cd api && source .venv/bin/activate
-./webres6-api.py --debug --port 6400
+./webres6_api.py --debug --port 6400
 ```
 
 ### Run the CLI
@@ -66,7 +66,7 @@ Four independently deployable services:
 7. Report stored via `StorageManager`; ID returned to client.
 
 ### NAT64 detection
-`api/webres6-api.py` monkey-patches `ipaddress.IPv6Address` with `.is_nat64` and `.nat64_extract_ipv4`. NAT64 prefixes default to `64:ff9b::/96` and are configurable via `NAT64_PREFIXES`. This makes NAT64 addresses count as IPv6-capable throughout the codebase.
+`api/webres6_api.py` monkey-patches `ipaddress.IPv6Address` with `.is_nat64` and `.nat64_extract_ipv4`. NAT64 prefixes default to `64:ff9b::/96` and are configurable via `NAT64_PREFIXES`. This makes NAT64 addresses count as IPv6-capable throughout the codebase.
 
 ### Storage abstraction (`api/webres6_storage.py`)
 `StorageManager` base class with four implementations selected at startup:

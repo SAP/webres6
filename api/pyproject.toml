@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "webres6-api"
+version = "1.4.0"
+description = "IPv6 Web Resource Checker API server"
+license = "Apache-2.0"
+requires-python = ">=3.8"
+dependencies = [
+    "Flask==3.1.3",
+    "selenium==4.43.0",
+    "urllib3==2.6.3",
+    "ipwhois==1.3.0",
+    "valkey==6.1.1",
+    "prometheus-client==0.25.0",
+    "boto3==1.43.1",
+    # OpenTelemetry
+    "opentelemetry-api==1.41.0",
+    "opentelemetry-sdk==1.41.0",
+    "opentelemetry-exporter-otlp-proto-http==1.41.0",
+    "opentelemetry-instrumentation-flask==0.62b0",
+    "opentelemetry-instrumentation-urllib==0.62b0",
+    "opentelemetry-instrumentation-urllib3==0.62b0",
+    "opentelemetry-python-contrib-external-valkey==0.62b0",
+    "opentelemetry-instrumentation-botocore==0.62b0",
+    "opentelemetry-semantic-conventions==0.62b0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+    "pytest-cov>=7.1.0",
+    "pytest-mock>=3.15.1",
+    "responses>=0.26.0",
+    "freezegun>=1.5.5",
+]
+
+[tool.hatch.build.targets.wheel]
+include = ["webres6_api.py", "webres6_storage.py", "webres6_whois.py"]
+

@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "webres6-dnsprobe"
+version = "1.4.0"
+description = "IPv6 Web Resource Checker DNS probe"
+license = "Apache-2.0"
+requires-python = ">=3.8"
+dependencies = [
+    "Flask==3.1.3",
+]
+
+[tool.hatch.build.targets.wheel]
+include = ["dnsprobe.py"]

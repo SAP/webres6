@@ -2,6 +2,7 @@
 .vscode/
 */.venv/
 **/__pycache__/
+**/*.egg-info/
 */.coverage
 deploy/*-secret.yaml
 local_cache/

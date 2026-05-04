@@ -64,8 +64,8 @@ COPY --from=builder /usr/local/lib/ /usr/local/lib/
 RUN ldconfig
 
 # Install Python dependencies via pip (Flask + Gunicorn)
-COPY dnsprobe/requirements.txt ./
-RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt; \
+COPY dnsprobe/pyproject.toml ./
+RUN pip3 install --no-cache-dir --break-system-packages . ; \
     pip3 install --no-cache-dir --break-system-packages gunicorn[gthread]
 
 # Copy application code

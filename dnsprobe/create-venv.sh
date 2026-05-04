@@ -159,8 +159,7 @@ pip install --quiet --upgrade pip
 
 # 2. Python dependencies (Flask + Gunicorn)
 info "Installing Python dependencies (Flask, Gunicorn)..."
-pip install --quiet -r "$SCRIPT_DIR/requirements.txt"
-pip install --quiet 'gunicorn[gthread]'
+pip install -e .
 
 # 3. Build pyunbound if not already available
 if python3 -c "import unbound" 2>/dev/null; then
