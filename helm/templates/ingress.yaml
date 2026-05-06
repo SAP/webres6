@@ -44,10 +44,20 @@ spec:
           - path: /dnsprobe
             pathType: Prefix
             backend:
+              {{- if eq $.Values.dnsprobe.mode "service" }}
               service:
                 name: {{ include "webres6.fullname" $ }}-dnsprobe
                 port:
                   number: {{ $.Values.dnsprobe.service.port }}
+              {{- else if eq $.Values.dnsprobe.mode "internal" }}
+              service:
+                name: {{ include "webres6.fullname" $ }}-api
+                port:
+                  number: {{ $.Values.api.service.port }}
+              {{- else if eq $.Values.dnsprobe.mode "external" }}
+              external:
+                name: {{ $.Values.dnsprobe.url }}
+              {{- end }}
           {{- end }}
           - path: /
             pathType: Prefix

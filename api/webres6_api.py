@@ -16,17 +16,12 @@ import platform
 import time
 import uuid
 from os import getenv
-from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
+from ipaddress import IPv4Address, IPv6Address
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from tempfile import mkdtemp
 from shutil import rmtree
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.client_config import ClientConfig
-from selenium.common.exceptions import WebDriverException, TimeoutException, NoSuchElementException
 from urllib.parse import urlparse
-import urllib3
 import flask
 from flask import Flask, redirect, request, jsonify, send_from_directory
 from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry, multiprocess, disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
@@ -41,8 +36,10 @@ from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from opentelemetry.instrumentation.urllib3 import URLLib3Instrumentor
 from opentelemetry.trace import Status, StatusCode
 
+import webres6_nat64  # noqa: F401 — applies NAT64 monkey-patch to IPv6Address and loads NAT64_PREFIXES
+
 # config/flag variables
-webres6_version   = "1.4.1"
+webres6_version   = "1.5.0"
 debug_whois       = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo    = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask       = 'flask'    in getenv("DEBUG", '').lower().split(',')
@@ -53,6 +50,7 @@ selenium_username = getenv("SELENIUM_USERNAME", None)
 selenium_password = getenv("SELENIUM_PASSWORD", None)
 headless_selenium = getenv("HEADLESS_SELENIUM", False)
 dnsprobe_api_url  = getenv("DNSPROBE_API_URL", None)
+enable_dnsprobe   = getenv("ENABLE_DNSPROBE", 'true').lower() in ['true', '1', 'yes']
 valkey_url        = getenv("VALKEY_URL", None)
 s3_bucket         = getenv("S3_BUCKET", None)
 s3_endpoint       = getenv("S3_ENDPOINT", None)
@@ -72,6 +70,9 @@ whois_cache_ttl   = int(getenv("WHOIS_CACHE_TTL", 270000)) # seconds
 enable_scoreboard = getenv("ENABLE_SCOREBOARD", 'true').lower() in ['true', '1', 'yes']
 scoreboard_request_limit = int(getenv("SCOREBOARD_REQUEST_LIMIT", 1024))
 screenshot_modes  = ['none', 'small', 'medium', 'full']
+check_selenium_health = True
+check_dnsprobe_health = True
+check_storage_health  = True
 
 # OpenTelemetry configuration
 debug_trace        = 'trace' in getenv("DEBUG", '').lower().split(',')
@@ -91,7 +92,7 @@ def init_tracing():
     """Initialize OpenTelemetry tracing."""
     if not otel_enabled:
         print("OpenTelemetry tracing is disabled.", file=sys.stderr)
-        return None
+        return trace.get_tracer(__name__)  # Return a no-op tracer to avoid errors in tracing calls
 
     try:
         # Create resource with service information
@@ -123,38 +124,15 @@ def init_tracing():
         # Set global tracer provider
         trace.set_tracer_provider(provider)
 
-        # Auto-instrument libraries
-        URLLib3Instrumentor().instrument()
-
         print("OpenTelemetry tracing initialized successfully", file=sys.stderr)
-        return trace.get_tracer(__name__)
 
     except Exception as e:
         print(f"WARNING: Failed to initialize OpenTelemetry: {e}", file=sys.stderr)
-        return None
+
+    return trace.get_tracer(__name__)  # Returns a no-op tracer if initialization failed
 
 # Initialize tracing
 tracer = init_tracing()
-
-def traced(span_name):
-    """ Decorator that wraps a function in an OTEL span. The function can call
-    trace.get_current_span() to add attributes or events to the active span.
-    """
-    def decorator(fn):
-        @functools.wraps(fn)
-        def wrapper(*args, **kwargs):
-            if not tracer:
-                return fn(*args, **kwargs)
-            with tracer.start_as_current_span(span_name) as span:
-                try:
-                    return fn(*args, **kwargs)
-                except Exception as e:
-                    span.record_exception(e)
-                    span.set_status(Status(StatusCode.ERROR, str(e)))
-                    raise
-        return wrapper
-    return decorator
-
 
 # Prometheus metrics
 prometheus_mp_temp_dir = None
@@ -166,166 +144,39 @@ webres6_cache_hits_total = Counter('webres6_cache_hits_total', 'Total number of 
 webres6_archive_total = Counter('webres6_archive_hits_total', 'Total number of archive hits', ['result'])
 webres6_time_spent = Counter('webres6_time_spent_seconds_total', 'Time spent in different processing phases', ['phase'])
 webres6_response_time = Histogram('webres6_response_time_seconds_total', 'Response time for checks performed', ['whois', 'screenshot'], buckets=(0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 90, 120, 150, 180))
-webres6_hostinfo_parsed = Counter('webres6_hostinfo_parsed_total', 'Total number of hostinfo entries parsed', ['type'])
-webres6_resources_total = Counter('webres6_resources_total', 'Total number of resources per protocol', ['protocol'])
 webres6_whois_cache_size = Gauge('webres6_whois_cache_size_total', 'Number of entries in whois cache')
 webres6_whois_cache_size.set_function(lambda: storage_manager.whois_cache_size() if storage_manager else 0)
 webres6_dnsprobe_results_total = Counter('webres6_dnsprobe_results_total', 'Total number of DNSProbe results', ['rcode'])
 
-# load custom modules (allows overrides in serverconfig directory)
+# allow overrides in serverconfig directory)
 sys.path.insert(0, srvconfig_dir)
-from webres6_storage import StorageManager, LocalStorageManager, ValkeyStorageManager, ValkeyFileHybridStorageManager, ValkeyS3HybridStorageManager, Scoreboard, export_scoreboard_entries, import_scoreboard_entries, export_archived_reports, import_archived_reports
-from webres6_whois import get_whois_info
 from webres6_extension import check_extension_parameter, get_extensions, init_selenium_options, prepare_selenium_crawl, operate_selenium_crawl, cleanup_selenium_crawl, finalize_report, health_check
 
-# load NAT64 prefixes
-for nat64 in [ip_network(p) for p in getenv("NAT64_PREFIXES", "").split(",") if p]:
-    if nat64.version == 6 or nat64.prefixlen == 96:
-        IPv6Address.nat64_networks.append(nat64)
-    else:
-        print(f"ERROR: Invalid NAT64 prefix {nat64}. Must be an IPv6 network with a /96 prefix length.", file=sys.stderr)
-        sys.exit(2)
+# load additional modules after setting up config and tracing
+from webres6_storage import StorageManager, LocalStorageManager, ValkeyStorageManager, ValkeyFileHybridStorageManager, ValkeyS3HybridStorageManager, Scoreboard, export_scoreboard_entries, import_scoreboard_entries, export_archived_reports, import_archived_reports
+from webres6_dnsprobe import DNSprobe
+from webres6_whois import get_whois_info
+from webres6_crawler import init_webdriver, crawl_page, load_public_suffix_list, take_screenshot, split_hostname, get_hostinfo, cleanup_crawl, check_selenium, add_url_blocklist
 
-# load privacy policy
-privacy_policy = None
-privacy_file = os.path.join(srvconfig_dir, 'PRIVACY')
-if os.path.exists(privacy_file):
-    with open(privacy_file) as f:
-        privacy_policy = f.read()
 
-# load server message
-srv_message = None
-srv_message_file = os.path.join(srvconfig_dir, 'MESSAGE')
-if os.path.exists(srv_message_file):
-    with open(srv_message_file) as f:
-        srv_message = f.read()
-
-# load blocklist
-url_blocklist = ["*://*.local/*", "*://*.internal/*"]
-url_blocklist_file = os.path.join(srvconfig_dir, 'url-blocklist')
-if os.path.exists(url_blocklist_file):
-    with open(url_blocklist_file) as f:
-        url_blocklist = f.read().splitlines()
-
-# initialize selenium auth if needed
-selenium_client_config = None
-if selenium_remote:
-    selenium_client_config = ClientConfig(
-        remote_server_addr=selenium_remote,
-        username=selenium_username if selenium_username else 'admin',
-        password=selenium_password if selenium_password else 'admin',
-    )
-
-# read public suffix list
-public_suffixes = None
-if os.path.exists(os.path.join(app_home, 'public_suffix_list.dat')):
-    with open(os.path.join(app_home, 'public_suffix_list.dat')) as f:
-        public_suffixes = set()
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('//'):
-                public_suffixes.add(line)
-    print(f"loaded {len(public_suffixes)} public suffixes.", file=sys.stderr)
-else:
-    print(f"WARNING: public suffix list not found, domain part extraction will always use the 2nd level domain.", file=sys.stderr)
-
-# inialize storage manager
+# declare global variables for storage manager and scoreboard, will be initialized later based on configuration
 storage_manager = None
-if valkey_url and valkey_url.strip() != '':
-    if s3_bucket and s3_bucket.strip() != '':
-        print("Valkey client and S3 endpoint configured, using ValkeyS3HybridStorageManager", file=sys.stderr)
-        storage_manager = ValkeyS3HybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
-                                              valkey_url=valkey_url, s3_bucket=s3_bucket, s3_endpoint=s3_endpoint, s3_delivery_strategy=s3_strategy)
-    elif archive_dir and archive_dir.strip() != '':
-        print("Valkey client and local archive dir configured, using ValkeyFileHybridStorageManager", file=sys.stderr)
-        storage_manager = ValkeyFileHybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
-                                                            valkey_url=valkey_url, archive_dir=archive_dir)
-    else:
-        print("Valkey client configured, using ValkeyStorageManager", file=sys.stderr)
-        storage_manager = ValkeyStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, valkey_url=valkey_url)
-else:
-    print("Valkey client not configured, using LocalStorageManager", file=sys.stderr)
-    LocalStorageManager.print_warnings(None)
-    storage_manager = LocalStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, cache_dir=local_cache_dir, archive_dir=archive_dir)
-
-# initialize scoreboard if enabled
 scoreboard = None
-if storage_manager.can_archive() and enable_scoreboard:
-    scoreboard = Scoreboard(storage_manager=storage_manager)
 
-# create connection pool for dnsprobe if needed
+# configure DNSProbe
 dnsprobe = None
-if dnsprobe_api_url:
-    print(f"DNSProbe API URL is set to {dnsprobe_api_url}.", file=sys.stderr)
-    dnsprobe = urllib3.PoolManager(
-        maxsize=10, block=True,
-        timeout=urllib3.Timeout(connect=5.0, total=15.0), retries=False,
-    )
+if not enable_dnsprobe:
+    dnsprobe = None
+elif dnsprobe_api_url and dnsprobe_api_url.strip() != '':
+    dnsprobe = DNSprobe(remote=dnsprobe_api_url)
+else:
+    dnsprobe = DNSprobe(local=True)
 
-# whois enabled?
-print(f"whois lookups are {'enabled with TTL ' + str(whois_cache_ttl) + 's' if enable_whois else 'disabled'}.", file=sys.stderr)
-
-
-# patch ip address object to support NAT64 detection
-def _is_nat64(self):
-    """ Check if the IP address is a NAT64 address.
-        NAT64 addresses are in the range 64:ff9b::/96.
-    """
-    return self.version == 6 and any(self in net for net in self.nat64_networks)
-
-def _nat64_extract_ipv4(self):
-        """Extract the embedded IPv4 address from a NAT64 IPv6 address.
-
-        Returns:
-            An IPv4Address object representing the embedded IPv4 address,
-            or None if the address is not a NAT64 address.
-
-        """
-        if not self.is_nat64():
-            return None
-        low_order_bits = self._ip & 0xFFFFFFFF
-        return ip_address(low_order_bits)
-
-def _nat64_ipv6_to_str(self):
-        """Return convenient text representation of NAT64 address
-
-        Returns:
-            A string, 'x:x:x:x:x:x:d.d.d.d', where the 'x's are the hexadecimal values of
-            the six high-order 16-bit pieces of the address, and the 'd's are
-            the decimal values of the four low-order 8-bit pieces of the
-            address (standard IPv4 representation) as defined in RFC 4291 2.2 p.3.
-
-        """
-        high_order_bits = self._ip & 0xFFFFFFFFFFFFFFFFFFFFFFFF00000000
-        low_order_bits = self._ip & 0xFFFFFFFF
-        return self._string_from_ip_int(high_order_bits) + '.'.join(map(str, low_order_bits.to_bytes(4, 'big')))
-
-def _nat64_aware__str__(self):
-        ipv4_mapped = self.ipv4_mapped
-        if ipv4_mapped is not  None:
-            ip_str = self._ipv4_mapped_ipv6_to_str()
-            return ip_str + '%' + self._scope_id if self._scope_id else ip_str
-        elif self.is_nat64():
-            ip_str = self._nat64_ipv6_to_str()
-            return ip_str + '%' + self._scope_id if self._scope_id else ip_str
-        else:
-            return super(IPv6Address, self).__str__()
-
-IPv6Address.nat64_networks = [
-    ip_network('64:ff9b::/96'), # well-known NAT64 prefix
-    ]
-IPv6Address.is_nat64 = _is_nat64
-IPv6Address.nat64_extract_ipv4 = _nat64_extract_ipv4
-IPv6Address._nat64_ipv6_to_str = _nat64_ipv6_to_str
-IPv6Address.__str__ = _nat64_aware__str__
-
-# end patch
-
+# helper function to check if an address is an IP address (IPv4 or IPv6)
 def is_ip(address):
     """ Check if the given address is an IP address object (IPv4 or IPv6).
     """
     return isinstance(address, IPv4Address) or isinstance(address, IPv6Address)
-
 
 # Custom JSON encoders
 class DateTimeEncoder(json.JSONEncoder):
@@ -341,363 +192,7 @@ class FlaskJSONProvider(flask.json.provider.DefaultJSONProvider):
         return super().default(obj)
 
 
-@traced("selenium.init_webdriver")
-def init_webdriver(log_prefix='', implicit_wait=0.5, extension=None, extension_data=None):
-    """ Initializes the Selenium WebDriver with the necessary options.
-    """
-    span = trace.get_current_span()
-    span.set_attributes({
-        "webres6.selenium.remote": selenium_remote is not None,
-        "webres6.selenium.headless": headless_selenium,
-        "webres6.extension": extension or "none",
-    })
-
-    options = webdriver.ChromeOptions()
-    options.enable_bidi = True
-    options.enable_webextensions = True
-    options.page_load_strategy = 'normal'
-    options.unhandled_prompt_behavior = 'dismiss'
-    options.add_argument('--disable-gpu')
-    options.add_argument('--disable-webrtc')
-    options.add_argument('--disable-notifications')
-    options.add_experimental_option('perfLoggingPrefs', { 'enableNetwork' : True })
-    options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
-
-    if headless_selenium:
-        options.headless = True
-        options.add_argument('--headless=new')
-
-    # initialize extension if needed
-    if not init_selenium_options(options, extension, extension_data=extension_data, log_prefix=log_prefix):
-        return None
-
-    # If SELENIUM_REMOTE_URL is set, use it to connect to a remote Selenium server
-    driver = None
-
-    try:
-        if selenium_remote:
-            print(f"{log_prefix}connecting to remote Selenium server at {selenium_remote}", file=sys.stderr)
-            client_config = ClientConfig
-            driver = webdriver.Remote(command_executor=selenium_remote, options=options, client_config=selenium_client_config)
-        else:
-            print(f"{log_prefix}starting local Selenium", file=sys.stderr)
-            driver = webdriver.Chrome(options=options)
-
-        # set implicit wait for almost all actions
-        driver.implicitly_wait(implicit_wait)
-
-        # add block list
-        driver.execute_cdp_cmd("Network.enable", {})
-        driver.execute_cdp_cmd("Network.setBlockedURLs", {"urls": url_blocklist })
-
-        caps = driver.capabilities
-        span.set_attributes({
-            "webres6.browser.name": caps.get('browserName', 'unknown'),
-            "webres6.browser.version": caps.get('browserVersion', 'unknown'),
-            "webres6.browser.platform": caps.get('platformName', 'unknown'),
-        })
-
-    except urllib3.exceptions.MaxRetryError as e:
-        print(f"{log_prefix}ERROR: Could not connect to Selenium server at {selenium_remote}: {e}", file=sys.stderr)
-        span.set_status(Status(StatusCode.ERROR, "Could not connect to selenium"))
-        return None, "Could not connect to selenium"
-
-    except TimeoutException as e:
-        print(f"{log_prefix}ERROR: Selenium WebDriver initialization timed out: {e.msg}", file=sys.stderr)
-        span.set_status(Status(StatusCode.ERROR, "Timeout getting selenium instance"))
-        return None, "Timeout getting selenium instance"
-
-    except WebDriverException as e:
-        print(f"{log_prefix}ERROR: failed initializing Selenium WebDriver: {e.msg}", file=sys.stderr)
-        span.set_status(Status(StatusCode.ERROR, "Selenium initialization failed"))
-        return None, "Selenium initialization failed"
-
-    return driver, None
-
-
-@traced("selenium.crawl_page")
-def crawl_page(url, driver=None, extension=None, extension_data=None, wait=2, timeout=10, log_prefix=''):
-    """ Fetches the web page at the given URL using Selenium WebDriver.
-    """
-    span = trace.get_current_span()
-    span.set_attributes({
-        "webres6.url": url,
-        "webres6.wait_time": wait,
-        "webres6.timeout": timeout,
-        "webres6.extension": extension or "none",
-    })
-
-    start_time = None
-    try:
-        # initialize page load timeout
-        driver.set_page_load_timeout(timeout)
-
-        # prepare for crawl
-        span.add_event("prepare_selenium_crawl")
-        success, err = prepare_selenium_crawl(driver, url, extension=extension, extension_data=extension_data, log_prefix=log_prefix)
-        if not success:
-            span.set_status(Status(StatusCode.ERROR, err or "Unknown error"))
-            return False, err
-
-        # start crawl
-        span.add_event("page_load_start")
-        start_time = time.time()
-        driver.get(url)
-
-        # wait requested settle time
-        span.add_event("settle_wait_start", {"wait_seconds": wait})
-        time.sleep(wait)
-
-        # operate after crawl
-        span.add_event("operate_selenium_crawl")
-        success, err = operate_selenium_crawl(driver, url, extension=extension, extension_data=extension_data, log_prefix=log_prefix)
-        if not success:
-            span.set_status(Status(StatusCode.ERROR, err or "Unknown error"))
-            return False, err
-
-        # wait for page load complete if time budget allows
-        span.add_event("wait_for_page_ready")
-        while time.time() - start_time < timeout:
-            if driver.execute_script("return document.readyState") == "complete":
-                span.add_event("page_ready", {"elapsed_seconds": time.time() - start_time})
-                break
-            time.sleep(0.5)
-
-    except TimeoutException as e:
-        span.record_exception(e)
-        span.set_status(Status(StatusCode.ERROR, "page rendering timed out"))
-        return False, f"Page rendering timed out after {time.time() - start_time:.2f} seconds"
-    except WebDriverException as e:
-        span.record_exception(e)
-        span.set_status(Status(StatusCode.ERROR, e.msg))
-        return False, e.msg.replace('unknown error: ', '')
-    except Exception as e:
-        span.record_exception(e)
-        span.set_status(Status(StatusCode.ERROR, str(e)))
-        return False, str(e)
-
-    return True, None
-
-@traced("selenium.take_screenshot")
-def take_screenshot(driver, mode='full', log_prefix=''):
-    """ takes a screenshot of the current page and returns it as a base64-encoded string.
-    """
-
-    if mode in ['none', None]:
-        return None
-
-    # Ask selenium to navigate to the URL and fetch performance logs
-    try:
-        if mode == 'full':
-            # get the page scroll dimensions
-            width = driver.execute_script("return document.body.parentNode.scrollWidth")
-            height = driver.execute_script("return document.body.parentNode.scrollHeight")
-            # set the window size to the scroll dimensions (with some reasonable limits to avoid OOM issues)
-            if width < 1:
-                width = 2048
-            elif width > 16384:
-                width = 16384
-            if height < 1:
-                height = 1152
-            elif height > 32768:
-                height = 32768
-            driver.set_window_size(width, height)
-            # get the full body element
-            full_body_element = driver.find_element(By.TAG_NAME, "body")
-            return full_body_element.screenshot_as_base64
-        elif mode == 'medium':
-            # set a reasonable window size for a partial screenshot
-            driver.set_window_size(2048, 1152)
-            return driver.get_screenshot_as_base64()
-        else: # small for all other cases
-            # set a reasonable window size for a partial screenshot
-            driver.set_window_size(1024, 768)
-            return driver.get_screenshot_as_base64()
-
-    except WebDriverException as e:
-        print(f"{log_prefix}ERROR: failed acquiring screenshot: {e.msg}", file=sys.stderr)
-        return None
-
-
-def split_hostname(hostname):
-    """ Splits the hostname into local part and domain part.
-    """
-
-    if public_suffixes is None:
-        parts = hostname.rsplit('.', 2)
-        domain_part = '.'.join(parts[-2:]) if len(parts) > 1 else hostname
-        local_part = (parts[0] + '.') if len(parts) > 2 else ''
-    else:
-        parts = hostname.split('.')
-        for i in range(1, len(parts)+1):
-            domain_part = '.'.join(parts[-i:])
-            local_part  = '.'.join(parts[:-i]) + ('.' if len(parts[:-i]) > 0 else '')
-            if domain_part not in public_suffixes:
-                break
-
-    return local_part, domain_part
-
-@traced("selenium.get_hostinfo")
-def get_hostinfo(driver, log_prefix=''):
-    """ extracts host information using Selenium/Chromium network performance logs.
-    """
-
-    span = trace.get_current_span()
-
-    # Ask selenium for performance logs
-    try:
-        # ugly work-around as >>> # perfs = driver.get_log('performance') <<< does not work with remote driver
-        perfs = driver.execute('getLog', {'type': 'performance'})['value']
-    except WebDriverException as e:
-        print(f"Error fetching performance logs: {e.msg}", file=sys.stderr)
-        return None
-
-    # dictionary to hold host-level summaries
-    hosts = {}
-
-    # Extract host info from performance logs
-    for perf in perfs:
-        # parse log entry
-        try:
-            msg = perf.get('message')
-            obj = json.loads(msg)
-        except Exception as e:
-            print(f"{log_prefix}ERROR: failed parsing log entry: {e}", file=sys.stderr)
-            span.add_event("log.parse_error", {"log_entry": str(e)})
-            webres6_hostinfo_parsed.labels(type='error').inc()
-            continue
-
-        # We are only interested in Network.responseReceived events
-        if 'message' not in obj or obj['message'].get('method') != 'Network.responseReceived':
-            webres6_hostinfo_parsed.labels(type='skipped').inc()
-            continue
-
-        # Check for valid IP in response
-        response = obj['message']['params']['response']
-        remote_ip = response.get('remoteIPAddress', None)
-        if not remote_ip:
-            webres6_hostinfo_parsed.labels(type='without_ip').inc()
-            if debug_hostinfo:
-                print(f"{log_prefix}WARNING: No valid IP address found in {response}", file=sys.stderr)
-                span.add_event("log.missing_ip", {"response": str(response)})
-            continue
-        # Strip brackets from IPv6 addresses
-        if remote_ip and remote_ip.startswith('[') and remote_ip.endswith(']'):
-            remote_ip = remote_ip[1:-1]
-        # Parse the IP address
-        try:
-            ip = ip_address(remote_ip)
-            webres6_hostinfo_parsed.labels(type='valid_ip').inc()
-        except ValueError as e:
-            webres6_hostinfo_parsed.labels(type='invalid_ip').inc()
-            print(f"{log_prefix}WARNING: Error parsing IP address: {remote_ip} - {e}", file=sys.stderr)
-            span.add_event("log.invalid_ip", {"ip_address": remote_ip, "error": str(e)})
-            ip = None
-        # add resource statistics
-        match ip.version:
-            case 4:
-                webres6_resources_total.labels(protocol='IPv4').inc()
-            case 6 if ip.is_nat64():
-                webres6_resources_total.labels(protocol='NAT64').inc()
-            case 6 if ip.ipv4_mapped:
-                webres6_resources_total.labels(protocol='IPv4_Mapped').inc()
-            case 6:
-                webres6_resources_total.labels(protocol='IPv6').inc()
-            case _:
-                webres6_resources_total.labels(protocol='Unknown').inc()
-
-        # Extract remainder of the response details
-        url = urlparse(response.get('url'))
-        security_details = response.get('securityDetails', None)
-        security_protocol = security_details.get('protocol') if security_details else None
-        protocols = response.get('protocol'), security_protocol
-
-        # print debugging information if needed
-        if debug_hostinfo:
-            print(f"{log_prefix}Response URL: {response.get('url')}", file=sys.stderr)
-            print(f"{log_prefix}Response Status: {response.get('status')}", file=sys.stderr)
-            print(f"{log_prefix}Response Host: {url.hostname}", file=sys.stderr)
-            print(f"{log_prefix}Response IP: {response.get('remoteIPAddress')}", file=sys.stderr)
-            print(f"{log_prefix}Response Protocol: {response.get('protocol')}", file=sys.stderr)
-            if security_details:
-                print(f"{log_prefix}Security Protocol: {security_details.get('protocol')}", file=sys.stderr)
-                print(f"{log_prefix}Subject Alt Names: {security_details.get('sanList')}", file=sys.stderr)
-            print(f"{log_prefix}Response Headers: {response.get('headers')}", file=sys.stderr)
-
-        # Update the hosts dictionary with the response details
-        if not url.hostname:
-            webres6_hostinfo_parsed.labels(type='without_hostname').inc()
-            if debug_hostinfo:
-                print(f"{log_prefix}WARNING: No valid hostname found in URL {response.get('url')}", file=sys.stderr)
-                span.add_event("log.missing_hostname", {"url": response.get('url')})
-            continue
-
-        # Create a new host entry if it does not exist yet
-        if url.hostname not in hosts:
-            local_part, domain_part = split_hostname(url.hostname)
-            hosts[url.hostname] = {
-                'domain_part': domain_part,
-                'local_part': local_part,
-                'urls': set(),
-                'ips': set(),
-                'protocols': {},
-                'subject_alt_names': set()
-            }
-            span.add_event("host.new", {"hostname": url.hostname, "domain_part": domain_part, "local_part": local_part})
-        else:
-            span.add_event("host.update", {"hostname": url.hostname})
-
-        # Add the URLs and additional IPs
-        hosts[url.hostname]['urls'].add(url.geturl())
-        hosts[url.hostname]['ips'].add(ip)
-        # Update protocol ifs they are not already set
-        if ip not in hosts[url.hostname]['protocols']:
-            hosts[url.hostname]['protocols'][ip] = [protocols]
-        elif protocols not in hosts[url.hostname]['protocols'][ip]:
-            hosts[url.hostname]['protocols'][ip].append(protocols)
-        # Update subject alt names if they are not already set
-        if security_details:
-            hosts[url.hostname]['subject_alt_names'].update(security_details.get('sanList'))
-
-    return hosts
-
-@traced("selenium.cleanup_crawl")
-def cleanup_crawl(driver, extension=None, extension_data=None, log_prefix=''):
-    """Cleans up the Selenium WebDriver instance by safely quitting it.
-
-    Args:
-        driver: The Selenium WebDriver instance to be cleaned up
-        extension (str, optional): The extension name being used. Defaults to None.
-        log_prefix (str, optional): Prefix to add to error log messages. Defaults to ''.
-
-    Returns:
-        None
-
-    """
-    try:
-        cleanup_selenium_crawl(driver, extension=extension, extension_data=extension_data, log_prefix=log_prefix)
-        driver.quit()
-    except WebDriverException as e:
-        print(f"{log_prefix}ERROR: failed quitting WebDriver: {e.msg}", file=sys.stderr)
-    return
-
-@traced("check_selenium")
-def check_selenium(log_prefix=''):
-    """ Checks if Selenium is available and working properly.
-    """
-    try:
-        driver, err = init_webdriver(log_prefix=log_prefix, implicit_wait=0.5)
-        if driver:
-            browser_name = driver.capabilities.get('browserName', 'unknown')
-            browser_version = driver.capabilities.get('browserVersion', 'unknown')
-            cleanup_crawl(driver, log_prefix=log_prefix)
-            return True, f'ok: {browser_name} {browser_version}'
-        else:
-            return False, f'error: {err}'
-    except Exception as e:
-        return False, f'error: {str(e)}'
-
-@traced("add_dnsprobe_info")
+@tracer.start_as_current_span("add_dnsprobe_info")
 def add_dnsprobe_info(hosts, log_prefix=''):
     """ Adds DNSProbe information for each unique IP address in the hosts dictionary.
     """
@@ -707,35 +202,9 @@ def add_dnsprobe_info(hosts, log_prefix=''):
     servfail = 0
     other_rcode = 0
 
-    @traced("dnsprobe.resolve6only")
-    def _dnsprobe_resolve6only(hostname):
-        span = trace.get_current_span()
-        request_url = f"{dnsprobe_api_url}/dnsprobe/resolve6only({hostname})"
-        try:
-            response = dnsprobe.request('GET', request_url, timeout=10)
-            if response.status == 200:
-                dnsprobe_data = response.json()
-                dnsprobe_data['ts'] = datetime.fromisoformat(dnsprobe_data['ts'])
-                span.set_attributes({
-                    "dnsprobe.success": dnsprobe_data.get('success', False),
-                    "dnsprobe.rcode": dnsprobe_data.get('rcode', 'unknown'),
-                    "dnsprobe.aaaa_count": len(dnsprobe_data.get('aaaa_records', [])),
-                    "dnsprobe.elapsed": dnsprobe_data.get('time_elapsed', -1),
-                })
-                return dnsprobe_data
-            else:
-                span.set_status(Status(StatusCode.ERROR, f"HTTP {response.status}"))
-                print(f"{log_prefix}WARNING: dnsprobe lookup failed for {hostname}: GET {request_url} => {response.status}", file=sys.stderr)
-                return {}
-        except Exception as e:
-            span.record_exception(e)
-            span.set_status(Status(StatusCode.ERROR, f"Exception during DNSProbe lookup: {str(e)}"))
-            print(f"{log_prefix}WARNING: dnsprobe lookup failed for {hostname}: {e}", file=sys.stderr)
-            return {}
-
     for hostname, info in hosts.items():
         total += 1
-        dnsprobe_data = _dnsprobe_resolve6only(hostname)
+        dnsprobe_data = dnsprobe.res_v6only(hostname)
         webres6_dnsprobe_results_total.labels(rcode=dnsprobe_data.get('rcode', 'unknown')).inc()
         if dnsprobe_data.get('success', False):
             success += 1
@@ -801,7 +270,8 @@ def get_ipv6_only_score(hosts):
 
     return overall_score, http_score, dns_score, ipv6_only_ready
 
-@traced("add_whois_info")
+
+@tracer.start_as_current_span("add_whois_info")
 def add_whois_info(hosts):
     """Adds WHOIS information for each unique IP address in the hosts dictionary.
 
@@ -912,7 +382,7 @@ def gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, re
     return f"{int(ts.timestamp()):x}-{subject}-{report_node}"
 
 
-@traced("crawl_and_analyze_url")
+@tracer.start_as_current_span("crawl_and_analyze_url")
 def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
                           screenshot_mode, lookup_whois,
                           report_id, report_node):
@@ -1188,6 +658,11 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
         return json_result, error_code
 
 
+
+##############################################################################
+# flask app factory and helpers
+##############################################################################
+
 def validate_url(url):
     """Validate URL with security and format checks.
 
@@ -1265,35 +740,38 @@ def check_component_health():
     all_healthy = True
 
     # Check storage availability
-    try:
-        if storage_manager:
-            storage_manager.check_health()
-            status['storage'] = 'ok'
-        else:
-            status['storage'] = 'not configured'
-    except Exception as e:
-        status['storage'] = f'error: {str(e)}'
-        all_healthy = False
+    if check_storage_health:
+        try:
+            if storage_manager:
+                storage_manager.check_health()
+                status['storage'] = 'ok'
+            else:
+                status['storage'] = 'not configured'
+        except Exception as e:
+            status['storage'] = f'error: {str(e)}'
+            all_healthy = False
 
     # Check DNS probe availability
-    if dnsprobe_api_url and dnsprobe:
-        try:
-            response = dnsprobe.request('GET', f"{dnsprobe_api_url}/dnsprobe/ping", timeout=5)
-            if response.status == 200:
-                status['dnsprobe'] = 'ok'
-            else:
-                status['dnsprobe'] = f'error: HTTP {response.status}'
+    if check_dnsprobe_health:
+        if dnsprobe:
+            try:
+                ok, error = dnsprobe.ping()
+                if ok:
+                    status['dnsprobe'] = 'ok'
+                else:
+                    status['dnsprobe'] = f'error: {error}'
+                    all_healthy = False
+            except Exception as e:
+                status['dnsprobe'] = f'error: {str(e)}'
                 all_healthy = False
-        except Exception as e:
-            status['dnsprobe'] = f'error: {str(e)}'
-            all_healthy = False
-    else:
-        status['dnsprobe'] = 'not configured'
+        else:
+            status['dnsprobe'] = 'not configured'
 
     # Check selenium availability
-    selenium_ok,  status['selenium'] = check_selenium(log_prefix=lp)
-    if not selenium_ok:
-        all_healthy = False
+    if check_selenium_health:
+        selenium_ok,  status['selenium'] = check_selenium(log_prefix=lp)
+        if not selenium_ok:
+            all_healthy = False
 
     # check extensions health if needed
     extension_health_check = globals().get('health_check')
@@ -1301,20 +779,17 @@ def check_component_health():
         if not extension_health_check(log_prefix=lp, status=status):
             all_healthy = False
 
-    print(f"{lp}{'OK' if all_healthy else 'DEGRADED'} (selenium: {status['selenium']}, storage: {status['storage']}, dnsprobe: {status['dnsprobe']})", file=sys.stderr)
+    print(f"{lp}{'OK' if all_healthy else 'DEGRADED'} ({', '.join([f'{k}: {v}' for k, v in status.items() if k != 'ts'])})", file=sys.stderr)
 
     return status, all_healthy
 
 
 def create_http_app():
-    """ Start HTTP API server to serve host information.
-
-    All api endpoints are created here.
+    """ Common setup for Flask app instance, including instrumentation, endpoints, and configuration.
 
     Returns:
         Flask app instance
     """
-
 
     # Start a simple HTTP API server using Flask
     app = Flask(__name__, static_folder=app_home)
@@ -1327,9 +802,10 @@ def create_http_app():
         FlaskInstrumentor().instrument_app(app)
         print("\tOpenTelemetry Flask instrumentation enabled", file=sys.stderr)
 
+    # Create API endpoints
     print("creating endpoints:", file=sys.stderr)
 
-    print("\t/healthz             readiness endpoint (checks health of backend services storage, DNS, selenium)", file=sys.stderr)
+    print("\t/healthz                      readiness endpoint (checks health of backend services storage, DNS, selenium)", file=sys.stderr)
     @app.route('/healthz', methods=['GET'])
     def health():
         status, all_healthy = check_component_health()
@@ -1339,20 +815,40 @@ def create_http_app():
         else:
             status['status'] = 'degraded'
             return jsonify(status), 503
-
-    print("\t/ping                liveliness endpoint", file=sys.stderr)
-    print("\t/res6/ping           liveliness endpoint", file=sys.stderr)
+    
+    print("\t/ping                         liveliness endpoint", file=sys.stderr)
     @app.route('/ping', methods=['GET'])
-    @app.route('/res6/ping', methods=['GET'])
     def ping():
         return jsonify({'status': 'ok', 'ts': datetime.now(timezone.utc).isoformat()}), 200
 
-    print("\t/res6/$metadata      get OData metadata document", file=sys.stderr)
+    print("\t/metrics                      get Prometheus compatible metrics", file=sys.stderr)
+    @app.route('/metrics', methods=['GET'])
+    def metrics():
+        if check_auth(request):
+            registry = CollectorRegistry()
+            multiprocess.MultiProcessCollector(registry)
+            return app.response_class(generate_latest(registry), mimetype=CONTENT_TYPE_LATEST)
+        else:
+            return app.response_class('Authentication required', mimetype='text/plain', status=401, headers={'WWW-Authenticate': 'Basic realm="webres6 admin"'})
+
+    return app
+
+
+def setup_res6_endpoints(app, srv_message=None, privacy_policy=None):
+    """ Set up WebRes6 related endpoints.
+    """
+
+    print("\t/res6/ping                    liveliness endpoint", file=sys.stderr)
+    @app.route('/res6/ping', methods=['GET'])
+    def res6_ping():
+        return jsonify({'status': 'ok', 'ts': datetime.now(timezone.utc).isoformat()}), 200
+
+    print("\t/res6/$metadata               get OData metadata document", file=sys.stderr)
     @app.route('/res6/$metadata', methods=['GET'])
     def res6_metadata():
         return send_from_directory(app_home, 'webres6-api-metadata.xml', mimetype='application/xml')
 
-    print("\t/res6/serverconfig   list available extensions, screenshot-modes, whois support, ...", file=sys.stderr)
+    print("\t/res6/serverconfig            list available extensions, screenshot-modes, whois support, ...", file=sys.stderr)
     @app.route('/res6/serverconfig', methods=['GET'])
     def res6_serverconfig():
         res = jsonify({'version': webres6_version,
@@ -1366,7 +862,7 @@ def create_http_app():
         res.headers['Cache-Control'] = 'public, max-age=900'
         return res, 200
 
-    print("\t/res6/url(URL)       get JSON results for URL provided", file=sys.stderr)
+    print("\t/res6/url(URL)                get JSON results for URL provided", file=sys.stderr)
     @app.route('/res6/url(<path:url>)', methods=['GET'])
     def res6_url(url):
         ts = datetime.now(timezone.utc)
@@ -1406,7 +902,7 @@ def create_http_app():
         webres6_response_time.labels(whois=str(lookup_whois), screenshot=str(screenshot_mode)).observe((datetime.now(timezone.utc) - ts).total_seconds())
         return response, error_code
 
-    print("\t/res6/report/ID      get archived JSON results for report ID provided", file=sys.stderr)
+    print("\t/res6/report/ID               get archived JSON results for report ID provided", file=sys.stderr)
     @app.route('/res6/report/<string:report_id>', methods=['GET'])
     def res6_report(report_id):
         # check record id - only allow alphanumeric characters and hyphens
@@ -1415,7 +911,7 @@ def create_http_app():
         return get_archived_report(report_id)
 
     if scoreboard:
-        print("\t/res6/scoreboard     get current scoreboard entries", file=sys.stderr)
+        print("\t/res6/scoreboard              get current scoreboard entries", file=sys.stderr)
         @app.route('/res6/scoreboard', methods=['GET'])
         def res6_scoreboard():
             try:
@@ -1428,18 +924,8 @@ def create_http_app():
             res.headers['Cache-Control'] = 'public, max-age=60'
             return res, 200
 
-    print("\t/metrics             get Prometheus compatible metrics", file=sys.stderr)
-    @app.route('/metrics', methods=['GET'])
-    def metrics():
-        if check_auth(request):
-            registry = CollectorRegistry()
-            multiprocess.MultiProcessCollector(registry)
-            return app.response_class(generate_latest(registry), mimetype=CONTENT_TYPE_LATEST)
-        else:
-            return app.response_class('Authentication required', mimetype='text/plain', status=401, headers={'WWW-Authenticate': 'Basic realm="webres6 admin"'})
-
     if storage_manager and hasattr(storage_manager, 'can_persist') and storage_manager.can_persist():
-        print("\t/admin/persist       persist local cache to disk", file=sys.stderr)
+        print("\t/admin/persist                persist local cache to disk", file=sys.stderr)
         @app.route('/admin/persist', methods=['GET'])
         def admin_persist():
             if check_auth(request):
@@ -1452,7 +938,7 @@ def create_http_app():
                 return app.response_class('Authentication required', mimetype='text/plain', status=401, headers={'WWW-Authenticate': 'Basic realm="webres6 admin"'})
 
     if storage_manager and hasattr(storage_manager, 'expire'):
-        print("\t/admin/expire        expire local cache entries", file=sys.stderr)
+        print("\t/admin/expire                 expire local cache entries", file=sys.stderr)
         @app.route('/admin/expire', methods=['GET'])
         def admin_expire():
             if check_auth(request):
@@ -1463,19 +949,19 @@ def create_http_app():
                 return app.response_class('Authentication required', mimetype='text/plain', status=401, headers={'WWW-Authenticate': 'Basic realm="webres6 admin"'})
 
     if os.path.isdir(viewer_dir):
-        print("\t/viewer/<path:file>  send viewer files", file=sys.stderr)
+        print("\t/viewer/<path:file>           send viewer files", file=sys.stderr)
         @app.route('/viewer/<path:file>', methods=['GET'])
         def send_viewer_file(file):
             return send_from_directory(viewer_dir, file)
 
-        print("\t/viewer/[#url:URL]   serve viewer.html as index", file=sys.stderr)
-        print("\t/viewer/[#report:ID] serve viewer.html as index", file=sys.stderr)
+        print("\t/viewer/[#url:URL]            serve viewer.html as index", file=sys.stderr)
+        print("\t/viewer/[#report:ID]          serve viewer.html as index", file=sys.stderr)
         @app.route('/viewer/', methods=['GET'])
         def viewer_index():
             return send_from_directory(viewer_dir, 'viewer.html')
 
         if debug_viewer:
-            print("\t/.well-known/appspecific/com.chrome.devtools.json\n\t                     serve viewer debug info for Chrome DevTools", file=sys.stderr)
+            print("\t/.well-known/appspecific/com.chrome.devtools.json\n\t                              serve viewer debug info for Chrome DevTools", file=sys.stderr)
             @app.route('/.well-known/appspecific/com.chrome.devtools.json', methods=['GET'])
             def viewer_debug():
                 return jsonify({
@@ -1484,12 +970,136 @@ def create_http_app():
                         "uuid": uuid.uuid4(),
                     }}), 200
 
-        print("\t/                    redirect to /viewer", file=sys.stderr)
+        print("\t/                             redirect to /viewer", file=sys.stderr)
         @app.route('/', methods=['GET'])
         def index():
             return redirect('/viewer', code=302)
 
+
+def setup_dnsprobe_endpoints(app):
+    """ Set up DNSProbe related endpoints if DNSProbe is enabled and available.
+    """
+    print("\t/dnsprobe/ping                liveliness probe endpoint", file=sys.stderr)
+    @app.route('/dnsprobe/ping', methods=['GET'])
+    def dnsprobe_ping():
+        return jsonify({'status': 'ok', 'ts': datetime.now(timezone.utc).isoformat()}), 200
+
+    print("\t/dnsprobe/resolve6only(host)  resolve AAAA records for given hostname", file=sys.stderr)
+    @app.route('/dnsprobe/resolve6only(<string:hostname>)', methods=['GET'])
+    def resolve6only(hostname):
+        result = dnsprobe.res_v6only(hostname)
+        resp = jsonify(result)
+        resp.headers['Cache-Control'] = f"public, max-age={dnsprobe.cache_ttl}"
+        return resp, 200
+
+
+def create_webres6_app():
+    """ Start default HTTP API server serving the /res6/* and (if enabled) /dnsprobe/* endpoints.
+
+    Returns:
+        Flask app instance
+    """
+
+    # inialize storage manager
+    global storage_manager
+    if valkey_url and valkey_url.strip() != '':
+        if s3_bucket and s3_bucket.strip() != '':
+            print("Valkey client and S3 endpoint configured, using ValkeyS3HybridStorageManager", file=sys.stderr)
+            storage_manager = ValkeyS3HybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
+                                                valkey_url=valkey_url, s3_bucket=s3_bucket, s3_endpoint=s3_endpoint, s3_delivery_strategy=s3_strategy)
+        elif archive_dir and archive_dir.strip() != '':
+            print("Valkey client and local archive dir configured, using ValkeyFileHybridStorageManager", file=sys.stderr)
+            storage_manager = ValkeyFileHybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
+                                                                valkey_url=valkey_url, archive_dir=archive_dir)
+        else:
+            print("Valkey client configured, using ValkeyStorageManager", file=sys.stderr)
+            storage_manager = ValkeyStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, valkey_url=valkey_url)
+    else:
+        print("Valkey client not configured, using LocalStorageManager", file=sys.stderr)
+        LocalStorageManager.print_warnings(None)
+        storage_manager = LocalStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, cache_dir=local_cache_dir, archive_dir=archive_dir)
+
+    # initialize scoreboard if enabled
+    global scoreboard
+    if storage_manager.can_archive() and enable_scoreboard:
+        scoreboard = Scoreboard(storage_manager=storage_manager)
+
+    # Report whois configuration
+    print(f"Whois lookups are {'enabled with TTL ' + str(whois_cache_ttl) + 's' if enable_whois else 'disabled'}.", file=sys.stderr)
+
+    # Load URL blocklist if available
+    _url_blocklist_file = os.path.join(srvconfig_dir, 'url-blocklist')
+    if os.path.exists(_url_blocklist_file):
+        with open(_url_blocklist_file) as f:
+            url_blocklist = f.read().splitlines()
+            print(f"Loaded URL blocklist with {len(url_blocklist)} entries from '{_url_blocklist_file}'", file=sys.stderr)
+            add_url_blocklist(url_blocklist)
+
+    # load public suffix list for domain parsing
+    load_public_suffix_list(os.path.join(app_home, 'public_suffix_list.dat'))
+
+    # Load privacy policy
+    privacy_policy = None
+    privacy_file = os.path.join(srvconfig_dir, 'PRIVACY')
+    if os.path.exists(privacy_file):
+        print(f"Loading privacy policy file '{privacy_file}'...", end='', file=sys.stderr)
+        with open(privacy_file) as f:
+            privacy_policy = f.read()
+        print("done.", file=sys.stderr)
+
+    # Load server message
+    srv_message = None
+    srv_message_file = os.path.join(srvconfig_dir, 'MESSAGE')
+    if os.path.exists(srv_message_file):
+        print(f"Loading server message file '{srv_message_file}'...", end='', file=sys.stderr)
+        with open(srv_message_file) as f:
+            srv_message = f.read()
+        print("done.", file=sys.stderr)
+
+    # configure component health checks to only check DNSProbe for this app
+    global check_storage_health, check_dnsprobe_health, check_selenium_health
+    check_storage_health = True
+    check_dnsprobe_health = True
+    check_selenium_health = True
+
+    # create app and common endpoints
+    app = create_http_app()
+
+    # set up DNSProbe endpoints if enabled and not remote
+    if dnsprobe and dnsprobe.is_local():
+        setup_dnsprobe_endpoints(app)
+
+    # set up main webres6 endpoints
+    setup_res6_endpoints(app, srv_message=srv_message, privacy_policy=privacy_policy)
+
     return app
+
+
+def create_dnsprobe_app():
+    """ Start dnsprobe HTTP API server serving /dnsprobe/* endpoints only.
+
+    Returns:
+        Flask app instance
+    """
+
+    # Only start DNSProbe API if dnsprobe is configured and local
+    if not dnsprobe or not dnsprobe.is_local():
+        return None
+
+    # configure component health checks to only check DNSProbe for this app
+    global check_storage_health, check_dnsprobe_health, check_selenium_health
+    check_storage_health = False
+    check_dnsprobe_health = True
+    check_selenium_health = False
+
+    # create app and common endpoints
+    app = create_http_app()
+
+    # set up DNSProbe endpoints if enabled and not remote
+    setup_dnsprobe_endpoints(app)
+
+    return app
+
 
 # signal handler for graceful shutdown
 def signal_handler(sig, frame):
@@ -1516,6 +1126,7 @@ if __name__ == "__main__":
             epilog="For production use, consider running in gunicorn behind a reverse proxy.\n")
     parser.add_argument("--port", type=int, metavar='6400', default=6400, help="start a simple HTTP API server at given port")
     parser.add_argument("--debug", action="store_true", help="enable flask debugging output for the HTTP API server")
+    parser.add_argument("--dnsprobe-only", action="store_true", help="start in DNSProbe-only mode, serving only the /dnsprobe/* endpoints")
     parser.add_argument("--export-scoreboard", type=str, metavar='scoreboard.json', help="export scoreboard entries to JSON file and exit")
     parser.add_argument("--import-scoreboard", type=str, metavar='scoreboard.json', help="import scoreboard entries from JSON file and exit")
     parser.add_argument("--export-reports", type=str, metavar='/path/to/dir', help="export all archived reports to the given directory and exit")
@@ -1584,9 +1195,11 @@ if __name__ == "__main__":
         os.environ['PROMETHEUS_MULTIPROC_DIR'] = prometheus_mp_temp_dir
         print(f"Set PROMETHEUS_MULTIPROC_DIR to temporary directory {prometheus_mp_temp_dir}", file=sys.stderr)
 
-    # Check if URL is provided and valid
-    print(f"Starting HTTP API server on port {args.port}", file=sys.stderr)
-    app = create_http_app()
+    # create and run app
+    if args.dnsprobe_only:
+        app = create_dnsprobe_app()
+    else:
+        app = create_webres6_app()
     app.run(debug=debug_flask, host='::1', port=args.port, threaded=False)
 
 # vim: set ts=4 sw=4 et:

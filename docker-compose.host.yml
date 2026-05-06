@@ -1,0 +1,73 @@
+# SPDX-FileCopyrightText: 2026 SAP SE and IPv6 Web Resource Checker contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# This is an example file for docker-compose.
+# make sure your docker network has IPv6 enabled.
+# see https://docs.docker.com/engine/daemon/ipv6/
+
+services:
+
+  webres6-api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: webres6-api
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - LISTEN_ADDR=[::1]
+      - SELENIUM_REMOTE_URL=http://localhost:4444/wd/hub
+      - ENABLE_WHOIS=true
+      - ENABLE_DNSPROBE=true
+      - ARCHIVE_DIR=/archive
+      - VALKEY_URL=valkey://localhost:6379/0
+      - WHOIS_CACHE_TTL=604800
+      - RESULT_CACHE_TTL=300
+      - RESULT_ARCHIVE_TTL=31536000
+    volumes:
+      - ./message.txt:/app/serverconfig/MESSAGE
+      - ./privacy.txt:/app/serverconfig/PRIVACY
+      - ./data/reports:/archive
+      - ./data/backup:/backup
+    depends_on:
+      - selenium
+      - valkey
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6400/healthz"]
+      interval: 60s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  webres6-viewer:
+    build: 
+      context: .
+      dockerfile: viewer/Dockerfile
+    container_name: webres6-viewer
+    environment:
+      - WEBRES6_API_URL=http://localhost:6400/
+      - DNSPROBE_API_URL=http://localhost:6400/
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./data/reports:/usr/share/nginx/html/res6/report:ro
+    depends_on:
+      - webres6-api
+
+  selenium:
+    image: selenium/standalone-chromium:4.43.0
+    environment:
+      - SE_HOST=localhost
+    restart: unless-stopped
+    network_mode: host
+
+  valkey:
+    image: valkey/valkey:latest
+    container_name: webres6-valkey
+    restart: unless-stopped
+    command: valkey-server --save 60 1 --loglevel warning --bind ::1
+    network_mode: host
+    volumes:
+      - ./data/valkey:/data
+

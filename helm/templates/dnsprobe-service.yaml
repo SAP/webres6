@@ -1,4 +1,4 @@
-{{if .Values.dnsprobe.enabled }}
+{{- if eq .Values.dnsprobe.mode "service" }}
 apiVersion: v1
 kind: Service
 metadata:

@@ -23,9 +23,6 @@ check() {
 check "api/webres6_api.py" \
     "$(grep 'webres6_version' api/webres6_api.py | head -1 | sed 's/.*"\(.*\)".*/\1/')"
 
-check "dnsprobe/dnsprobe.py" \
-    "$(grep 'webres6_version' dnsprobe/dnsprobe.py | head -1 | sed 's/.*"\(.*\)".*/\1/')"
-
 check "helm/Chart.yaml (version)" \
     "$(grep '^version:' helm/Chart.yaml | awk '{print $2}')"
 

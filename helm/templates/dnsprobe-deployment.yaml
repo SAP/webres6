@@ -1,4 +1,4 @@
-{{if .Values.dnsprobe.enabled }}
+{{- if eq .Values.dnsprobe.mode "service" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -35,8 +35,9 @@ spec:
       {{- end }}
       containers:
         - name: webres6-dnsprobe
-          image: {{ .Values.dnsprobe.image.repository | default "" .Values.image.repository }}{{ .Values.dnsprobe.image.name | default "webres6-dnsprobe" }}:{{ .Values.dnsprobe.image.tag | default "latest" .Values.image.tag }}
+          image: {{ .Values.dnsprobe.image.repository | default "" .Values.image.repository }}{{ .Values.dnsprobe.image.name | default "webres6-api" }}:{{ .Values.dnsprobe.image.tag | default "latest" .Values.image.tag }}
           imagePullPolicy: {{ .Values.dnsprobe.image.pullPolicy | default "IfNotPresent" }}
+          args: ["--dnsprobe-only"]
           env:
             - name: DEPLOYMENT
               value: {{ .Release.Name | quote }}

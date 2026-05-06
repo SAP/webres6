@@ -16,7 +16,8 @@ import urllib3
 from urllib.parse import urlparse, quote_plus as encodeURIComponent
 
 api_url = environ.get('WEBRES6_API_URL', 'https://webres6.dev.sap').rstrip("/").rstrip("/res6") + "/res6"
-http = urllib3.PoolManager(happy_eyeballs=True)
+retry = urllib3.util.Retry(total=5, connect=5, backoff_factor=2)
+http = urllib3.PoolManager(happy_eyeballs=True, retries=retry)
 max_retries = 5
 
 # Define ANSI color codes for terminal output

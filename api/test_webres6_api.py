@@ -17,7 +17,7 @@ import unittest
 import json
 import os
 import sys
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 from datetime import datetime, timezone, timedelta
 from ipaddress import ip_address
 
@@ -39,7 +39,7 @@ for key, value in test_env.items():
 # Import the API module
 import webres6_api
 
-from webres6_api import create_http_app, check_component_health, gen_report_id, gen_json, get_ipv6_only_score
+from webres6_api import create_webres6_app, check_component_health, gen_report_id, gen_json, get_ipv6_only_score
 
 
 class TestWebres6APIEndpoints(unittest.TestCase):
@@ -48,7 +48,7 @@ class TestWebres6APIEndpoints(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up Flask test client"""
-        cls.app = create_http_app()
+        cls.app = create_webres6_app()
         cls.client = cls.app.test_client()
         cls.app.config['TESTING'] = True
 
@@ -226,9 +226,7 @@ class TestHealthCheckFunctions(unittest.TestCase):
         mock_selenium.return_value = (True, 'ok: chrome 120.0')
 
         # Mock dnsprobe
-        mock_response = Mock()
-        mock_response.status = 200
-        mock_dnsprobe.request.return_value = mock_response
+        mock_dnsprobe.ping.return_value = (True, None)
 
         status, all_healthy = check_component_health()
 
@@ -244,10 +242,7 @@ class TestHealthCheckFunctions(unittest.TestCase):
         """Test health check when storage fails"""
         mock_storage.check_health.side_effect = Exception('Connection refused')
         mock_selenium.return_value = (True, 'ok: chrome 120.0')
-
-        mock_response = Mock()
-        mock_response.status = 200
-        mock_dnsprobe.request.return_value = mock_response
+        mock_dnsprobe.ping.return_value = (True, None)
 
         status, all_healthy = check_component_health()
 
@@ -262,10 +257,7 @@ class TestHealthCheckFunctions(unittest.TestCase):
         """Test health check when Selenium fails"""
         mock_storage.check_health.return_value = True
         mock_selenium.return_value = (False, 'error: Could not connect to selenium')
-
-        mock_response = Mock()
-        mock_response.status = 200
-        mock_dnsprobe.request.return_value = mock_response
+        mock_dnsprobe.ping.return_value = (True, None)
 
         status, all_healthy = check_component_health()
 

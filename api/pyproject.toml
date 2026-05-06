@@ -41,5 +41,5 @@ test = [
 ]
 
 [tool.hatch.build.targets.wheel]
-include = ["webres6_api.py", "webres6_storage.py", "webres6_whois.py"]
+include = ["webres6_api.py", "webres6_crawler.py", "webres6_nat64.py", "webres6_storage.py", "webres6_whois.py"]
 

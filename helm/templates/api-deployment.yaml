@@ -61,12 +61,22 @@ spec:
             - name: SELENIUM_PASSWORD
               value: {{ .Values.seleniumHub.password | quote }}
             {{- end }}
-            {{- if .Values.dnsprobe.url }}
+            {{- if and (eq .Values.dnsprobe.mode "external") .Values.dnsprobe.url }}
+            - name: ENABLE_DNSPROBE
+              value: "true"
             - name: DNSPROBE_API_URL
               value: {{ .Values.dnsprobe.url | quote }}
-            {{- else if .Values.dnsprobe.enabled }}
+            {{- else if eq .Values.dnsprobe.mode "service" }}
+            - name: ENABLE_DNSPROBE
+              value: "true"
             - name: DNSPROBE_API_URL
               value: "http://{{ include "webres6.fullname" . }}-dnsprobe:{{ .Values.dnsprobe.service.port }}"
+            {{- else if eq .Values.dnsprobe.mode "internal" }}
+            - name: ENABLE_DNSPROBE
+              value: "true"
+            {{- else if eq .Values.dnsprobe.mode "disabled" }}
+            - name: ENABLE_DNSPROBE
+              value: "false"
             {{- end }}
             {{- if .Values.api.valkeyURL }}
             - name: VALKEY_URL

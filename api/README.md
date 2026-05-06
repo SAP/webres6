@@ -33,7 +33,8 @@ Environment variables:
   TIMEOUT                     Maximum timeout value in seconds
   NAT64_PREFIXES              Comma-separated list of NAT64 prefixes
   SELENIUM_REMOTE_URL         Use remote Selenium server instead of starting selenium for each request
-  DNSPROBE_API_URL            Enable DNS checking using specified dns probe service
+  ENABLE_DNSPROBE             Check DNS entries encountered during the crawl for IPv6-only readiness (default: true) 
+  DNSPROBE_API_URL            Enable DNS checking using external dns probe service (uses internal implementation if unset)
   VALKEY_URL                  URL for optional VALKEY cache, will also store reports if S3_BUCKET/ARCHIVE_DIR are not set
   S3_BUCKET                   Name of S3 bucket to use for report storage (requires valkey to be set)
   S3_ENDPOINT                 S3 Endpoint to use for report storage
@@ -42,7 +43,7 @@ Environment variables:
                               'private'   - fetch object from S3 and deliver from API
   ARCHIVE_DIR                 DIR for optional filesystem-based report storage
   LOCAL_CACHE_DIR             DIR for optional LOCAL filesystem-based cache
-  ENABLE_WHOIS                Enable clients to request whois lookups
+  ENABLE_WHOIS                Enable clients to request whois lookups (default: true)
   WHOIS_CACHE_TTL             Expiry time for whois cache
   RESULT_CACHE_TTL            Expiry time for result cache
   RESULT_ARCHIVE_TTL          Expiry time for result archive
@@ -54,6 +55,8 @@ API endpoints:
   /res6/srvconfig             list available extensions, screenshot-modes, whois support, ...
   /res6/url(URL)              get JSON results for URL provided
   /res6/scoreboard            get current scoreboard entries
+  /dnsprobe/ping              liveliness probe endpoint for DNSprobe logic
+  /dnsprobe/resolve6only(host) resolve AAAA records for given hostname ipv6-only
   /metrics                    Prometheus compatible metrics (requires ADMIN_API_KEY if set)
   /admin/expire               tell stoarge manager to expire old whois cache and scoreboard entries (requires ADMIN_API_KEY if set)
   /admin/persist              tell storage manager to persists data to disk (requires ADMIN_API_KEY if set)
@@ -73,10 +76,12 @@ All configuration is either done by environment variables (see above) or files i
 The API server is built with Flask and uses Selenium WebDriver to crawl web pages and analyze their IPv6 readiness. It consists of several key components:
 
 - **Main API endpoints** (`webres6_api.py`) - Flask application providing REST endpoints
-- **Storage management** (`webres6_storage.py`) - Handles result caching and persistence  
+- **Selenium crawler** (`webres6_crawler.py`) - Selenium WebDriver management, page crawling, and host extraction from performance logs; also owns the URL blocklist and public suffix list
+- **NAT64 support** (`webres6_nat64.py`) - Monkey-patches `ipaddress.IPv6Address` with NAT64 detection; loaded at startup via `import webres6_nat64`
+- **DNS probe client/server** (`webres6_dnsprobe.py`) - `DNSprobe` class used by the API to resolve hostnames over IPv6-only; also shared with the `dnsprobe/` service
+- **Storage management** (`webres6_storage.py`) - Handles result caching and persistence
 - **WHOIS integration** (`webres6_whois.py`) - Provides IP address ownership information
 - **Custom extensions** (`webres6_extension.py`) - Hooks to modify browser automation framework
-- **DNSprobe** – External API to check IPv6-only readiness of the DNS records (see top level `dnsprobe` directory)
 
 ## Extension Mechanisms
 

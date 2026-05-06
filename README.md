@@ -80,6 +80,8 @@ Containerized setup requires IPv6 being enabled in the container runtime. This c
 - Flask 3.1.2+
 - Selenium 4.33+ with [ChromeDriver](https://chromedriver.chromium.org/) and Python support
 - A dual-stack or IPv6-only host with NAT64 connectivity to run Selenium on
+- libunbound with python bindings (built integrated in `Dockerfile` / `create-venv.sh`)
+- A dual-stack or IPv6-only host with clean outbound DNS connectivity / no DNS mingling
 
 ### CLI Client
 <a id="cli"/>
@@ -92,12 +94,6 @@ Containerized setup requires IPv6 being enabled in the container runtime. This c
 - jquery-3.7.1
 - 72 web font
 
-### DNS probe
-
-- Python 3.11+  
-- libunbound with python bindings
-- Flask 3.1.2+
-- A dual-stack or IPv6-only host with clean outbound DNS connectivity / no DNS mingling
 
 ## Setup (CLI only):
 
@@ -108,17 +104,17 @@ You can install the CLI by using `uv tool install --from 'git+https://github.com
 First, you need to have Selenium installed or 
 available as a service and have ```SELENIUM_REMOTE_URL``` environment variable pointing to it.
 
-The *api*, *cli*, *viewer* and *dnsprobe* code can be found in the respective folders.
+The *api*, *cli*, and *viewer* code can be found in the respective folders.
 
-Run the following script to build virtualenvs for *api*, *dnsprobe*, and *cli*: ```bash create-virtualenvs.sh ```
+Run the following script to build virtualenvs for *api*, and *cli*: ```bash create-virtualenvs.sh ```
 
-For *api*, *dnsprobe*, and *cli*, run ```bash source .venv/bin/activate``` within the respective folder before trying to execute the python code.
+For *api*, and *cli*, run ```bash source .venv/bin/activate``` within the respective folder before trying to execute the python code.
 The *viewer* is also served from the *api* development environment. 
 
-The *dnsprobe* is a little tricky, as it needs a custom *pyunbound* build to work.
-Please see the `Dockerfile` and `create_venv.sh` in the *dnsprobe* folder for details.
+The *dnsprobe* implementation in *api* is a little tricky, as it needs a custom *pyunbound* build to work.
+Please see the `Dockerfile` and `create-venv.sh` in the *api* folder for details.
 
-The `webres6` script in the top folder launches *api* and *dnsprobe* first and then passes the arguments to the *cli* to check a single URL.
+The `webres6` script in the top folder launches *api* first and then passes the arguments to the *cli* to check a single URL.
 
 ## Setup (docker compose):
 
@@ -134,7 +130,7 @@ There is a helm chart available in the `helm` directory with a deployment exampl
 ## CLI Client Usage
 
 ```bash
-./webres6-cli.py [options] URL
+webres6 [options] URL
 
 Options:
 positional arguments:

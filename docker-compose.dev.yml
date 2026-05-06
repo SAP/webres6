@@ -8,6 +8,8 @@
 
 services:
   webres6-api:
+    image: webres6-api:latest
+    pull_policy: build
     build:
       context: .
       dockerfile: api/Dockerfile
@@ -22,10 +24,8 @@ services:
       - "6400:6400"
     environment:
       - SELENIUM_REMOTE_URL=http://selenium:4444/wd/hub
-      # disable internal dnsprobe by default as it creates horrible delays if IPv6 in docker is not set up properly
-      # - DNSPROBE_API_URL=http://webres6-dnsprobe:6453/
-      # use external dnsprobe
-      - DNSPROBE_API_URL=https://webres6.krautrouting.net/
+      # use external dnsprobe to avoid docker IPv6 issues - comment out to use build-in dnsprobe
+      - DNSPROBE_API_URL=https://webres6.dev.sap
       - ENABLE_WHOIS=true
       - VALKEY_URL=valkey://webres6-valkey:6379/0
       - WHOIS_CACHE_TTL=3600
@@ -43,7 +43,6 @@ services:
       - ./local_cache/reports:/archive
     depends_on:
       - selenium
-      - webres6-dnsprobe
       - valkey
       - jaeger
     healthcheck:
@@ -73,16 +72,12 @@ services:
       - ./local_cache/reports:/usr/share/nginx/html/res6/report:ro
     depends_on:
       - webres6-api
+      - webres6-dnsprobe
 
   webres6-dnsprobe:
-    build:
-      context: .
-      dockerfile: dnsprobe/Dockerfile
-      x-bake:
-        platforms:
-          - linux/amd64
-          - linux/arm64
-    container_name: webres6-dnsprobe
+    image: webres6-api:latest
+    pull_policy: never
+    command: ["--dnsprobe-only"]
     networks:
       - webres6-network
     ports:

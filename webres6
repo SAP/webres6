@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# This is a wrapper script to start run webres6-client.py
+# This is a wrapper script to start run webres6_cli.py
 # it uses WEBRES6_API_URL as API backend if set,
-# otherwise it starts a local webres6-server.py instance.
+# otherwise it starts a local webres6_api.py instance.
 #
 # SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
 # SPDX-License-Identifier: Apache-2.0
@@ -10,29 +10,8 @@
 SCRIPT_DIR=$(cd $(dirname $(readlink -f "$0")) && pwd)
 CLI_DIR="$SCRIPT_DIR/cli"
 API_DIR="$SCRIPT_DIR/api"
-DNSPROBE_DIR="$SCRIPT_DIR/dnsprobe"
 PORT=6400
-DNSPROBE_PORT=$(($PORT+53))
 RESULT_CACHE_TTL=30
-
-# Start dnsprobe if not already running
-if [ -z ${DNSPROBE_API_URL} ]; then
-  export DNSPROBE_API_URL="http://[::1]:$DNSPROBE_PORT/"
-  # Check if virtual environment is existing
-  if [ ! -d "$DNSPROBE_DIR/.venv" ]; then
-    echo "Could not find virtual environment for dnsprobe, please run create_virtualenvs.sh first." >&2
-    exit 2
-  fi
-  (
-    cd "$DNSPROBE_DIR"
-    source ".venv/bin/activate"
-    echo "Starting local dnsprobe API $DNSPROBE_API_URL" >&2
-    exec "$DNSPROBE_DIR/.venv/bin/python3" "./dnsprobe.py" "--port=$DNSPROBE_PORT" >/dev/null 1>&2
-  ) &
-  DNSPROBE_SPID=$!
-  echo "Started dnsprobe API with PID $DNSPROBE_SPID" >&2
-  sleep 1
-fi
 
 # Start webres6-server if WEBRES6_API_URL is not set
 if [ -z ${WEBRES6_API_URL} ]; then
@@ -45,15 +24,15 @@ if [ -z ${WEBRES6_API_URL} ]; then
   (
     cd "$API_DIR"
     source ".venv/bin/activate"
-    echo "Starting local webres6-api $WEBRES6_API_URL" >&2
-    ENABLE_WHOIS="true" RESULT_CACHE_TTL="$RESULT_CACHE_TTL" exec "$API_DIR/.venv/bin/python3" "./webres6-api.py" "--port=$PORT" >/dev/null 1>&2
+    echo "Starting local webres6 api $WEBRES6_API_URL" >&2
+    ENABLE_WHOIS="true" RESULT_CACHE_TTL="$RESULT_CACHE_TTL" exec "$API_DIR/.venv/bin/python3" "./webres6_api.py" "--port=$PORT" 1>/dev/null 2>/dev/null
   ) &
   export SPID=$!
   echo "Started webres6-api with PID $SPID" >&2
   sleep 1
 fi
 
-trap "if [ ! -z $SPID ]; then kill $SPID; fi; if [ ! -z $DNSPROBE_SPID ]; then kill $DNSPROBE_SPID; fi" EXIT
+trap "if [ ! -z $SPID ]; then kill $SPID; fi; " EXIT
 
 # Check if virtual environment is existing
 if [ ! -d "$CLI_DIR/.venv" ]; then
@@ -62,4 +41,4 @@ if [ ! -d "$CLI_DIR/.venv" ]; then
 fi
 # Start webres6-cli
 source "$CLI_DIR/.venv/bin/activate"
-"$CLI_DIR/.venv/bin/python3" "$CLI_DIR/webres6-cli.py" "$@" 
+"$CLI_DIR/.venv/bin/python3" "$CLI_DIR/webres6_cli.py" "$@" 

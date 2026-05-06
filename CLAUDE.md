@@ -22,7 +22,7 @@ cd api && source .venv/bin/activate
 ### Run the CLI
 ```bash
 cd cli && source .venv/bin/activate
-./webres6-cli.py https://example.com
+./webres6_cli.py https://example.com
 ```
 
 ### Tests (api only — no tests for other components)
@@ -40,7 +40,6 @@ Tests use mocked Selenium, Valkey, S3, and DNSProbe — no real services require
 ```bash
 docker-compose build webres6-api
 docker-compose build webres6-viewer
-docker-compose build webres6-dnsprobe
 docker-compose up                     # full stack (requires IPv6-capable Docker)
 ```
 `docker-compose.yml` symlinks to `docker-compose.dev.yml`. `docker-compose.host.yml` is for production (host networking, Traefik, longer TTLs, `./data/` volumes).
@@ -53,7 +52,7 @@ Four independently deployable services:
 |---------|-----------|------|-------|
 | API server | `api/` | 6400 | Python/Flask + Gunicorn + Selenium |
 | Web viewer | `viewer/` | 6480 | Static HTML/JS served by nginx |
-| DNS probe | `dnsprobe/` | 6453 | Python/Flask + libunbound (built from source) |
+| DNS probe | `dnsprobe/` | 6453 | Same image as API server, only exposes dnsprobe endpoints |
 | CLI client | `cli/` | — | Python/urllib3 |
 
 ### Request flow
@@ -66,7 +65,7 @@ Four independently deployable services:
 7. Report stored via `StorageManager`; ID returned to client.
 
 ### NAT64 detection
-`api/webres6_api.py` monkey-patches `ipaddress.IPv6Address` with `.is_nat64` and `.nat64_extract_ipv4`. NAT64 prefixes default to `64:ff9b::/96` and are configurable via `NAT64_PREFIXES`. This makes NAT64 addresses count as IPv6-capable throughout the codebase.
+`api/webres6_nat64.py` monkey-patches `ipaddress.IPv6Address` with `.is_nat64` and `.nat64_extract_ipv4`. NAT64 prefixes default to `64:ff9b::/96` and are configurable via `NAT64_PREFIXES`. This makes NAT64 addresses count as IPv6-capable throughout the codebase. `webres6_api.py` activates the patch with a bare `import webres6_nat64`.
 
 ### Storage abstraction (`api/webres6_storage.py`)
 `StorageManager` base class with four implementations selected at startup:
@@ -80,8 +79,8 @@ All WHOIS results, crawl reports, and scoreboards go through this layer. Storage
 ### Extension system
 `api/serverconfig/webres6_extension.py` is a swappable file (variants in same dir: `loadcrx.py`, `googledns.py`, `debug_output.py`). It exposes hooks called at each stage of the Selenium crawl: `get_extensions()`, `init_selenium_options()`, `prepare_selenium_crawl()`, `operate_selenium_crawl()`, `cleanup_selenium_crawl()`, `finalize_report()`.
 
-### DNS probe (`dnsprobe/`)
-Uses libunbound's Python bindings (`import unbound`) to perform DNS resolution over IPv6 only (per `unbound.v6only.conf`). The Dockerfile builds unbound from source (two-stage): builder stage compiles with `--with-pyunbound`; runtime stage copies `/usr/local/lib/` and runs `ldconfig`. The `MAX_TARGET_NX` constant is increased to handle CDN DNS delegation chains.
+### DNS probe
+DNS resolution logic lives in `api/webres6_dnsprobe.py` (shared module used by both the API and the DNS probe service). It uses libunbound's Python bindings (`import unbound`) to perform DNS resolution over IPv6 only (per `unbound.v6only.conf`). The Dockerfile builds unbound from source (two-stage): builder stage compiles with `--with-pyunbound`; runtime stage copies `/usr/local/lib/` and runs `ldconfig`. The `MAX_TARGET_NX` constant is increased to handle CDN DNS delegation chains.
 
 ### Viewer frontend (`viewer/`)
 jQuery SPA. All result rows are rendered by cloning hidden `<template>`-class DOM elements. API base URL is discovered from `<link rel="x-webres6-api">` in the HTML. Supports drag-and-drop of JSON report files for offline analysis.
