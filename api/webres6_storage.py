@@ -17,16 +17,14 @@ import boto3
 
 # OpenTelemetry imports
 from opentelemetry import trace
-from opentelemetry.trace import Status, StatusCode
 from opentelemetry.instrumentation.botocore import BotocoreInstrumentor
 from opentelemetry.instrumentation.valkey import ValkeyInstrumentor
 
 
 # Get tracer instance & instrument libraries
-tracer = trace.get_tracer(__name__) 
-if tracer:
-    BotocoreInstrumentor().instrument()
-    ValkeyInstrumentor().instrument()
+tracer = trace.get_tracer(__name__)
+BotocoreInstrumentor().instrument()
+ValkeyInstrumentor().instrument()
 
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -141,37 +139,26 @@ class LocalStorageManager(StorageManager):
     def can_archive(self):
         return self.local_archive_dir is not None
 
+    @tracer.start_as_current_span("storage.archive_result")
     def archive_result(self, report_id, data):
-        if tracer:
-            with tracer.start_as_current_span("storage.archive_result") as span:
-                span.set_attributes({
-                    "webres6.report_id": report_id,
-                    "webres6.storage.backend": "local",
-                    "webres6.storage.operation": "archive",
-                })
-                try:
-                    result = self._archive_result_impl(report_id, data)
-                    span.set_attribute("webres6.storage.success", result)
-                    return result
-                except Exception as e:
-                    span.record_exception(e)
-                    span.set_status(Status(StatusCode.ERROR, str(e)))
-                    raise
-        else:
-            return self._archive_result_impl(report_id, data)
-
-    def _archive_result_impl(self, report_id, data):
-        if not self.local_archive_dir:
-            return False
-        try:
-            file = os.path.join(self.local_archive_dir, f"report-{report_id}.json")
-            with open(file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, cls=DateTimeEncoder, ensure_ascii=False)
-                f.close()
-            return True
-        except Exception as e:
-            print(f"WARNING: failed archiving result {report_id} to local cache: {e}", file=sys.stderr)
-            return False
+        span = trace.get_current_span()
+        span.set_attributes({
+            "webres6.report_id": report_id,
+            "webres6.storage.backend": "local",
+            "webres6.storage.operation": "archive",
+        })
+        result = False
+        if self.local_archive_dir:
+            try:
+                file = os.path.join(self.local_archive_dir, f"report-{report_id}.json")
+                span.set_attribute("webres6.storage.filename", file)
+                with open(file, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, cls=DateTimeEncoder, ensure_ascii=False)
+                result = True
+            except Exception as e:
+                print(f"WARNING: failed archiving result {report_id} to local cache: {e}", file=sys.stderr)
+        span.set_attribute("webres6.storage.success", result)
+        return result
 
     def list_archived_reports(self):
         if not self.local_archive_dir:
@@ -184,36 +171,27 @@ class LocalStorageManager(StorageManager):
             print(f"WARNING: failed listing archived reports from local storage: {e}", file=sys.stderr)
             return []
 
+    @tracer.start_as_current_span("storage.retrieve_result")
     def retrieve_result(self, report_id):
-        if tracer:
-            with tracer.start_as_current_span("storage.retrieve_result") as span:
-                span.set_attributes({
-                    "webres6.report_id": report_id,
-                    "webres6.storage.backend": "local",
-                    "webres6.storage.operation": "retrieve",
-                })
-                result = self._retrieve_result_impl(report_id)
-                span.set_attribute("webres6.storage.found", result is not None)
-                return result
-        else:
-            return self._retrieve_result_impl(report_id)
-
-    def _retrieve_result_impl(self, report_id):
-        if not self.local_archive_dir:
-            return None
-        try:
-            file = os.path.join(self.local_archive_dir, f"report-{report_id}.json")
-            if os.path.exists(file):
-                with open(file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    data['ts'] = datetime.fromisoformat(data['ts'])
-                    f.close()
-                return data
-            else:
-                return None
-        except Exception as e:
-            print(f"WARNING: failed retrieving archived result {report_id} from local storage: {e}", file=sys.stderr)
-            return None
+        span = trace.get_current_span()
+        span.set_attributes({
+            "webres6.report_id": report_id,
+            "webres6.storage.backend": "local",
+            "webres6.storage.operation": "retrieve",
+        })
+        result = None
+        if self.local_archive_dir:
+            try:
+                file = os.path.join(self.local_archive_dir, f"report-{report_id}.json")
+                span.set_attribute("webres6.storage.filename", file)
+                if os.path.exists(file):
+                    with open(file, 'r', encoding='utf-8') as f:
+                        result = json.load(f)
+                        result['ts'] = datetime.fromisoformat(result['ts'])
+            except Exception as e:
+                print(f"WARNING: failed retrieving archived result {report_id} from local storage: {e}", file=sys.stderr)
+        span.set_attribute("webres6.storage.success", result is not None)
+        return result
 
     def put_result_cacheline(self, cache_key, data, ttl, overwrite=True):
         if overwrite or cache_key not in self.result_cache:
@@ -426,32 +404,22 @@ class ValkeyStorageManager(StorageManager):
     def can_archive(self):
         return True
 
+    @tracer.start_as_current_span("storage.archive_result")
     def archive_result(self, report_id, data):
-        if tracer:
-            with tracer.start_as_current_span("storage.archive_result") as span:
-                span.set_attributes({
-                    "webres6.report_id": report_id,
-                    "webres6.storage.backend": "valkey",
-                    "webres6.storage.operation": "archive",
-                })
-                try:
-                    result = self._archive_result_impl(report_id, data)
-                    span.set_attribute("webres6.storage.success", result)
-                    return result
-                except Exception as e:
-                    span.record_exception(e)
-                    span.set_status(Status(StatusCode.ERROR, str(e)))
-                    raise
-        else:
-            return self._archive_result_impl(report_id, data)
-
-    def _archive_result_impl(self, report_id, data):
+        span = trace.get_current_span()
+        span.set_attributes({
+            "webres6.report_id": report_id,
+            "webres6.storage.backend": "valkey",
+            "webres6.storage.operation": "archive",
+        })
+        result = False
         try:
             self.valkey_client.set(f"webres6:archive:{report_id}", json.dumps(data, cls=DateTimeEncoder).encode('utf-8'), ex=self.result_archive_ttl)
-            return True
+            result = True
         except Exception as e:
             print(f"WARNING: failed archiving result {report_id} to valkey: {e}", file=sys.stderr)
-            return False
+        span.set_attribute("webres6.storage.success", result)
+        return result
 
     def list_archived_reports(self):
         try:
@@ -462,56 +430,50 @@ class ValkeyStorageManager(StorageManager):
             print(f"WARNING: failed listing archived reports from valkey: {e}", file=sys.stderr)
             return []
 
+    @tracer.start_as_current_span("storage.retrieve_result")
     def retrieve_result(self, report_id):
-        if tracer:
-            with tracer.start_as_current_span("storage.retrieve_result") as span:
-                span.set_attributes({
-                    "webres6.report_id": report_id,
-                    "webres6.storage.backend": "valkey",
-                    "webres6.storage.operation": "retrieve",
-                })
-                result = self._retrieve_result_impl(report_id)
-                span.set_attribute("webres6.storage.found", result is not None)
-                return result
-        else:
-            return self._retrieve_result_impl(report_id)
-
-    def _retrieve_result_impl(self, report_id):
+        span = trace.get_current_span()
+        span.set_attributes({
+            "webres6.report_id": report_id,
+            "webres6.storage.backend": "valkey",
+            "webres6.storage.operation": "retrieve",
+        })
+        result = None
         try:
             cached_data = self.valkey_client.get(f"webres6:archive:{report_id}")
             if cached_data:
-                data = json.loads(cached_data)
-                data['ts'] = datetime.fromisoformat(data['ts'])
-                return data
-            else:
-                return None
+                result = json.loads(cached_data)
+                result['ts'] = datetime.fromisoformat(result['ts'])
         except Exception as e:
             print(f"WARNING: failed retrieving archived result {report_id} from valkey: {e}", file=sys.stderr)
-            return None
+        span.set_attribute("webres6.storage.found", result is not None)
+        return result
 
+    @tracer.start_as_current_span("storage.put_cache")
     def put_result_cacheline(self, cache_key, data, ttl, overwrite=True):
-        if tracer:
-            with tracer.start_as_current_span("storage.put_cache") as span:
-                span.set_attributes({
-                    "webres6.cache_key": cache_key,
-                    "webres6.storage.backend": "valkey",
-                    "webres6.storage.ttl": ttl,
-                })
-                result = self._put_result_cacheline_impl(cache_key, data, ttl, overwrite)
-                span.set_attribute("webres6.storage.success", result)
-                return result
-        else:
-            return self._put_result_cacheline_impl(cache_key, data, ttl, overwrite)
-
-    def _put_result_cacheline_impl(self, cache_key, data, ttl, overwrite):
+        span = trace.get_current_span()
+        span.set_attributes({
+            "webres6.result_cache.key": cache_key,
+            "webres6.storage.backend": "valkey",
+            "webres6.storage.ttl": ttl,
+        })
+        result = False
         try:
             self.valkey_client.set(f"webres6:cache:{cache_key}", json.dumps(data, cls=DateTimeEncoder).encode('utf-8'), ex=ttl, nx=(not overwrite))
-            return True
+            result = True
         except Exception as e:
             print(f"WARNING: failed putting cacheline {cache_key} to valkey: {e}", file=sys.stderr)
-            return False
+        span.set_attribute("webres6.storage.success", result)
+        return result
 
+    @tracer.start_as_current_span("storage.delete_result_cacheline")
     def delete_result_cacheline(self, cache_key):
+        span = trace.get_current_span()
+        span.set_attributes({
+            "webres6.result_cache.key": cache_key,
+            "webres6.storage.backend": "valkey",
+            "webres6.storage.operation": "delete",
+        })
         try:
             self.valkey_client.delete(f"webres6:cache:{cache_key}")
             return True
@@ -519,37 +481,32 @@ class ValkeyStorageManager(StorageManager):
             print(f"WARNING: failed deleting cacheline {cache_key} from valkey: {e}", file=sys.stderr)
             return False
 
+    @tracer.start_as_current_span("storage.get_cache")
     def get_result_cacheline(self, cache_key):
-        if tracer:
-            with tracer.start_as_current_span("storage.get_cache") as span:
-                span.set_attributes({
-                    "webres6.cache_key": cache_key,
-                    "webres6.storage.backend": "valkey",
-                })
-                result = self._get_result_cacheline_impl(cache_key)
-                span.set_attribute("webres6.cache_hit", result is not None)
-                return result
-        else:
-            return self._get_result_cacheline_impl(cache_key)
-
-    def _get_result_cacheline_impl(self, cache_key):
+        span = trace.get_current_span()
+        span.set_attributes({
+            "webres6.result_cache.key": cache_key,
+            "webres6.storage.backend": "valkey",
+        })
+        result = None
         try:
             cached_data = self.valkey_client.get(f"webres6:cache:{cache_key}")
             if cached_data:
-                data = json.loads(cached_data)
-                # understand why this may be a list
-                # if isinstance(data, list):
-                #    print(f"WARNING: found a list in cache for key {cache_key}, taking first element", file=sys.stderr)
-                #    data = data[0]
-                data['ts'] = datetime.fromisoformat(data['ts'])
-                return data
-            else:
-                return None
+                result = json.loads(cached_data)
+                result['ts'] = datetime.fromisoformat(result['ts'])
         except Exception as e:
             print(f"WARNING: failed getting cacheline {cache_key} from valkey: {e}", file=sys.stderr)
-            return None
+        span.set_attribute("webres6.cache_hit", result is not None)
+        return result
 
+    @tracer.start_as_current_span("storage.put_whois_cacheline")
     def put_whois_cacheline(self, ip, data):
+        span = trace.get_current_span()
+        span.set_attributes({
+            "webres6.whois_cache.key": f"{ip}",
+            "webres6.storage.backend": "valkey",
+            "webres6.storage.operation": "put",
+        })
         # calculate TTL based on timestamp in data
         age = datetime.now(timezone.utc) - data['ts']
         ttl = max(0, self.whois_cache_ttl - int(age.total_seconds()))
@@ -573,7 +530,14 @@ class ValkeyStorageManager(StorageManager):
         self.whois_mem_cache[ip] = data
         return True
 
+    @tracer.start_as_current_span("storage.get_whois_cacheline")
     def get_whois_cacheline(self, ip):
+        span = trace.get_current_span()
+        span.set_attributes({
+            "webres6.whois_cache.key": f"{ip}",
+            "webres6.storage.backend": "valkey",
+            "webres6.storage.operation": "get",
+        })
         # check in-memory cache first
         if ip in self.whois_mem_cache:
             result = self.whois_mem_cache[ip]
@@ -611,7 +575,13 @@ class ValkeyStorageManager(StorageManager):
             raise Exception("Valkey ping returned False")
         return True
 
+    @tracer.start_as_current_span("storage.put_scorecard")
     def put_scorecard(self, scorecard):
+        span = trace.get_current_span()
+        span.set_attributes({
+            "webres6.storage.backend": "valkey",
+            "webres6.storage.operation": "put",
+        })
         try:
             self.valkey_client.lpush("webres6:scorecards", json.dumps(scorecard, cls=DateTimeEncoder).encode('utf-8'))
             return True
@@ -619,7 +589,13 @@ class ValkeyStorageManager(StorageManager):
             print(f"WARNING: failed putting scorecard to valkey: {e}", file=sys.stderr)
             return False
         
+    @tracer.start_as_current_span("storage.get_scorecards")
     def get_scorecards(self, max_entries=23):
+        span = trace.get_current_span()
+        span.set_attributes({
+            "webres6.storage.backend": "valkey",
+            "webres6.storage.operation": "get",
+        })
         deadline = datetime.now(timezone.utc) - timedelta(seconds=self.result_archive_ttl)
         try:
             raw_scorecards = self.valkey_client.lrange("webres6:scorecards", 0, max_entries - 1)
@@ -630,6 +606,12 @@ class ValkeyStorageManager(StorageManager):
                 # only include non-expired scorecards
                 if scorecard['ts'] > deadline:
                     scorecards.append(scorecard)
+            span.set_attributes({
+                "webres6.scorecards_requested": max_entries,
+                "webres6.scorecards_read": len(raw_scorecards),
+                "webres6.scorecards_returned": len(scorecards),
+                "webres6.scorecards_expired": len(raw_scorecards) - len(scorecards),
+            })
             return scorecards
         except Exception as e:
             print(f"WARNING: failed getting scorecards from valkey: {e}", file=sys.stderr)
@@ -726,8 +708,15 @@ class ValkeyS3HybridStorageManager(ValkeyStorageManager):
 
     def _make_s3_key(self, report_id):
         return f"report-{report_id}.json"
-
+    
+    @tracer.start_as_current_span("storage.archive_result")
     def archive_result(self, report_id, data):
+        span = trace.get_current_span()
+        span.set_attributes({
+            "webres6.report_id": report_id,
+            "webres6.storage.backend": "s3",
+            "webres6.storage.operation": "archive",
+        })
         date = datetime.now(timezone.utc) + timedelta(seconds=self.result_archive_ttl)
         try:
             self.s3_client.put_object(Bucket=self.s3_bucket, Key=self._make_s3_key(report_id),
@@ -754,7 +743,14 @@ class ValkeyS3HybridStorageManager(ValkeyStorageManager):
             print(f"WARNING: failed listing archived reports from S3: {e}", file=sys.stderr)
             return []
 
+    @tracer.start_as_current_span("storage.retrieve_result")
     def retrieve_result(self, report_id):
+        span = trace.get_current_span()
+        span.set_attributes({
+            "webres6.report_id": report_id,
+            "webres6.storage.backend": "s3",
+            "webres6.storage.operation": "retrieve",
+        })
         try:
             response = self.s3_client.get_object(Bucket=self.s3_bucket, Key=self._make_s3_key(report_id))
             if 'Body' in response:
@@ -768,7 +764,15 @@ class ValkeyS3HybridStorageManager(ValkeyStorageManager):
             print(f"WARNING: failed retrieving archived result {report_id} from S3: {e}", file=sys.stderr)
             return None
 
+    @tracer.start_as_current_span("storage.retrieve_result_url")
     def retrieve_result_url(self, report_id):
+        span = trace.get_current_span()
+        span.set_attributes({
+            "webres6.report_id": report_id,
+            "webres6.storage.backend": "s3",
+            "webres6.storage.operation": "retrieve_url",
+            "webres6.storage.s3_delivery_strategy": self.s3_delivery_strategy,
+        })
         if self.s3_delivery_strategy == 'public':
             return f"{self.s3_client.meta.endpoint_url}/{self.s3_bucket}/{self._make_s3_key(report_id)}"
         elif self.s3_delivery_strategy == 'private':
