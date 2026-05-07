@@ -16,16 +16,12 @@ from opentelemetry.instrumentation.urllib import URLLibInstrumentor
 
 # Get tracer instance
 tracer = trace.get_tracer(__name__)
-
-# instrument urllib
-
-if tracer:
-    from opentelemetry.instrumentation.urllib import URLLibInstrumentor
-    URLLibInstrumentor().instrument()
+URLLibInstrumentor().instrument()
 
 webres6_whois_lookups = Counter('webres6_whois_lookups_total', 'WHOIS lookups performed', ['type'])
 
-def get_whois_info(ip, local_cache, storage_manager, debug=False):
+@tracer.start_as_current_span("whois.lookup")
+def get_whois_info(ip, local_cache, local_cache_lock, storage_manager, debug=False):
     """ Fetches WHOIS information for the given IP address using local and global caches.
 
     Args:
@@ -35,46 +31,31 @@ def get_whois_info(ip, local_cache, storage_manager, debug=False):
         dict: The WHOIS information for the IP address, or None if not found.
     """
 
-    if tracer:
-        with tracer.start_as_current_span("whois.lookup") as span:
-            span.set_attributes({
-                "whois.ip": str(ip),
-                "whois.ip_version": ip.version,
-            })
-            result, source = _get_whois_info_impl(ip, local_cache, storage_manager, debug, span)
-            span.set_attributes({
-                "whois.source": source,
-                "whois.success": result is not None,
-            })
-            return result, source
-    else:
-        return _get_whois_info_impl(ip, local_cache, storage_manager, debug, None)
+    # otel tracing span attributes
+    span = trace.get_current_span()
+    span.set_attributes({
+        "whois.ip": str(ip),
+        "whois.ip_version": ip.version,
+    })
 
 
-def _get_whois_info_impl(ip, local_cache, storage_manager, debug, parent_span):
-    """ Internal implementation of get_whois_info.
-
-    Args:
-        ip (ipaddress.IPv4Address or ipaddress.IPv6Address): The IP address to look up
-
-    Returns:
-        dict: The WHOIS information for the IP address, or None if not found.
-    """
-
+    # helper functions for cache management and whois lookup
     def push_to_local_cache(whois_info):
-        try:
-            for cidr in whois_info['network']['cidr'].split(','):
-                ipn = ip_network(cidr.strip())
-                local_cache[ipn] = whois_info
-        except (ValueError, KeyError) as e:
-            print(f"\tWARNING: local cache push failed for whois info {whois_info}: {e}", file=sys.stderr)
+        with local_cache_lock:
+            try:
+                for cidr in whois_info['network']['cidr'].split(','):
+                    ipn = ip_network(cidr.strip())
+                    local_cache[ip.version][ipn] = whois_info
+            except (ValueError, KeyError) as e:
+                print(f"\tWARNING: local cache push failed for whois info {whois_info}: {e}", file=sys.stderr)
 
     def lookup_local_cache(ip):
-        for network_cidr, cached_data in local_cache[ip.version].items():
-            if ip in network_cidr:
-                if debug:
-                    print(f"\twhois cache local hit for {ip} in network {network_cidr}", file=sys.stderr)
-                return cached_data
+        with local_cache_lock:
+            for network_cidr, cached_data in local_cache[ip.version].items():
+                if ip in network_cidr:
+                    if debug:
+                        print(f"\twhois cache local hit for {ip} in network {network_cidr}", file=sys.stderr)
+                    return cached_data
         return None
 
     def lookup_whois(ip):
@@ -86,7 +67,8 @@ def _get_whois_info_impl(ip, local_cache, storage_manager, debug, parent_span):
             # Extract network CIDR
             network_cidr = result.get("network", {}).get("cidr")
             if not network_cidr:
-                print(f"\tWARNING: whois lookup failed for {ip}: {e}", file=sys.stderr)
+                print(f"\tWARNING: whois lookup failed for {ip}: no network CIDR found in whois result", file=sys.stderr)
+                span.add_event("whois_lookup_failed", {"error": "no network CIDR in whois result"})
                 return None
 
             whois_info = {
@@ -109,9 +91,13 @@ def _get_whois_info_impl(ip, local_cache, storage_manager, debug, parent_span):
 
         except Exception as e:
             print(f"\tWARNING: whois lookup failed for {ip}: {e}", file=sys.stderr)
+            span.add_event("whois_lookup_failed", {"error": str(e)})
             return None
 
+
     # Check global cache (exact ip match) first
+    # This also "warms up" the local cache for subsequent lookups 
+    # of IPs from the same whois object
     if (whois_info := storage_manager.get_whois_cacheline(ip)):
         if debug:
             print(f"\twhois global cache hit for {ip}", file=sys.stderr)
@@ -119,6 +105,10 @@ def _get_whois_info_impl(ip, local_cache, storage_manager, debug, parent_span):
         push_to_local_cache(whois_info)
         # store result
         webres6_whois_lookups.labels(type='cache-global').inc()
+        span.set_attributes({
+            "whois.source": 'global_cache',
+            "whois.success": True
+        })
         return whois_info, 'global_cache_hit'
 
     # Check if IP falls into any locally cached network afterwards
@@ -127,6 +117,10 @@ def _get_whois_info_impl(ip, local_cache, storage_manager, debug, parent_span):
         storage_manager.put_whois_cacheline(ip, whois_info)
         # store result
         webres6_whois_lookups.labels(type='cache-local').inc()
+        span.set_attributes({
+            "whois.source": 'local_cache',
+            "whois.success": True
+        })
         return whois_info, 'local_cache_hit'
 
     # finally do a real whois lookup
@@ -137,8 +131,16 @@ def _get_whois_info_impl(ip, local_cache, storage_manager, debug, parent_span):
         storage_manager.put_whois_cacheline(ip, whois_info)
         # store result
         webres6_whois_lookups.labels(type='whois-success').inc()
+        span.set_attributes({
+            "whois.source": 'whois_lookup',
+            "whois.success": True
+        })
         return whois_info, 'whois_lookup'
     else:
         # store result
         webres6_whois_lookups.labels(type='whois-fail').inc()
+        span.set_attributes({
+            "whois.source": 'whois_lookup',
+            "whois.success": False
+        })
         return None, 'whois_failed'

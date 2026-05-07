@@ -13,8 +13,10 @@ import json
 import os
 import signal
 import platform
+import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from os import getenv
 from ipaddress import IPv4Address, IPv6Address
 from datetime import datetime, timedelta, timezone
@@ -33,10 +35,9 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExport
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION, DEPLOYMENT_ENVIRONMENT
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
-from opentelemetry.instrumentation.urllib3 import URLLib3Instrumentor
-from opentelemetry.trace import Status, StatusCode
 
 import webres6_nat64  # noqa: F401 — applies NAT64 monkey-patch to IPv6Address and loads NAT64_PREFIXES
+from webres6_stackoverflow import TracedThreadPoolExecutor
 
 # config/flag variables
 webres6_version   = "1.5.0"
@@ -50,6 +51,7 @@ selenium_username = getenv("SELENIUM_USERNAME", None)
 selenium_password = getenv("SELENIUM_PASSWORD", None)
 headless_selenium = getenv("HEADLESS_SELENIUM", False)
 dnsprobe_api_url  = getenv("DNSPROBE_API_URL", None)
+dnsprobe_jobs     = int(getenv("DNSPROBE_JOBS", "8"))
 enable_dnsprobe   = getenv("ENABLE_DNSPROBE", 'true').lower() in ['true', '1', 'yes']
 valkey_url        = getenv("VALKEY_URL", None)
 s3_bucket         = getenv("S3_BUCKET", None)
@@ -67,6 +69,7 @@ max_timeout       = int(getenv("TIMEOUT", 180))//2
 max_wait          = max_timeout//3
 enable_whois      = getenv("ENABLE_WHOIS", 'true').lower() in ['true', '1', 'yes']
 whois_cache_ttl   = int(getenv("WHOIS_CACHE_TTL", 270000)) # seconds
+whois_jobs        = int(getenv("WHOIS_JOBS", "8"))
 enable_scoreboard = getenv("ENABLE_SCOREBOARD", 'true').lower() in ['true', '1', 'yes']
 scoreboard_request_limit = int(getenv("SCOREBOARD_REQUEST_LIMIT", 1024))
 screenshot_modes  = ['none', 'small', 'medium', 'full']
@@ -223,37 +226,120 @@ class FlaskJSONProvider(flask.json.provider.DefaultJSONProvider):
             return obj.isoformat()
         return super().default(obj)
 
+##############################################################################
+# main app logic
+##############################################################################
 
 @tracer.start_as_current_span("add_dnsprobe_info")
 def add_dnsprobe_info(hosts, log_prefix=''):
     """ Adds DNSProbe information for each unique IP address in the hosts dictionary.
     """
+    span = trace.get_current_span()
     total = 0
     success = 0
     noerror = 0
     servfail = 0
     other_rcode = 0
 
-    for hostname, info in hosts.items():
-        total += 1
-        dnsprobe_data = dnsprobe.res_v6only(hostname)
-        webres6_dnsprobe_results_total.labels(rcode=dnsprobe_data.get('rcode', 'unknown')).inc()
-        if dnsprobe_data.get('success', False):
-            success += 1
-            dnsprobe_data['ipv6_only_ready'] = True
-        elif dnsprobe_data.get('rcode', '') == 'no error':
-            noerror += 1
-            dnsprobe_data['ipv6_only_ready'] = True
-        elif dnsprobe_data.get('rcode', '') == 'serv fail':
-            servfail += 1
-            dnsprobe_data['ipv6_only_ready'] = False
-        else:
-            other_rcode += 1
-            # inconclusive answer, don't set ipv6_only_ready flag
-        info['dns'] = dnsprobe_data
+    if len(hosts) == 0:
+        span.add_event("dnsprobe_lookups_skipped", {"reason": "no hosts"})
+        print(f"{log_prefix}no hosts to perform dnsprobe lookups for.", file=sys.stderr)
+        return total
 
+    span.add_event("dnsprobe_lookups_started", {"total_lookups": len(hosts), "dnsprobe_jobs": dnsprobe_jobs})
+    with TracedThreadPoolExecutor(tracer, max_workers=min(len(hosts), dnsprobe_jobs)) as executor:
+        futures = {executor.submit(dnsprobe.res_v6only, hostname): (hostname, info)
+                   for hostname, info in hosts.items()}
+        for future in as_completed(futures):
+            hostname, info = futures[future]
+            dnsprobe_data = future.result()
+            total += 1
+            webres6_dnsprobe_results_total.labels(rcode=dnsprobe_data.get('rcode', 'unknown')).inc()
+            if dnsprobe_data.get('success', False):
+                success += 1
+                dnsprobe_data['ipv6_only_ready'] = True
+            elif dnsprobe_data.get('rcode', '') == 'no error':
+                noerror += 1
+                dnsprobe_data['ipv6_only_ready'] = True
+            elif dnsprobe_data.get('rcode', '') == 'serv fail':
+                servfail += 1
+                dnsprobe_data['ipv6_only_ready'] = False
+            else:
+                other_rcode += 1
+                # inconclusive answer, don't set ipv6_only_ready flag
+            info['dns'] = dnsprobe_data
+
+    span.add_event("dnsprobe_lookups_completed", {"total": total, "success": success, "noerror": noerror, "servfail": servfail, "other_rcode": other_rcode})
     print(f"{log_prefix}dnsprobe lookups completed: {total} total, {noerror} no error, {success} success, {servfail} servfail, {other_rcode} inconclusive", file=sys.stderr)
     return total
+
+
+@tracer.start_as_current_span("add_whois_info")
+def add_whois_info(hosts, log_prefix=''):
+    """Adds WHOIS information for each unique IP address in the hosts dictionary.
+
+    Args:
+        hosts (dict): Dictionary containing host information
+
+    Returns:
+        tuple: A tuple containing statistics about the WHOIS lookups:
+            - global_cache_hits (int): Number of global cache hits
+            - local_cache_hits (int): Number of local cache hits
+            - whois_lookups (int): Number of actual WHOIS lookups performed
+            - whois_failed (int): Number of WHOIS lookups that failed
+    """
+
+    # Get current span for tracing
+    span = trace.get_current_span()
+
+    # Cache stats
+    stats = {'global_cache_hit': 0, 'local_cache_hit': 0, 'whois_lookup': 0, 'whois_failed': 0}
+
+    # Cache WHOIS lookups by network CIDR locally
+    local_cache = {4: {}, 6: {}}
+    local_cache_lock = threading.Lock()
+
+    # Iterate over all hosts and their IPs to generate WHOIS information fetching tasks
+    tasks = []
+    for hostname, info in hosts.items():
+        # Add empty WHOIS data to host info
+        whois_data = {}
+        info['whois'] = whois_data
+        for ip_in in info.get('ips', []):
+
+            # normalize IP address for lookup
+            if ip_in.version == 6 and ip_in.is_nat64():
+                ip = ip_in.nat64_extract_ipv4()
+            elif ip_in.version == 6 and ip_in.ipv4_mapped:
+                ip = ip_in.ipv4_mapped
+            else:
+                ip = ip_in
+
+            if debug_whois:
+                print(f"\taquiring whois info for {ip_in} lookup {ip}", file=sys.stderr)
+
+            tasks.append((whois_data, ip_in, ip))
+
+    if len(tasks) == 0:
+        span.add_event("whois_lookups_skipped", {"reason": "no IPs"})
+        print(f"{log_prefix}no IPs to perform whois lookups for.", file=sys.stderr)
+        return
+
+    # execute jobs in parallel and update host info with results
+    span.add_event("whois_lookups_started", {"total_lookups": len(tasks), "whois_jobs": whois_jobs})
+    with TracedThreadPoolExecutor(tracer, max_workers=min(len(tasks), whois_jobs)) as executor:
+        future_to_ip = {executor.submit(get_whois_info, ip, local_cache, local_cache_lock, storage_manager, debug=debug_whois): (whois_data, ip_in, ip) for whois_data, ip_in, ip in tasks}
+        for future in as_completed(future_to_ip):
+            whois_data, ip_in, ip = future_to_ip[future]
+            whois_info, source = future.result()
+            if whois_info:
+                whois_data[ip_in] = whois_info
+            stats[source] += 1
+
+    span.add_event("whois_lookups_completed", stats)
+    print(f"{log_prefix}whois lookups: {stats['whois_lookup']} successful, {stats['whois_failed']} failed, {stats['global_cache_hit']} global cache hits, {stats['local_cache_hit']} local cache hits", file=sys.stderr)
+
+    return
 
 
 def get_ipv6_only_score(hosts):
@@ -301,53 +387,6 @@ def get_ipv6_only_score(hosts):
     dns_score = resources_ipv6_dns / resources_total if resources_total > 0 and has_dnsinfo else None
 
     return overall_score, http_score, dns_score, ipv6_only_ready
-
-
-@tracer.start_as_current_span("add_whois_info")
-def add_whois_info(hosts):
-    """Adds WHOIS information for each unique IP address in the hosts dictionary.
-
-    Args:
-        hosts (dict): Dictionary containing host information
-
-    Returns:
-        tuple: A tuple containing statistics about the WHOIS lookups:
-            - global_cache_hits (int): Number of global cache hits
-            - local_cache_hits (int): Number of local cache hits
-            - whois_lookups (int): Number of actual WHOIS lookups performed
-            - whois_failed (int): Number of WHOIS lookups that failed
-    """
-
-    # Cache stats
-    stats = {'global_cache_hit': 0, 'local_cache_hit': 0, 'whois_lookup': 0, 'whois_failed': 0}
-
-    # Cache WHOIS lookups by network CIDR locally
-    local_cache = {4: {}, 6: {}}
-
-    # Iterate over all hosts and their IPs to fetch WHOIS information
-    for hostname, info in hosts.items():
-        whois_data = {}
-        for ip_in in info.get('ips', []):
-
-            # normalize IP address for lookup
-            if ip_in.version == 6 and ip_in.is_nat64():
-                ip = ip_in.nat64_extract_ipv4()
-            elif ip_in.version == 6 and ip_in.ipv4_mapped:
-                ip = ip_in.ipv4_mapped
-            else:
-                ip = ip_in
-
-            if debug_whois:
-                print(f"\taquiring whois info for {ip_in} lookup {ip}", file=sys.stderr)
-
-            whois_info, source = get_whois_info(ip, local_cache, storage_manager, debug=debug_whois)
-            whois_data[ip_in] = whois_info
-            stats[source] += 1
-
-        # Add WHOIS data to host info
-        info['whois'] = whois_data
-
-    return stats['global_cache_hit'], stats['local_cache_hit'], stats['whois_lookup'], stats['whois_failed']
 
 
 def gen_json(url, domain=None, hosts={}, ipv6_only_ready=None, score=None, http_score=None, dns_score=None, screenshot=None,
@@ -512,8 +551,7 @@ def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
         push_timing('dnsprobe')
 
     if lookup_whois and enable_whois:
-        gch, lch, qs, qf = add_whois_info(hosts)
-        print(f"{lp}whois lookups: {qs} successful, {qf} failed, {gch} global cache hits, {lch} local cache hits", file=sys.stderr)
+        add_whois_info(hosts, log_prefix=lp)
         push_timing('whois')
 
     # report statistics

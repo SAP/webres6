@@ -61,7 +61,7 @@ class DNSprobe:
         else:
             print("DNSprobe unavailable - unbound module not found", file=sys.stderr)
             self.is_local = lambda: False
-            self.res_v6only = lambda self, hostname: {}
+            self.res_v6only = lambda _: {}
             self.ping = lambda: (False, "unbound module not found")
 
     @tracer.start_as_current_span("dnsprobe.resolve6only_remote")
