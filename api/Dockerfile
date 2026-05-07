@@ -19,11 +19,10 @@ RUN apt-get update -q \
   && rm -rf /var/lib/apt/lists/*
 
 # Install setup tools and swig for building Python bindings
-RUN pip install --no-cache-dir setuptools swig
+RUN pip install --no-cache-dir --progress-bar off setuptools swig
 
 # Fetch and verify the latest unbound source
-RUN curl -fsSL "$UNBOUND_IMAGE" \
-      -o unbound.tar.gz \
+RUN curl -fsSL "$UNBOUND_IMAGE" -o unbound.tar.gz \
   && tar xzf unbound.tar.gz \
   && mv unbound-* unbound
 
@@ -69,8 +68,8 @@ RUN ldconfig
 COPY api/pyproject.toml api/docker-entrypoint api/webres6_api.py api/webres6_*.py api/webres6-api-metadata.xml api/unbound.v6only.conf ./
 
 # Install python dependencies
-RUN pip install --no-cache-dir . ; \
-    pip install --no-cache-dir gunicorn[gthread]
+RUN pip install --no-cache-dir --progress-bar off . \
+  && pip install --no-cache-dir --progress-bar off gunicorn[gthread]
 
 # Don't copy viewer files into api image, viewer is served separately
 
