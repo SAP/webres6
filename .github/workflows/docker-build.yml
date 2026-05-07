@@ -10,14 +10,12 @@ on:
     paths:
       - 'api/**'
       - 'viewer/**'
-      - 'dnsprobe/**'
     tags: ['v*']
   pull_request:
     branches: [main]
     paths:
       - 'api/**'
       - 'viewer/**'
-      - 'dnsprobe/**'
 
 jobs:
   build:
@@ -39,22 +37,19 @@ jobs:
           - service: viewer
             dockerfile: viewer/Dockerfile
             image: ghcr.io/sap/webres6-viewer
-          - service: dnsprobe
-            dockerfile: dnsprobe/Dockerfile
-            image: ghcr.io/sap/webres6-dnsprobe
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -62,7 +57,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ matrix.image }}
           tags: |
@@ -73,7 +68,7 @@ jobs:
 
       - name: Build and push
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -95,7 +90,7 @@ jobs:
 
       - name: Attest SBOM
         if: github.event_name != 'pull_request'
-        uses: actions/attest-sbom@v2
+        uses: actions/attest@v4
         with:
           subject-name: ${{ matrix.image }}
           subject-digest: ${{ steps.build.outputs.digest }}
