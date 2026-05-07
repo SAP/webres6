@@ -52,7 +52,7 @@ class DNSprobe:
             )
             self.is_local = lambda: False
             self.res_v6only = self._res_v6only_remote
-            self.ping = self._ping_remote()
+            self.ping = self._ping_remote
         elif unbound_available:
             print(f"DNSprobe local unbound using config file '{unbound_v6_conf}' with debug level {unbound_debug_level}", file=sys.stderr)
             self.is_local = lambda: True
@@ -92,17 +92,16 @@ class DNSprobe:
 
     @tracer.start_as_current_span("dnsprobe.ping_remote")
     def _ping_remote(self):
-        def ping():
-            request_url = f"{self.remote}/dnsprobe/ping"
-            try:
-                response = dnsprobe.request('GET', request_url, timeout=5)
-                if response.status == 200:
-                    return True, None
-                else:
-                    return False, f"HTTP {response.status}"
-            except Exception as e:
-                return False, str(e)
-        return ping
+        print("Pinging DNSProbe API...", file=sys.stderr)
+        request_url = f"{self.remote}/dnsprobe/ping"
+        try:
+            response = self.remote_pool.request('GET', request_url, timeout=5)
+            if response.status == 200:
+                return True, None
+            else:
+                return False, f"HTTP {response.status}"
+        except Exception as e:
+            return False, str(e)
 
     @tracer.start_as_current_span("dnsprobe.resolve6only_local")
     def _res_v6only_local(self, hostname):
