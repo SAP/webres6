@@ -163,6 +163,38 @@ from webres6_crawler import init_webdriver, crawl_page, load_public_suffix_list,
 storage_manager = None
 scoreboard = None
 
+def init_storage():
+    """ Initializes the storage manager and scoreboard based on the configuration.
+    """
+
+    print("Initializing storage abstraction...", file=sys.stderr)
+
+    # inialize storage manager
+    global storage_manager
+    if valkey_url and valkey_url.strip() != '':
+        if s3_bucket and s3_bucket.strip() != '':
+            print("Valkey client and S3 endpoint configured, using ValkeyS3HybridStorageManager", file=sys.stderr)
+            storage_manager = ValkeyS3HybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
+                                                valkey_url=valkey_url, s3_bucket=s3_bucket, s3_endpoint=s3_endpoint, s3_delivery_strategy=s3_strategy)
+        elif archive_dir and archive_dir.strip() != '':
+            print("Valkey client and local archive dir configured, using ValkeyFileHybridStorageManager", file=sys.stderr)
+            storage_manager = ValkeyFileHybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
+                                                                valkey_url=valkey_url, archive_dir=archive_dir)
+        else:
+            print("Valkey client configured, using ValkeyStorageManager", file=sys.stderr)
+            storage_manager = ValkeyStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, valkey_url=valkey_url)
+    else:
+        print("Valkey client not configured, using LocalStorageManager", file=sys.stderr)
+        LocalStorageManager.print_warnings(None)
+        storage_manager = LocalStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, cache_dir=local_cache_dir, archive_dir=archive_dir)
+
+    # initialize scoreboard if enabled
+    global scoreboard
+    if storage_manager.can_archive() and enable_scoreboard:
+        scoreboard = Scoreboard(storage_manager=storage_manager)
+
+    print("Storage abstraction initialized", file=sys.stderr)
+
 # configure DNSProbe
 dnsprobe = None
 if not enable_dnsprobe:
@@ -1000,29 +1032,7 @@ def create_webres6_app():
         Flask app instance
     """
 
-    # inialize storage manager
-    global storage_manager
-    if valkey_url and valkey_url.strip() != '':
-        if s3_bucket and s3_bucket.strip() != '':
-            print("Valkey client and S3 endpoint configured, using ValkeyS3HybridStorageManager", file=sys.stderr)
-            storage_manager = ValkeyS3HybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
-                                                valkey_url=valkey_url, s3_bucket=s3_bucket, s3_endpoint=s3_endpoint, s3_delivery_strategy=s3_strategy)
-        elif archive_dir and archive_dir.strip() != '':
-            print("Valkey client and local archive dir configured, using ValkeyFileHybridStorageManager", file=sys.stderr)
-            storage_manager = ValkeyFileHybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
-                                                                valkey_url=valkey_url, archive_dir=archive_dir)
-        else:
-            print("Valkey client configured, using ValkeyStorageManager", file=sys.stderr)
-            storage_manager = ValkeyStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, valkey_url=valkey_url)
-    else:
-        print("Valkey client not configured, using LocalStorageManager", file=sys.stderr)
-        LocalStorageManager.print_warnings(None)
-        storage_manager = LocalStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, cache_dir=local_cache_dir, archive_dir=archive_dir)
-
-    # initialize scoreboard if enabled
-    global scoreboard
-    if storage_manager.can_archive() and enable_scoreboard:
-        scoreboard = Scoreboard(storage_manager=storage_manager)
+    init_storage()
 
     # Report whois configuration
     print(f"Whois lookups are {'enabled with TTL ' + str(whois_cache_ttl) + 's' if enable_whois else 'disabled'}.", file=sys.stderr)
@@ -1136,6 +1146,7 @@ if __name__ == "__main__":
 
     # dump scoreboard if requested and exit
     if args.export_scoreboard:
+        init_storage()
         if not scoreboard:
             print("Scoreboard is not enabled in this deployment.", file=sys.stderr)
             sys.exit(1)
@@ -1144,6 +1155,7 @@ if __name__ == "__main__":
 
     # import scoreboard if requested and exit
     if args.import_scoreboard:
+        init_storage()
         if not scoreboard:
             print("Scoreboard is not enabled in this deployment.", file=sys.stderr)
             sys.exit(1)
@@ -1154,6 +1166,7 @@ if __name__ == "__main__":
 
     # export archived reports if requested and exit
     if args.export_reports:
+        init_storage()
         if export_archived_reports(storage_manager, args.export_reports, result_archive_ttl):
             sys.exit(0)
         else:
@@ -1161,6 +1174,7 @@ if __name__ == "__main__":
 
     # import archived reports if requested and exit
     if args.import_reports:
+        init_storage()
         if import_archived_reports(storage_manager, args.import_reports, result_archive_ttl):
             sys.exit(0)
         else:
@@ -1168,6 +1182,7 @@ if __name__ == "__main__":
 
     # expire local cache entries if requested and exit
     if args.expire:
+        init_storage()
         if storage_manager and hasattr(storage_manager, 'expire'):
             result = storage_manager.expire()
             print(f"Expired {result} cache entries", file=sys.stderr)

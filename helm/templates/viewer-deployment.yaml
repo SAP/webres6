@@ -42,16 +42,16 @@ spec:
             - name: NGINX_PORT
               value: {{ .Values.viewer.port | default "80" | quote }}
             - name: WEBRES6_API_URL
-              value: "http://{{ include "webres6.fullname" . }}-api:{{ .Values.api.port | default 6400 }}/"
+              value: "http://{{ include "webres6.fullname" . }}-api:{{ .Values.api.port | default 6400 }}"
             {{- if and (eq .Values.dnsprobe.mode "external") .Values.dnsprobe.url }}
             - name: DNSPROBE_API_URL
               value: {{ .Values.dnsprobe.url | quote }}
             {{- else if eq .Values.dnsprobe.mode "service" }}
             - name: DNSPROBE_API_URL
-              value: "http://{{ include "webres6.fullname" . }}-dnsprobe:{{ .Values.dnsprobe.service.port }}/"
+              value: "http://{{ include "webres6.fullname" . }}-dnsprobe:{{ .Values.dnsprobe.service.port }}"
             {{- else if eq .Values.dnsprobe.mode "internal" }}
             - name: DNSPROBE_API_URL
-              value: "http://{{ include "webres6.fullname" . }}-api:{{ .Values.api.port }}/"
+              value: "http://{{ include "webres6.fullname" . }}-api:{{ .Values.api.port }}"
             {{- else if eq .Values.dnsprobe.mode "disabled" }}
             {{- end }}
           ports:

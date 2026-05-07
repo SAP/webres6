@@ -57,11 +57,11 @@ spec:
               protocol: TCP
           readinessProbe:
             httpGet:
-              path: /ping
+              path: /healthz
               port: {{ .Values.dnsprobe.port }}
           livenessProbe:
             httpGet:
-              path: /ping
+              path: /healthz
               port: {{ .Values.dnsprobe.port }}
           {{- with .Values.dnsprobe.securityContext }}
           securityContext:
