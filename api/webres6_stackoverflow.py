@@ -7,6 +7,7 @@
 # Source - https://stackoverflow.com/a/71334860
 # Posted by r s, modified by community. See post 'Timeline' for change history
 # Retrieved 2026-05-07, License - CC BY-SA 4.0
+
 from opentelemetry import context as otel_context
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -34,3 +35,5 @@ class TracedThreadPoolExecutor(ThreadPoolExecutor):
             )
         else:
             return super().submit(lambda: fn(*args, **kwargs))
+
+##############################################################################

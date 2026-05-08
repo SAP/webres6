@@ -13,5 +13,5 @@ spec:
     - name: wget
       image: "{{ .Values.curl.image.repository | default "curlimages/curl" }}:{{ .Values.curl.image.tag | default "latest" }}"
       imagePullPolicy: {{ .Values.curl.image.pullPolicy }}
-      args: ['--no-progress-meter', '--request', 'GET', 'http://{{ include "webres6.fullname" . }}:{{ .Values.api.service.port }}/ping']
+      args: ['--no-progress-meter', '--request', 'GET', 'http://{{ include "webres6.fullname" . }}-api:{{ .Values.api.service.port }}/ping']
   restartPolicy: Never

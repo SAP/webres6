@@ -91,5 +91,6 @@ USER app
 
 # Start the app with Gunicorn
 ENV GUNICORN_CMD_ARGS="--threads 32"
+ENV DNSPROBE_WORKERS="8"
 EXPOSE 6400
 ENTRYPOINT [ "/app/docker-entrypoint" ]

@@ -74,6 +74,14 @@ spec:
             {{- else if eq .Values.dnsprobe.mode "internal" }}
             - name: ENABLE_DNSPROBE
               value: "true"
+            {{- if .Values.dnsprobe.workers }}
+            - name: DNSPROBE_WORKERS
+              value: "{{ .Values.dnsprobe.workers }}"
+            {{- end }}
+            {{- if .Values.dnsprobe.unboundDebugLevel }}
+            - name: UNBOUND_DEBUG_LEVEL
+              value: "{{ .Values.dnsprobe.unboundDebugLevel }}"
+            {{- end }}
             {{- else if eq .Values.dnsprobe.mode "disabled" }}
             - name: ENABLE_DNSPROBE
               value: "false"
@@ -151,24 +159,24 @@ spec:
             httpGet:
               path: /healthz
               port: {{ .Values.api.port }}
-            initialDelaySeconds: 10
-            periodSeconds: 30
-            timeoutSeconds: 20
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 6
           readinessProbe:
             httpGet:
               path: /healthz
               port: {{ .Values.api.port }}
-            timeoutSeconds: 20
-            periodSeconds: 60
-            failureThreshold: 2
+            periodSeconds: 30
+            timeoutSeconds: 15
+            failureThreshold: 1
           livenessProbe:
             httpGet:
               path: /ping
               port: {{ .Values.api.port }}
             periodSeconds: 60
             timeoutSeconds: 30
-            failureThreshold: 5
+            failureThreshold: 10
           volumeMounts:
             - name: serverconfig
               mountPath: /app/serverconfig

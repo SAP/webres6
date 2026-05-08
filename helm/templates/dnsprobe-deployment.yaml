@@ -47,6 +47,10 @@ spec:
             - name: GUNICORN_CMD_ARGS
               value: "--threads {{ .Values.dnsprobe.gunicornThreads }}"
             {{- end }}
+            {{- if .Values.dnsprobe.workers }}
+            - name: DNSPROBE_WORKERS
+              value: "{{ .Values.dnsprobe.workers }}"
+            {{- end }}
             {{- if .Values.dnsprobe.unboundDebugLevel }}
             - name: UNBOUND_DEBUG_LEVEL
               value: "{{ .Values.dnsprobe.unboundDebugLevel }}"
@@ -55,14 +59,28 @@ spec:
             - name: http
               containerPort: {{ .Values.dnsprobe.port }}
               protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.dnsprobe.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           readinessProbe:
             httpGet:
               path: /healthz
               port: {{ .Values.dnsprobe.port }}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 1
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /ping
               port: {{ .Values.dnsprobe.port }}
+            periodSeconds: 60
+            timeoutSeconds: 30
+            failureThreshold: 10
           {{- with .Values.dnsprobe.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}

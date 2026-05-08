@@ -1057,7 +1057,13 @@ def setup_dnsprobe_endpoints(app):
     print("\t/dnsprobe/resolve6only(host)  resolve AAAA records for given hostname", file=sys.stderr)
     @app.route('/dnsprobe/resolve6only(<string:hostname>)', methods=['GET'])
     def resolve6only(hostname):
+        # set up logging
+        ts = datetime.now(timezone.utc)
+        lp = f"{int(ts.timestamp()):x}-resolve6only-{hostname[:32]} "  # limit hostname length in logs to prevent abuse
+        # query dnsprobe and log result
         result = dnsprobe.res_v6only(hostname)
+        print(f"{lp}elapsed={result['time_elapsed']:.2f} status={result['success']} rcode={result['rcode'].replace(' ', '_')} {(('ips=['+' '.join([str(ip) for ip in result.get('aaaa_records', [])])+']') if len(result.get('aaaa_records', [])) >0 else '' )}", file=sys.stderr)
+        # prepare and send response
         resp = jsonify(result)
         resp.headers['Cache-Control'] = f"public, max-age={dnsprobe.cache_ttl}"
         return resp, 200

@@ -150,8 +150,13 @@ viewer:
 # DNS Probe configuration
 dnsprobe:
   mode: "internal" # "disabled", "internal", "service" or "external"
-  # external URL to dnsprobe service, if empty internal dnsprobe service will be used
+  # external URL to dnsprobe service (only used if mode is "external")
   url: ""
+  # number of worker processes for the dnsprobe component (only used if mode is "service" or "internal")
+  # note that this is per gunicorn worker (*1 by default)
+  workers: 16
+  # number of threads for the dnsprobe deployment (only used if mode is "service")
+  gunicornThreads: 24
   # image configuration
   image:
     # Overrides the image repository whose default is "" – needs to end with a slash if name is set
@@ -171,10 +176,10 @@ dnsprobe:
   resources:
     requests:
       cpu: "100m"
-      memory: "128Mi"
+      memory: "256Mi"
     limits:
       cpu: "200m"
-      memory: "256Mi"
+      memory: "512Mi"
   securityContext: {}
   podSecurityContext: {}
 
