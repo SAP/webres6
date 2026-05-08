@@ -100,7 +100,8 @@ services:
       start_period: 20s
 
   selenium:
-    image: selenium/standalone-chromium:latest
+    image: selenium/standalone-chromium:4.43.0
+    container_name: webres6-selenium
     networks:
       - webres6-network
     # Uncomment below if you want to expose the Selenium Remote
@@ -108,7 +109,7 @@ services:
     #   - "4444:4444"
 
   valkey:
-    image: valkey/valkey:latest
+    image: valkey/valkey:9.0
     container_name: webres6-valkey
     networks:
       - webres6-network

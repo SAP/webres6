@@ -34,3 +34,8 @@ updates:
     directory: /viewer
     multi-ecosystem-group: docker
     labels: [dependencies]
+
+  - package-ecosystem: docker-compose
+    directory: /
+    multi-ecosystem-group: docker
+    labels: [dev-environment]
