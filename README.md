@@ -45,7 +45,7 @@ The tool is inspired by Paul Marks' [IPvFoo](https://github.com/pmarks-net/ipvfo
 - Calculates scores based on the share of resources available for IPv6-only clients and keeps a score-board of the results.
 - Splits domain names into host/domain part using [public suffix list](https://publicsuffix.org/).
 
-The tool can be accessed using a [CLI Client](#cli) and a built-in [Web app](#web-app).
+The tool can be accessed using a [CLI Client](#cli) and a built-in [Web app](#web-app) and en experimental [MCP server](#mcp).
 
 ### Known limitations
 
@@ -66,7 +66,6 @@ As modern Web pages tend to be complex, this will most likely result in many res
 Without *dnsprobe*, it ignores DNS aspects: Even if this tool reports green, it is still necessary to check the whole DNS delegation chain of all hosts involved for IPv6-only realness.
 With the *dnsprobe* microservice included in the project, DNS testing is fully supported.
 In case of errors, an *unbound* trace is generated and can be accessed by clicking on the red x in the Web app.
-If the tool reports a problem, a more thorough DNS IPv6-only analysis with a tool like [ready.chair6.net](/https://ready.chair6.net/) is recommended.
 
 Containerized setup requires IPv6 being enabled in the container runtime. This can be challenging especially under MacOS.
 
@@ -84,7 +83,6 @@ Containerized setup requires IPv6 being enabled in the container runtime. This c
 - A dual-stack or IPv6-only host with clean outbound DNS connectivity / no DNS mingling
 
 ### CLI Client
-<a id="cli"/>
 
 - Python 3.11+  
 - URLib3 2.6.3+ with URLlib3-future 2.19.913+
@@ -96,8 +94,19 @@ Containerized setup requires IPv6 being enabled in the container runtime. This c
 
 
 ## Setup (CLI only):
+<a id="cli"/>
 
-You can install the CLI by using `uv tool install --from 'git+https://github.com/SAP/webres6#subdirectory=cli' webres6`. This needs the API running elsewhere and defaults to using [http://webres6.dev.sap/].
+You can install the CLI by using
+`uv tool install --from 'git+https://github.com/SAP/webres6#subdirectory=cli' webres6`.
+This needs the API running elsewhere and defaults to using `http://webres6.dev.sap/` if `WEBRES6_API_URL` is not set.
+
+## Setup (MCP server only):
+<a id="mcp"/>
+
+You can install the experimental local/stdio MCP server by using 
+`uv tool install --from 'git+https://github.com/SAP/webres6#subdirectory=mcp' webres6-mcp`.
+This needs the API running elsewhere and defaults to using `http://webres6.dev.sap/` if `WEBRES6_API_URL` is not set.
+
 
 ## Setup (development):
 
