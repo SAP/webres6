@@ -11,21 +11,7 @@ from urllib.parse import quote
 from webres6_mcp.server import mcp
 from webres6_mcp.config import WEBRES6_API_URL
 
-
-@mcp.tool()
-def check_website_ipv6only_readiness(
-    url: Annotated[str, "The URL of the website to check. Include the scheme (http:// or https://)."],
-    scoreboard: Annotated[bool, "Whether to add this result to the public scoreboard. Ask the user before setting this to true."] = False,
-) -> dict:
-    """Check the IPv6-only readiness of a web page.
-
-    Drives a real Chrome browser through the webres6 API, captures every network
-    request and classifies each host as IPv6-only, dual-stack, or IPv4-only.
-    Returns the full report including per-host connection and DNS results enriched
-    with WHOIS data for each IP address.
-
-    May take up to 30 seconds for a fresh crawl.
-
+common_hints = """
     NAT64 addresses (address_family "NAT64") are an artifact of the test environment
     and should be treated as IPv4-only hosts.
 
@@ -83,7 +69,24 @@ def check_website_ipv6only_readiness(
       "timings": { "init": float, "crawl": float, "extract": float,
                    "dnsprobe": float, "whois": float, "finalize": float }
     }
-    """
+
+"""
+
+@mcp.tool()
+def check_website_ipv6only_readiness(
+    url: Annotated[str, "The URL of the website to check. Include the scheme (http:// or https://)."],
+    scoreboard: Annotated[bool, "Whether to add this result to the public scoreboard. Ask the user before setting this to true."] = False,
+) -> dict:
+    """Check the IPv6-only readiness of a web page.
+
+    Drives a real Chrome browser through the webres6 API, captures every network
+    request and classifies each host as IPv6-only, dual-stack, or IPv4-only.
+    Returns the full report including per-host connection and DNS results enriched
+    with WHOIS data for each IP address.
+
+    May take up to 30 seconds for a fresh crawl.
+
+    """ + common_hints
     with httpx.Client(follow_redirects=True, timeout=30) as client:
         encoded = quote(url, safe="")
         endpoint = f"{WEBRES6_API_URL}/url({encoded})"
@@ -106,3 +109,19 @@ def check_website_ipv6only_readiness(
             return data
 
     return {"error": "Crawl did not complete after 10 retries", "url": url}
+
+@mcp.tool()
+def get_report(report_id: str) -> dict:
+    """Retrieve a previously stored webres6 report by its ID.
+
+    The report ID is returned in the 'ID' field of every check_website_ipv6_readiness
+    result and the 'report_id' field of the get_websites_scoreboard tool.
+    Returns the full report JSON, or an error if the report has expired or does not exist.
+
+    """ + common_hints
+    with httpx.Client(follow_redirects=True, timeout=30) as client:
+        r = client.get(f"{WEBRES6_API_URL}/report/{report_id}")
+        r.raise_for_status()
+        data = r.json()
+    data.pop("screenshot", None)
+    return data

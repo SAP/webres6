@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Verify that VERSION, api/webres6-api.py, dnsprobe/dnsprobe.py, and
+# Verify that VERSION, api/webres6_api.py, api/pyproject.toml, and
 # helm/Chart.yaml all declare the same version before every commit.
 
 cd "$(git rev-parse --show-toplevel)"
@@ -22,6 +22,9 @@ check() {
 
 check "api/webres6_api.py" \
     "$(grep 'webres6_version' api/webres6_api.py | head -1 | sed 's/.*"\(.*\)".*/\1/')"
+
+check "api/pyproject.toml" \
+    "$(grep '^version' api/pyproject.toml | sed 's/version = "\(.*\)"/\1/')"
 
 check "helm/Chart.yaml (version)" \
     "$(grep '^version:' helm/Chart.yaml | awk '{print $2}')"

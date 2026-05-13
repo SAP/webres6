@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "webres6-api"
-version = "1.4.1"
+version = "1.5.2"
 description = "IPv6 Web Resource Checker API server"
 license = "Apache-2.0"
 requires-python = ">=3.11"

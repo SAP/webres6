@@ -479,10 +479,8 @@ async function loadScoreboard(resultsLimit=scoreboardDefaultLimit) {
             }
           }
         });
-        // Sort data by score (descending - highest scores first)
+        // Sort data by score (by timestamp, newest first, and then URL as tiebreaker)
         data.sort(function(a, b) {
-          var score = -compareScoreboardEntries(a, b, 'ipv6_only_score');
-          if (score !== 0) return score;
           var score = -compareScoreboardEntries(a, b, 'ts');
           if (score !== 0) return score;
           var score = compareScoreboardEntries(a, b, 'url');

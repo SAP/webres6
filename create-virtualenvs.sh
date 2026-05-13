@@ -25,11 +25,12 @@ if [ ! -d "$SCRIPT_DIR/api/.venv" ]; then
 fi
 
 # Create virtual environment if not existing
-if [ ! -d "$SCRIPT_DIR/dnsprobe/.venv" ]; then
+if [ ! -d "$SCRIPT_DIR/cli/.venv" ]; then
   create_venv "$SCRIPT_DIR/cli"
 fi
 
 # Create virtual environment if not existing
-if [ ! -d "$SCRIPT_DIR/cli/.venv" ]; then
-  create_venv "$SCRIPT_DIR/cli"
+if [ ! -d "$SCRIPT_DIR/mcp/.venv" ]; then
+  create_venv "$SCRIPT_DIR/mcp"
 fi
+

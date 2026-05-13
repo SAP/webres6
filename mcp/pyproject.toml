@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "webres6-mcp"
-version = "0.2.0"
+version = "0.3.0"
 requires-python = ">=3.11"
 dependencies = [
     "mcp[cli]==1.27.0",
