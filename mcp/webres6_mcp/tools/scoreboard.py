@@ -9,14 +9,13 @@ from webres6_mcp.config import WEBRES6_API_URL
 
 
 @mcp.tool()
-def get_website_scoreboard(limit: int = 12) -> dict:
+def get_websites_IPv6only_scoreboard(limit: int = 12) -> dict:
     """Return the most recent webres6 check results from the scoreboard.
 
     Each entry contains the URL, domain, IPv6-only readiness flag, score, and
-    timestamp of the last check. The limit parameter caps the number of entries
-    returned (maximum 12).
+    timestamp of the last check. The limit parameter defaults to 12 and may be limited by the backing API.
     """
     with httpx.Client(follow_redirects=True, timeout=30) as client:
-        r = client.get(f"{WEBRES6_API_URL}/scoreboard", params={"limit": min(limit, 12)})
+        r = client.get(f"{WEBRES6_API_URL}/scoreboard", params={"limit": min(limit, 1024)})
         r.raise_for_status()
         return r.json()

@@ -86,12 +86,12 @@ Containerized setup requires IPv6 being enabled in the container runtime. This c
 
 - Python 3.11+  
 - URLib3 2.6.3+ with URLlib3-future 2.19.913+
+- jq to extract further details from the JSON output
 
 ### Web App 
 
 - jquery-3.7.1
 - 72 web font
-
 
 ## Setup (CLI only):
 <a id="cli"/>
@@ -105,6 +105,7 @@ This needs the API running elsewhere and defaults to using `http://webres6.dev.s
 
 You can install the experimental local/stdio MCP server by using 
 `uv tool install --from 'git+https://github.com/SAP/webres6#subdirectory=mcp' webres6-mcp`.
+and add it, e.g., to *claude* with `claude mcp add webres6 uvx webres6-mcp` 
 This needs the API running elsewhere and defaults to using `http://webres6.dev.sap/` if `WEBRES6_API_URL` is not set.
 
 

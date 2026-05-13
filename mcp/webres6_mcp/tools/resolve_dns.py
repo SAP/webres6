@@ -20,6 +20,10 @@ def resolve_dns_v6only(hostname: str) -> dict:
     the report will contain a "unbound_trace" field with the full libunbound
     trace of the DNS resolution process to allow debugging and reasoning on the failure cause.
     This trace is base64 encoded and usually quite large.
+    These traces can be large — skip them during initial processing and only
+    decode them when investigating specific DNS problems.
+    Reading the unbound_trace from end towards start in ~50l chunks works well to find
+    the relevant query and response without loading the entire trace into memory.
     """
     with httpx.Client(follow_redirects=True, timeout=15) as client:
         r = client.get(f"{DNSPROBE_URL}/dnsprobe/resolve6only({hostname})")

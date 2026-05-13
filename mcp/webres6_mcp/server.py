@@ -10,6 +10,7 @@ mcp = FastMCP(
         "Tools for checking IPv6-only readiness of web pages and DNS hostnames. "
         "Use check_website_ipv6_readiness to analyse a full URL, resolve_dns_v6only to probe a "
         "single hostname, get_website_scoreboard to see recent results, and get_report to "
-        "retrieve a previously stored report by ID."
+        "retrieve a previously stored report by ID. "
+        "NAT64 addresses in reports are an artifact of the test environment and should be treated as IPv4."
     ),
 )
