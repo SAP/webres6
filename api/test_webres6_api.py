@@ -181,14 +181,15 @@ class TestWebres6APIEndpoints(unittest.TestCase):
 
     @patch('webres6_api.init_webdriver')
     def test_url_endpoint_selenium_unavailable(self, mock_init):
-        """Test /res6/url endpoint when Selenium is unavailable"""
+        """Test /res6/url endpoint when Selenium is unavailable — crawl is queued async, returns 202"""
         mock_init.return_value = (None, 'Could not connect to selenium')
 
         response = self.client.get('/res6/url(https://example.com)')
-        self.assertEqual(response.status_code, 503)
+        # Crawl is now submitted to background thread; initial response is always 202 (queued)
+        self.assertEqual(response.status_code, 202)
         data = json.loads(response.data)
         self.assertIn('error', data)
-        self.assertIn('selenium', data['error'].lower())
+        self.assertIn('report_id', data)
 
     def test_report_endpoint_invalid_id(self):
         """Test /res6/report endpoint with invalid ID"""

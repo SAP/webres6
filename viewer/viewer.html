@@ -86,7 +86,7 @@ SPDX-License-Identifier: Apache-2.0
         </thead>
         <tbody>
           <tr class="scoreboard-entry template">
-            <td class="scoreboard-ipv6only-score"><progress class="ipv6only-score" max="1"></progress> <span class="percentage"></span></td>
+            <td class="scoreboard-ipv6only-score"><meter class="ipv6only-score" min="0" max="1" low="0.6" high="0.95" optimum="1"></meter> <span class="percentage"></span></td>
             <td class="scoreboard-target"><a></a></td>
             <td class="scoreboard-timestamp"></td>
           </tr>
@@ -103,7 +103,10 @@ SPDX-License-Identifier: Apache-2.0
       </div>
       <div class="overview">
         <div class="overview-item status status-loading">
-          <strong>Loading resource details... this may take a few minutes</strong>
+          <strong>Analyzing resource details…</strong> <span class="placeholder"></span>
+          <div class="loading-progress-container">
+            <progress class="loading-progress" max="1" value="0"></progress>
+          </div>
         </div>
         <div class="overview-item status ipv6only-ready">
           <strong>IPv6-Only Ready: YES</strong>
@@ -118,13 +121,13 @@ SPDX-License-Identifier: Apache-2.0
           <strong>Error: <span class="placeholder"/></strong>
         </div>
         <div class="overview-item status ipv6only-score clickable">
-          <strong>IPv6-Only Score: </strong><progress class="ipv6only-score" max="1"></progress> <span class="percentage"></span>
+          <strong>IPv6-Only Score: </strong><meter class="ipv6only-score" min="0" max="1" low="0.6" high="0.95" optimum="1"></meter> <span class="percentage"></span>
         </div>
         <div class="overview-item status hide hidden-score ipv6only-http-score">
-          <strong>IPv6-Only HTTP Score: </strong><progress class="ipv6only-http-score" max="1"></progress> <span class="percentage"></span>
+          <strong>IPv6-Only HTTP Score: </strong><meter class="ipv6only-http-score" min="0" max="1" low="0.6" high="0.95" optimum="1"></meter> <span class="percentage"></span>
         </div>
         <div class="overview-item status hide hidden-score ipv6only-dns-score">
-          <strong>IPv6-Only DNS Score: </strong><progress class="ipv6only-dns-score" max="1"></progress> <span class="percentage"></span>
+          <strong>IPv6-Only DNS Score: </strong><meter class="ipv6only-dns-score" min="0" max="1" low="0.6" high="0.95" optimum="1"></meter> <span class="percentage"></span>
         </div>
       </div>
       <div class="hosts template">

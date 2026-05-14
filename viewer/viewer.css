@@ -112,14 +112,30 @@ h1 {
   background: lightgray;
   color: #501030;
 }
-progress {
-  accent-color: #1a7a1a;
+meter {
+  accent-color: #1a7a1a;;
   height: 2ex;
 }
-.overview-item progress {
-  width: 60%;
+.overview-item meter {
+  width: calc(100% - 16em);
   vertical-align: middle;
   margin-right: 8px;
+}
+progress {
+  accent-color: #1a7a1a;;
+  height: 2ex;
+}
+.status-loading .loading-progress-container {
+  position: relative;
+  width: 100%;
+}
+.status-loading progress {
+  width: 100%;
+  height: 2.5ex;
+  accent-color: #1a5a9a;
+}
+.status-loading span.placeholder {
+  float: right;
 }
 table {
   border-collapse: collapse;
@@ -179,9 +195,14 @@ td.scoreboard-ipv6only-score, th.scoreboard-ipv6only-score {
   text-align: left;
   width: 23%;
 }
+td.scoreboard-ipv6only-score meter {
+  width: calc(100% - 5em);
+  float: left;
+}
 td.scoreboard-ipv6only-score span.percentage {
   font-weight: bold;
   float: right;
+  text-align: right;
 }
 th.scoreboard-target, td.scoreboard-target {
   text-wrap-mode: nowrap;
@@ -397,6 +418,9 @@ td.ip-netname {
   }
   progress {
     accent-color: lightseagreen;
+  }
+  .status-loading progress {
+    accent-color: #4aa8d8;
   }
   td.protocol {
     color: #666

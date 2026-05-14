@@ -17,6 +17,7 @@ const scoreboardDefaultLimit=12;
 var srvSupportsScoreboard = false;
 var srvSupportsArchiveLinks = false;
 var srvArchiveLinkTemplate = function(report_id) { return getAPIBase() + `/report/${report_id}`; };
+var serverMaxRetryTime = 180; // seconds - if server indicates that crawl is still in progress, we will retry for up to this time before giving up and showing an error message
 async function loadSrvConfig() {
   // load config
   try {
@@ -35,6 +36,10 @@ async function loadSrvConfig() {
       // update wait time control
       if (srvconfig && srvconfig.max_wait) {
         $('#waitTime').attr('max', srvconfig.max_wait);
+      }
+      // update client retry time for in-progress responses
+      if (srvconfig && srvconfig.crawl_timeout) {
+        serverMaxRetryTime = srvconfig.crawl_timeout;
       }
       // If browser extensions are available in remote selenium, show selector
       if (srvconfig && srvconfig.extensions && Array.isArray(srvconfig.extensions) && srvconfig.extensions.length > 0) {
@@ -135,7 +140,7 @@ function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
   // IPv6-Only HTTP Score
   if (data.ipv6_only_score !== null) {
     const scoreStatus = $('#results-template .overview .status.ipv6only-score').clone();
-    scoreStatus.find('progress').attr('value', (data.ipv6_only_score));
+    scoreStatus.find('meter').attr('value', (data.ipv6_only_score));
     scoreStatus.find('.percentage').text(`${(data.ipv6_only_score * 100).toFixed(1)}%`);
     scoreStatus.on('click', function() {
       $('.hidden-score').toggleClass('hide');
@@ -145,14 +150,14 @@ function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
   // IPv6-Only HTTP Score
   if (data.ipv6_only_http_score !== null) {
     const httpScoreStatus = $('#results-template .overview .status.ipv6only-http-score').clone();
-    httpScoreStatus.find('progress').attr('value', (data.ipv6_only_http_score));
+    httpScoreStatus.find('meter').attr('value', (data.ipv6_only_http_score));
     httpScoreStatus.find('.percentage').text(`${(data.ipv6_only_http_score * 100).toFixed(1)}%`);
     overview.append(httpScoreStatus);
   }
   // IPv6-Only DNS Score
   if (data.ipv6_only_dns_score !== null) {
     const dnsScoreStatus = $('#results-template .overview .status.ipv6only-dns-score').clone();
-    dnsScoreStatus.find('progress').attr('value', (data.ipv6_only_dns_score));
+    dnsScoreStatus.find('meter').attr('value', (data.ipv6_only_dns_score));
     dnsScoreStatus.find('.percentage').text(`${(data.ipv6_only_dns_score * 100).toFixed(1)}%`);
     overview.append(dnsScoreStatus);
   }
@@ -338,51 +343,53 @@ function renderHostsTable(data, hostsContainer) {
   }
 }
 
-/* Call API and fetch analysis */ 
+/* Call API and fetch analysis */
 async function analyzeURL(url, wait = 2, scoreboard_entry = false, screenshot = 'none', ext = null, whois = 'true') {
   // Generate new container
   const [domContainer, overview, domContainerId] = createResultsDomContainer(url);
   const loadingStatus = $('#results-template .overview .status.status-loading').clone();
   loadingStatus.appendTo(overview);
-  // Retry configuration for HTTP 202 responses
-  const maxRetries = 5;
-  const baseDelay = 10*1000; // 10 seconds base delay
   // Build API URL
   let apiUrl = getAPIBase() + `/url(${encodeURIComponent(url)})?wait=${wait}&scoreboard=${scoreboard_entry}&screenshot=${screenshot}&whois=${whois}`;
   if (ext && ext !== "(none)") apiUrl += `&ext=${encodeURIComponent(ext)}`;
-  // Retry logic with exponential backoff
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  // Retry loop: use Refresh header from server, stop after serverMaxRetryTime
+  const startTime = Date.now();
+  const defaultDelay = 15;
+  const progressBar = loadingStatus.find('progress.loading-progress');
+  const timeDisplay = loadingStatus.find('span.placeholder');
+  const progressInterval = setInterval(function() {
+    const elapsed = (Date.now() - startTime) / 1000;
+    progressBar.attr('value', Math.min(elapsed / serverMaxRetryTime, 1));
+    timeDisplay.text(`${Math.round(elapsed)}s`);
+  }, 50);
+  function cleanup() {
+    clearInterval(progressInterval);
+    domContainer.find('.overview .status.status-loading').remove();
+  }
+  while (true) {
     try {
       const response = await fetch(apiUrl);
       if (response.status === 202) {
-        // HTTP 202 Accepted - request is still processing
-        if (attempt < maxRetries) {
-          const delay = baseDelay * attempt
-          console.log(`HTTP 202 received, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
-          // Update loading message to show retry status
-          loadingStatus.find('strong').append(` … ${attempt}`);
-          // Wait before retrying
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue; // Retry the request
-        } else {
-          // Max retries reached
-          console.error(`Max retries (${maxRetries}) reached for HTTP 202 responses`);
-          domContainer.find('.overview .status.status-loading').remove();
+        const elapsed = (Date.now() - startTime) / 1000;
+        if (elapsed >= serverMaxRetryTime) {
+          cleanup();
           const errStatus = $('#results-template .overview .status.error').clone();
-          errStatus.find('.placeholder').text(`Request timed out after ${maxRetries} retries. Server is still processing the request.`);
+          errStatus.find('.placeholder').text(`Request timed out after ${Math.round(elapsed)}s. Server is still processing the request.`);
           errStatus.removeClass('template');
           overview.append(errStatus);
           return;
         }
+        const refreshHeader = response.headers.get('Refresh');
+        const delay = refreshHeader ? parseFloat(refreshHeader) : defaultDelay;
+        await new Promise(resolve => setTimeout(resolve, delay * 1000));
+        continue;
       } else if (response.ok) {
-        // Success - process the response
-        domContainer.find('.overview .status.status-loading').remove();
+        cleanup();
         const data = await response.json();
         renderData(data, domContainer, overview);
-        return; // Exit successfully
+        return;
       } else {
-        // Other HTTP error - don't retry
-        domContainer.find('.overview .status.status-loading').remove();
+        cleanup();
         const errStatus = $('#results-template .overview .status.error').clone();
         errStatus.find('.placeholder').text(`${response.status} ${response.statusText}`);
         try {
@@ -390,31 +397,22 @@ async function analyzeURL(url, wait = 2, scoreboard_entry = false, screenshot = 
           if (errorData.error) {
             errStatus.find('.placeholder').text(`${errorData.error}`);
           }
-        } catch (e) {
-          // ignore JSON parse errors
-        }
+        } catch (e) {}
         errStatus.removeClass('template');
         overview.append(errStatus);
         return;
       }
     } catch (error) {
-      // Network or other fetch error
-      console.error(`Fetch error on attempt ${attempt + 1}:`, error);
-      if (attempt < maxRetries) {
-        const delay = baseDelay * Math.pow(2, attempt);
-        console.log(`Network error, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
-        // Update loading message to show retry status
-        loadingStatus.find('strong').text(`Network error, retrying in ${delay/1000}s... (attempt ${attempt + 1}/${maxRetries + 1})`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        continue; // Retry the request
-      } else {
-        // Max retries reached for network errors
-        domContainer.find('.overview .status.status-loading').remove();
+      const elapsed = (Date.now() - startTime) / 1000;
+      if (elapsed >= serverMaxRetryTime) {
+        cleanup();
         const errStatus = $('#results-template .overview .status.error').clone();
-        errStatus.find('.placeholder').text(`Network error after ${maxRetries} retries: ${error.message}`);
+        errStatus.find('.placeholder').text(`Network error after ${Math.round(elapsed)}s: ${error.message}`);
         overview.append(errStatus);
         return;
       }
+      await new Promise(resolve => setTimeout(resolve, defaultDelay * 1000));
+      continue;
     }
   }
 }
@@ -550,7 +548,7 @@ function renderScoreboard(data, resultsLimit) {
     // Use ipv6_only_score instead of score
     const score = entry.ipv6_only_score;
     row.find('.scoreboard-ipv6only-score .percentage').text(`${(score * 100).toFixed(1)}%`);
-    row.find('.scoreboard-ipv6only-score progress').attr('value', score);
+    row.find('.scoreboard-ipv6only-score meter').attr('value', score);
     const resultLink = row.find('.scoreboard-target a');
     resultLink.attr('href', `#report:${entry.report_id}`);
     resultLink.text(entry.url);

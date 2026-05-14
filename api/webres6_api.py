@@ -60,13 +60,17 @@ s3_strategy       = getenv("S3_DELIVERY_STRATEGY", "public")
 archive_dir       = getenv("ARCHIVE_DIR", None)
 result_cache_ttl  = int(getenv("RESULT_CACHE_TTL", 900))  # Default 15min
 result_archive_ttl = int(getenv("RESULT_ARCHIVE_TTL", 3600*24*90))  # Default 3 month
+error_cache_ttl   = int(getenv("ERROR_CACHE_TTL", 180))  # Default 3min
 app_home          = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 viewer_dir        = os.path.join(app_home, '..', 'viewer')
 srvconfig_dir     = os.path.join(app_home, 'serverconfig')
 local_cache_dir   = getenv("LOCAL_CACHE_DIR", os.path.join(app_home, '..', 'local_cache'))
-min_timeout       = int(getenv("TIMEOUT_MIN", 20))
-max_timeout       = int(getenv("TIMEOUT", 180))//2
-max_wait          = max_timeout//3
+min_timeout       = int(getenv("TIMEOUT_MIN", 20)) # min timeout for selenium operations
+max_timeout       = int(getenv("TIMEOUT", 90)) # max timeout for selenium operations
+max_wait          = max_timeout//3 # max wait time for page load
+crawl_jobs        = int(getenv("CRAWL_JOBS", "4"))
+crawl_timeout     = int(getenv("CRAWL_TIMEOUT", 4*max_timeout)) # timeout for the entire crawl operation, including dnsprobe and whois lookups
+client_retry_base = int(getenv("CLIENT_RETRY_BASE", 6)) # min seconds to wait before client retries fetching report
 enable_whois      = getenv("ENABLE_WHOIS", 'true').lower() in ['true', '1', 'yes']
 whois_cache_ttl   = int(getenv("WHOIS_CACHE_TTL", 270000)) # seconds
 whois_jobs        = int(getenv("WHOIS_JOBS", "8"))
@@ -136,6 +140,9 @@ def init_tracing():
 
 # Initialize tracing
 tracer = init_tracing()
+
+# Background crawl worker pool — shared across all requests
+crawl_executor = TracedThreadPoolExecutor(tracer, max_workers=crawl_jobs, thread_name_prefix="crawl-")
 
 # Prometheus metrics
 prometheus_mp_temp_dir = None
@@ -606,6 +613,7 @@ def get_archived_report(report_id):
 
     lp = f"res6 {report_id:.25} "
 
+    # first try to retrieve report URL for redirection
     if report_url := storage_manager.retrieve_result_url(report_id):
         # redirect to external report URL to improve client caching
         print(f"{lp}sending archived report {report_id} via redirect to {report_url}", file=sys.stderr)
@@ -614,6 +622,7 @@ def get_archived_report(report_id):
         rr.headers['Cache-Control'] = f"public, max-age={storage_manager.url_expiry}"
         return rr, 303
 
+    # if URL not available, try to retrieve report content for direct response
     if report := storage_manager.retrieve_result(report_id):
         ttl = report['ts'] + timedelta(seconds=result_archive_ttl) - datetime.now(timezone.utc)
         print(f"{lp}sending archived report {report_id}", file=sys.stderr)
@@ -645,11 +654,16 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
         rr.headers['Cache-Control'] = f"private, max-age={ttl:.0f}"
         return rr, 303
 
+    def send_in_progress_response(report_id, refresh=client_retry_base):
+        response = jsonify({ 'error': 'Crawl in progress - please come back later', 'report_id': report_id })
+        response.headers['Refresh'] = str(refresh)
+        return response, 202
+
     # initialize otel
     span = trace.get_current_span()
 
     # Try to lookup in Valkey cache first if available
-    cache_key = sha256(f"{url}:{wait}:{timeout}:{ext}:{screenshot_mode}:{lookup_whois}".encode('utf-8')).hexdigest()
+    cache_key = 'url:'+sha256(f"{url}:{wait}:{timeout}:{ext}:{screenshot_mode}:{lookup_whois}".encode('utf-8')).hexdigest()
     json_result = storage_manager.get_result_cacheline(cache_key)
     if json_result:
         # update statistics
@@ -670,9 +684,11 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
         span.set_attribute("webres6.report_id", report_id)
 
         if type == 'sentinel':
-            response = jsonify({ 'error': 'Crawl in progress - please come back later', 'report_id': report_id })
-            response.headers['Refresh'] = '15'
-            return response, 202
+            # calculate time passed
+            elapsed = (datetime.now(timezone.utc) - ts).total_seconds()
+            return send_in_progress_response(report_id, refresh=max(client_retry_base, elapsed//4))
+        elif type == 'error':
+            return jsonify(data), json_result.get('error_code', 500)
         elif type == 'report':
             # redirect to report URL to improve client caching
             return redirect_to_report(report_id, max(0, result_cache_ttl - cache_age.total_seconds()), storage_manager)
@@ -682,50 +698,55 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
     # generate report id for logging
     ts = datetime.now(timezone.utc)
     report_id = gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, report_node)
-    lp = f"res6 {report_id} "
+    lp = f"res6 {report_id:.25} "
     span.set_attribute("webres6.report_id", report_id)
 
     # Put a sentinel entry into the cache to avoid multiple concurrent crawls for the same URL
     sentinel = { 'type': 'sentinel', 'ts': ts, 'report_id': report_id,
                     'data': "crawl in progress - please come back later"}
-    storage_manager.put_result_cacheline(cache_key, sentinel, max_timeout, False)
+    storage_manager.put_result_cacheline(cache_key, sentinel, crawl_timeout, False)
 
-    # Perform actual crawl
-    json_result, error_code = crawl_and_analyze_url(url, wait=wait, timeout=timeout, ext=ext, scoreboard_entry=scoreboard_entry,
-                                   screenshot_mode=screenshot_mode,
-                                   lookup_whois=lookup_whois, report_id=report_id, report_node=report_node)
+    # run crawl and analysis in background thread to avoid blocking the main server thread
+    def _background_crawl():
+        # restore span context in background thread
+        bg_span = trace.get_current_span()
 
-    # Handle internal errors where crawl logic faild to prevent caching of error results as valid reports.
-    # Non-exisiting URLs still prodce a valid crawl (200) with error details in the JSON result.
-    if error_code != 200:
-        # remove sentinel in case of crawl error to allow retries
-        storage_manager.delete_result_cacheline(cache_key)
-        span.add_event("webres6.crawl_error", {"error_code": error_code})
-        return json_result, error_code
+        # run crawl and analysis
+        json_result, error_code = crawl_and_analyze_url(
+            url, wait=wait, timeout=timeout, ext=ext,
+            scoreboard_entry=scoreboard_entry,
+            screenshot_mode=screenshot_mode,
+            lookup_whois=lookup_whois,
+            report_id=report_id, report_node=report_node)
 
-    # Archive the result in storage
-    archived = storage_manager.archive_result(report_id, json_result)
-    span.add_event("webres6.crawl_success", attributes={"archived": archived})
+        if error_code != 200:
+            error_cache_line = { 'type': 'error', 'ts': ts, 'report_id': report_id,
+                                  'data': json_result, 'error_code': error_code }
+            storage_manager.put_result_cacheline(cache_key, error_cache_line, error_cache_ttl, False)
+            bg_span.add_event("webres6.crawl_error", {"error_code": error_code})
+            return
 
-    # Cache the result in storage if archiving was successful
-    storage_manager.delete_result_cacheline(cache_key)  # remove sentinel
-    if archived:
-        # put cache line pointing to archived report
-        cache_line = { 'type': 'report', 'ts': ts, 'report_id': report_id,
-                        'data': "./reports/" + report_id }
-        storage_manager.put_result_cacheline(cache_key, cache_line, result_cache_ttl, True)
+        # sucess – try to archive result and put report link into cache
+        archived = storage_manager.archive_result(report_id, json_result)
+        bg_span.add_event("webres6.crawl_success", attributes={"archived": archived})
+        if archived:
+            cache_line = { 'type': 'report', 'ts': ts, 'report_id': report_id,
+                            'data': "./reports/" + report_id }
+            storage_manager.put_result_cacheline(cache_key, cache_line, result_cache_ttl, True)
+            print(f"{lp}report archived successfully as {report_id}", file=sys.stderr)
 
-        # enter scoreboard entry
-        if scoreboard and scoreboard_entry and json_result.get('error', None) is None:
-            scoreboard.enter(json_result)
+            if scoreboard and scoreboard_entry and json_result.get('error') is None:
+                scoreboard.enter(json_result)
+        else:
+            # if archiving failed, send report data directly in cache (with shorter TTL to avoid long-term storage
+            print(f"{lp}WARNING: archiving report failed, caching report data directly", file=sys.stderr)
+            cache_line = { 'type': 'error', 'ts': ts, 'report_id': report_id,
+                                  'data': json_result, 'error_code': error_code }
+            storage_manager.put_result_cacheline(cache_key, cache_line, result_cache_ttl, False)
 
-        # redirect to report URL to improve client caching
-        span.add_event("webres6.redirect_to_archive", {"report_id": report_id, "result_cache_ttl": result_cache_ttl})
-        return redirect_to_report(report_id, result_cache_ttl, storage_manager)
-
-    else:
-        span.add_event("webres6.return_result_direct", {"report_id": report_id, "error_code": error_code})
-        return json_result, error_code
+    crawl_executor.submit(_background_crawl)
+    span.add_event("webres6.crawl_queued", {"report_id": report_id})
+    return send_in_progress_response(report_id, refresh=client_retry_base*2)
 
 
 
@@ -923,7 +944,9 @@ def setup_res6_endpoints(app, srv_message=None, privacy_policy=None):
     def res6_serverconfig():
         res = jsonify({'version': webres6_version,
                         'message': srv_message, 'privacy_policy': privacy_policy,
-                        'max_wait': max_wait, 'extensions': get_extensions(),
+                        'max_wait': max_wait, 'max_timeout': max_timeout, 
+                        'crawl_timeout': crawl_timeout, 'error_cache_ttl': error_cache_ttl,
+                        'extensions': get_extensions(),
                         'whois': enable_whois, 'screenshot_modes': screenshot_modes,
                         'archive': storage_manager.can_archive(),
                         'archive_url_template': storage_manager.url_template if storage_manager and storage_manager.can_archive() else None,
@@ -1158,6 +1181,8 @@ def create_dnsprobe_app():
 # signal handler for graceful shutdown
 def signal_handler(sig, frame):
     print(f"Received signal {sig}, shutting down...", file=sys.stderr)
+    if crawl_executor:
+        crawl_executor.shutdown(wait=True)
     if storage_manager and storage_manager.can_persist():
         print("Persisting local cache to disk...", file=sys.stderr)
         storage_manager.persist()

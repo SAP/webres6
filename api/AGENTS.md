@@ -68,6 +68,8 @@ The API emits OpenTelemetry traces (OTLP) and exposes Prometheus metrics. An exa
 | `ENABLE_WHOIS` | Enable WHOIS lookups |
 | `VALKEY_URL` | Valkey/Redis URL |
 | `S3_BUCKET`, `S3_ENDPOINT` | api | S3 storage backend |
+| `CRAWL_JOBS` | Number of background crawl worker threads (default: `4`) |
+| `CLIENT_RETRY_BASE` | Minimum interval between retries to fetch in-progress crawl results |
 | `DEBUG` | Comma-separated flags: `whois`, `hostinfo`, `unbound` |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | OTLP endpoint for trace export (enables tracing when set) |
 | `OTEL_TRACING_ENABLED` | Override tracing on/off (`true`/`false`; defaults to `true` if endpoint is set) |
