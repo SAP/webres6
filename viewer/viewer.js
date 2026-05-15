@@ -359,7 +359,8 @@ async function analyzeURL(url, wait = 2, scoreboard_entry = false, screenshot = 
   const timeDisplay = loadingStatus.find('span.placeholder');
   const progressInterval = setInterval(function() {
     const elapsed = (Date.now() - startTime) / 1000;
-    progressBar.attr('value', Math.min(elapsed / serverMaxRetryTime, 1));
+    const barValue = Math.min((Math.log1p(elapsed) / Math.log1p(serverMaxRetryTime)), 2*elapsed/serverMaxRetryTime); // logarithmic progress with fallback to linear after 50% time
+    progressBar.attr('value', barValue) ;
     timeDisplay.text(`${Math.round(elapsed)}s`);
   }, 50);
   function cleanup() {

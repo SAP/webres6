@@ -113,13 +113,19 @@ h1 {
   color: #501030;
 }
 meter {
-  accent-color: #1a7a1a;;
   height: 2ex;
 }
-.overview-item meter {
-  width: calc(100% - 16em);
+.overview-item .score-value {
+  width: calc(100% - 12em);
+  float: right;
+}
+.overview-item .score-value meter {
+  width: calc(100% - 5em);
   vertical-align: middle;
   margin-right: 8px;
+}
+.overview-item .score-value .percentage {
+  float: right;
 }
 progress {
   accent-color: #1a7a1a;;
@@ -187,6 +193,9 @@ input[type="text"] {
   border-radius: 6px;
   box-sizing: border-box;
 }
+#scoreboard {
+  overflow-x: hidden;
+}
 table.scoreboard-table{
   table-layout: fixed;
   font-size: small;
@@ -194,6 +203,7 @@ table.scoreboard-table{
 td.scoreboard-ipv6only-score, th.scoreboard-ipv6only-score {
   text-align: left;
   width: 23%;
+  min-width: 10em;
 }
 td.scoreboard-ipv6only-score meter {
   width: calc(100% - 5em);
