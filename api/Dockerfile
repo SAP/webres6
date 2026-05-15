@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ── Stage 1: build unbound with Python bindings ──────────────────────────────
-FROM python:3.15.0a8-slim-trixie AS unbound-builder
+FROM python:3.15.0b1-slim-trixie AS unbound-builder
 WORKDIR /build
 
 # Set MAX_TARGET_NX to 25 (upstream: 5) to work around CDN issues with many IPv4-only DNS servers
@@ -45,7 +45,7 @@ RUN ./configure \
 
 # ── Stage 2: runtime image ────────────────────────────────────────────────────
 # Use official debian trixie based Python image as base
-FROM python:3.15.0a8-slim-trixie
+FROM python:3.15.0b1-slim-trixie
 WORKDIR /app
 
 # Install non-python dependencies
