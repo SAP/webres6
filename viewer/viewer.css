@@ -23,7 +23,7 @@
     src: url('fonts/72-Condensed.woff2') format('woff2');
     font-weight: normal;
     font-style: normal;
-    font-stretch: condensed;
+    font-width: condensed;
     font-display: swap;
 }
 @font-face {
@@ -193,9 +193,6 @@ input[type="text"] {
   border-radius: 6px;
   box-sizing: border-box;
 }
-#scoreboard {
-  overflow-x: hidden;
-}
 table.scoreboard-table{
   table-layout: fixed;
   font-size: small;
@@ -222,6 +219,9 @@ th.scoreboard-target, td.scoreboard-target {
 th.scoreboard-timestamp, td.scoreboard-timestamp {
   text-align: left;
   width: 20%;
+  text-overflow: ellipsis;
+  text-wrap: nowrap;
+  overflow: hidden;
 }
 #scoreboard-load-more {
   float: right;
@@ -239,15 +239,16 @@ td.protocol {
   padding-left: 0;
 }
 td.host-localpart {
+  min-width: 3em;
   color: gray;
   text-align: right;
   padding-right: 0;
-  overflow-wrap: anywhere;
-  font-stretch: condensed;
+  overflow-wrap: break-all;
+  font-width: condensed;
 }
 td.host-dompart {
   padding-left: 0.1em;
-  overflow-wrap: break-word;
+  overflow-wrap: break-all;
 }
 td.dns-status, th.dns-status {
   max-width: 3em;
@@ -467,9 +468,6 @@ td.ip-netname {
   .contents-container {
     padding: 16px 16px 12px 16px;
   }
-  .overview-item progress {
-    width: 30%;
-  }
   table.scoreboard-table{
     table-layout: auto;
     empty-cells: hide;
@@ -490,12 +488,11 @@ td.ip-netname {
     width: auto;
     text-wrap: nowrap;
   }
-  td.host-dompart {
-    font-stretch: condensed;
+  td.host-dompart, td.host-localpart {
+    font-width: condensed;
   }
   td.host-localpart {
-    overflow-wrap: break-word;
-    font-stretch: condensed;
+    overflow-wrap: anywhere;
   }
 }
 @media print {
@@ -524,5 +521,18 @@ td.ip-netname {
   }
   .contents-container-footer {
     page-break-before: avoid !important;
+  }
+  .hosts table{
+    font-width: condensed;
+    table-layout: auto;
+  }
+  td.as-number, td.ip-address {
+    font-family: monospace;
+    font-width: condensed;
+    text-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  td.host-localpart {
+    overflow-wrap: anywhere;
   }
 }
