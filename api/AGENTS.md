@@ -68,7 +68,10 @@ The API emits OpenTelemetry traces (OTLP) and exposes Prometheus metrics. An exa
 | `ENABLE_WHOIS` | Enable WHOIS lookups |
 | `VALKEY_URL` | Valkey/Redis URL |
 | `S3_BUCKET`, `S3_ENDPOINT` | api | S3 storage backend |
+| `TIMEOUT` | Max timeout for Selenium operation in seconds (default: `90`) |
 | `CRAWL_JOBS` | Number of background crawl worker threads (default: `4`) |
+| `CRAWL_TIMEOUT` | Timeout for the entire crawl operation including dnsprobe and whois (default: `4*TIMEOUT`) |
+| `ERROR_CACHE_TTL` | TTL in seconds for caching error responses (default: `180`) |
 | `CLIENT_RETRY_BASE` | Minimum interval between retries to fetch in-progress crawl results |
 | `DEBUG` | Comma-separated flags: `whois`, `hostinfo`, `unbound` |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | OTLP endpoint for trace export (enables tracing when set) |

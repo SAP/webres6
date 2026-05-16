@@ -56,7 +56,10 @@ api:
     # This sets the pull policy for images.
     pullPolicy: Always
   port: 6400
-  timeout: 180
+  timeout: 180 # in seconds, this is the maximum time selenium should spent on a crawl
+  crawlJobs: 8 # number of concurrent crawl jobs, this is used to set the number of workers for the crawl component in the API deployment
+  crawlTimeout: {} # in seconds, this is the maximum time a crawl/dnprobe/whois job is allowed to run before being killed by the system defaults to 4*timeout
+  errorCacheTTL: "180"
   gunicornThreads: 64
   podAnnotations: {}
   podLabels: {}
@@ -70,6 +73,7 @@ api:
   s3Endpoint: ""
   results:
     cacheTTL: "180"
+    errorCacheTTL: "90"
     archiveTTL: "7776000"
   scoreboard:
     enabled: true

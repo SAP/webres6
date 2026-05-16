@@ -110,18 +110,34 @@ spec:
                   name: {{ .Values.api.awsSecret }}
                   key: secretAccessKey  
             {{- end }}
-            - name: ENABLE_WHOIS
-              value: {{ .Values.api.whois.enabled | quote | default "true" }}
             - name: ENABLE_SCOREBOARD
               value: {{ .Values.api.scoreboard.enabled | quote | default "true" }}
-            - name: WHOIS_CACHE_TTL
-              value: {{ .Values.api.whois.cacheTTL | quote }}
-            - name: RESULT_CACHE_TTL
-              value: {{ .Values.api.results.cacheTTL | quote }}
-            - name: RESULT_ARCHIVE_TTL
-              value: {{ .Values.api.results.archiveTTL | quote }}
+            - name: CRAWL_JOBS
+              value: {{ .Values.api.crawlJobs | quote }}
             - name: TIMEOUT
               value: {{ .Values.api.timeout | quote }}
+            {{- if .Values.api.crawlTimeout }}
+            - name: CRAWL_TIMEOUT
+              value: {{ .Values.api.crawlTimeout | quote }}
+            {{- end }}
+            - name: ENABLE_WHOIS
+              value: {{ .Values.api.whois.enabled | quote | default "true" }}
+            {{- if .Values.api.whois.cacheTTL }}
+            - name: WHOIS_CACHE_TTL
+              value: {{ .Values.api.whois.cacheTTL | quote }}
+            {{- end }}
+            {{- if .Values.api.results.cacheTTL }}
+            - name: RESULT_CACHE_TTL
+              value: {{ .Values.api.results.cacheTTL | quote }}
+            {{- end }}
+            {{- if .Values.api.results.errorCacheTTL }}
+            - name: ERROR_CACHE_TTL
+              value: {{ .Values.api.results.errorCacheTTL | quote }}
+            {{- end }}
+            {{- if .Values.api.results.archiveTTL }}
+            - name: RESULT_ARCHIVE_TTL
+              value: {{ .Values.api.results.archiveTTL | quote }}
+            {{- end }}
             - name: PORT
               value: {{ .Values.api.port | quote }}
             - name: GUNICORN_CMD_ARGS
