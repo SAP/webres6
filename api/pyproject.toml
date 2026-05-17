@@ -20,14 +20,14 @@ dependencies = [
     "prometheus-client==0.25.0",
     "boto3==1.43.8",
     # OpenTelemetry
-    "opentelemetry-api==1.41.0",
-    "opentelemetry-sdk==1.41.0",
-    "opentelemetry-exporter-otlp-proto-http==1.41.0",
-    "opentelemetry-semantic-conventions==0.62b0",
-    "opentelemetry-instrumentation-flask==0.62b0",
-    "opentelemetry-instrumentation-urllib==0.62b0",
-    "opentelemetry-instrumentation-urllib3==0.62b0",
-    "opentelemetry-instrumentation-botocore==0.62b0",
+    "opentelemetry-api==1.41.1",
+    "opentelemetry-sdk==1.41.1",
+    "opentelemetry-exporter-otlp-proto-http==1.41.1",
+    "opentelemetry-semantic-conventions==0.62b1",
+    "opentelemetry-instrumentation-flask==0.62b1",
+    "opentelemetry-instrumentation-urllib==0.62b1",
+    "opentelemetry-instrumentation-urllib3==0.62b1",
+    "opentelemetry-instrumentation-botocore==0.62b1",
     "opentelemetry-python-contrib-external-valkey==0.62b0",
 ]
 
