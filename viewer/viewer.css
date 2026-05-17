@@ -115,6 +115,10 @@ h1 {
 meter {
   height: 2ex;
 }
+.overview-item .score-label {
+  max-width: 11em;
+  float: left;
+}
 .overview-item .score-value {
   width: calc(100% - 12em);
   float: right;
