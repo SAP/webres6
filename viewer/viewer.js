@@ -224,7 +224,7 @@ function renderHostsTable(data, hostsContainer) {
         hasDNSInfo = true;
         if (info.dns.ipv6_only_ready) {
           dnsCell.addClass('dns-status-ipv6-only-ready');
-          dnsCell.text('✔');
+          dnsCell.text('✓');
           dnsCell.attr('title', 'Hostname can be resolved from an IPv6-only resolver');
         } else {
           if (info.dns.ipv6_only_ready === undefined) {
