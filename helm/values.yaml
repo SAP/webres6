@@ -34,6 +34,9 @@ serverconfig:
         return
     print ("loaded empty extension override", file=sys.stderr)
   url_blocklist:
+    - ".internal"
+    - ".local"
+    - ".invalid"
     - "example.com"
     - "example.org"
 
