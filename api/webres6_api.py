@@ -40,7 +40,7 @@ import webres6_nat64  # noqa: F401 — applies NAT64 monkey-patch to IPv6Address
 from webres6_stackoverflow import TracedThreadPoolExecutor
 
 # config/flag variables
-webres6_version   = "1.6.0"
+webres6_version   = "1.6.1"
 debug_whois       = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo    = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask       = 'flask'    in getenv("DEBUG", '').lower().split(',')
@@ -1103,9 +1103,10 @@ def create_webres6_app():
     _url_blocklist_file = os.path.join(srvconfig_dir, 'url-blocklist')
     if os.path.exists(_url_blocklist_file):
         with open(_url_blocklist_file) as f:
+            print(f"Loading URL blocklist from '{_url_blocklist_file}'...", end='', file=sys.stderr)
             url_blocklist = f.read().splitlines()
-            print(f"Loaded URL blocklist with {len(url_blocklist)} entries from '{_url_blocklist_file}'", file=sys.stderr)
             add_url_blocklist(url_blocklist)
+            print(f"done ({len(url_blocklist)} entries).", file=sys.stderr)
 
     # load public suffix list for domain parsing
     load_public_suffix_list(os.path.join(app_home, 'public_suffix_list.dat'))

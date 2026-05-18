@@ -23,7 +23,7 @@
     src: url('fonts/72-Condensed.woff2') format('woff2');
     font-weight: normal;
     font-style: normal;
-    font-width: condensed;
+    font-stretch: condensed;
     font-display: swap;
 }
 @font-face {
@@ -251,7 +251,7 @@ td.host-localpart {
   text-align: right;
   padding-right: 0;
   overflow-wrap: break-all;
-  font-width: condensed;
+  font-stretch: condensed;
 }
 td.host-dompart {
   padding-left: 0.1em;
@@ -496,7 +496,7 @@ td.ip-netname {
     text-wrap: nowrap;
   }
   td.host-dompart, td.host-localpart {
-    font-width: condensed;
+    font-stretch: condensed;
   }
   td.host-localpart {
     overflow-wrap: anywhere;
@@ -530,12 +530,12 @@ td.ip-netname {
     page-break-before: avoid !important;
   }
   .hosts table{
-    font-width: condensed;
+    font-stretch: condensed;
     table-layout: auto;
   }
   td.as-number, td.ip-address {
     font-family: monospace;
-    font-width: condensed;
+    font-stretch: condensed;
     text-wrap: break-word;
     overflow-wrap: break-word;
   }
