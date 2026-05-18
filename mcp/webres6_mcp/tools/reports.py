@@ -10,6 +10,7 @@ from urllib.parse import quote
 
 from webres6_mcp.server import mcp
 from webres6_mcp.config import WEBRES6_API_URL
+from webres6_mcp.tools.resolve_dns import dns_hint
 
 common_hints = """
     NAT64 addresses (address_family "NAT64") are an artifact of the test environment
@@ -19,7 +20,8 @@ common_hints = """
     contains observed HTTP connections. For those hosts with DNS issues, 
     the 'dns' dict will contain an 'unbound_trace' field (base64-encoded).
     The 'dns' section of the trace is identical to the output of the
-    resolve_dns_v6only tool for the same hostname, so the same analysis techniques apply.
+    resolve_dns_v6only tool for the same hostname.
+""" + dns_hint + """
 
     The WHOIS data gives a hint about the nature of the host (e.g. CDN, cloud provider, ISP, corporate, etc.)
     and can be useful to identify patterns in IPv6 readiness or investigate 3rd party dependencies.

@@ -12,7 +12,7 @@ ENV NGINX_PORT=6480
 
 # Copy viewer files
 WORKDIR /usr/share/nginx/html
-COPY viewer/viewer.* viewer/favicon.* ./
+COPY viewer/viewer.* viewer/favicon.* viewer/404.html viewer/50x.html ./
 COPY viewer/fonts/ ./fonts/
 COPY viewer/nginx.conf.template /etc/nginx/templates/default.conf.template
-RUN mkdir -p .well-known/ res6/report
+RUN mkdir -p .well-known/acme-challenge res6/report

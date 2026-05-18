@@ -15,9 +15,9 @@ data:
   webres6_extension.py: |
     {{- .Values.serverconfig.webres6_extension_py | nindent 4 }}
   {{- end }}
-  {{- if .Values.serverconfig.url_blacklist }}
-  url_blacklist.txt: |
-    {{- range .Values.serverconfig.url_blacklist }}
+  {{- if .Values.serverconfig.url_blocklist }}
+  url-blocklist: |
+    {{- range .Values.serverconfig.url_blocklist }}
     {{- . | nindent 4 }}
     {{- end }}
   {{- end }}

@@ -23,43 +23,71 @@ Options:
   -h, --help                  Show this help message and exit
   --port PORT                 Port to listen on (default: 6400)
   --debug                     Enable debugging output
-  --export-scoreboard sb.json export scoreboard entries to JSON file and exit
-  --import-scoreboard sb.json import scoreboard entries from JSON file and exit
-  --export-reports /to/dir/   export all archived reports to the given directory and exit
-  --import-reports /from/dir  import all archived reports from the given directory and exit
+  --dnsprobe-only             Start in DNS-probe-only mode, serving only the /dnsprobe/* endpoints
+  --export-scoreboard sb.json Export scoreboard entries to JSON file and exit
+  --import-scoreboard sb.json Import scoreboard entries from JSON file and exit
+  --export-reports /to/dir/   Export all archived reports to the given directory and exit
+  --import-reports /from/dir  Import all archived reports from the given directory and exit
+  --expire                    Expire local cache entries and exit
 
 Environment variables:
-  ADMIN_API_KEY               API Key to call privileged functions
-  TIMEOUT                     Maximum timeout value in seconds
-  NAT64_PREFIXES              Comma-separated list of NAT64 prefixes
-  SELENIUM_REMOTE_URL         Use remote Selenium server instead of starting selenium for each request
-  ENABLE_DNSPROBE             Check DNS entries encountered during the crawl for IPv6-only readiness (default: true) 
-  DNSPROBE_API_URL            Enable DNS checking using external dns probe service (uses internal implementation if unset)
-  VALKEY_URL                  URL for optional VALKEY cache, will also store reports if S3_BUCKET/ARCHIVE_DIR are not set
-  S3_BUCKET                   Name of S3 bucket to use for report storage (requires valkey to be set)
-  S3_ENDPOINT                 S3 Endpoint to use for report storage
+  ADMIN_API_KEY               API key required for /admin/* endpoints. When unset, those endpoints are open (intentional, for trusted networks).
+  DEBUG                       Comma-separated debug flags: whois, hostinfo, flask, viewer, trace, unbound
+  SELENIUM_REMOTE_URL         Use a remote Selenium server instead of starting Selenium for each request
+  SELENIUM_USERNAME           Basic-auth username for SELENIUM_REMOTE_URL (optional)
+  SELENIUM_PASSWORD           Basic-auth password for SELENIUM_REMOTE_URL (optional)
+  HEADLESS_SELENIUM           Run Selenium in headless mode (default: false)
+  SELENIUM_TIMEOUT_MIN        Min timeout for Selenium operations in seconds (default: 20)
+  SELENIUM_TIMEOUT_MAX        Max timeout for Selenium operations in seconds (default: 90)
+  CRAWL_JOBS                  Number of background crawl worker threads (default: 4)
+  CRAWL_TIMEOUT               Timeout for the entire crawl including dnsprobe and whois (default: 4*SELENIUM_TIMEOUT_MAX)
+  CLIENT_RETRY_BASE           Min seconds before clients retry fetching an in-progress report (default: 6)
+  NAT64_PREFIXES              Comma-separated list of NAT64 prefixes (default: 64:ff9b::/96)
+  ENABLE_DNSPROBE             Check DNS entries encountered during the crawl for IPv6-only readiness (default: true)
+  DNSPROBE_API_URL            Use external DNS-probe service at this URL (uses internal implementation if unset)
+  DNSPROBE_JOBS               Number of parallel DNS probe lookups per crawl (default: 8)
+  DNSPROBE_WORKERS            Number of unbound resolver workers (default: 4)
+  DNSPROBE_CACHE_TTL          DNS-probe in-process result cache TTL in seconds (default: 60)
+  DNSPROBE_TIMEOUT            DNS-probe per-query timeout in seconds (default: 30)
+  UNBOUND_DEBUG_LEVEL         libunbound verbosity, apples to DEBUG="unbound" and DNS failure reports (default: 4)
+  UNBOUND_V6ONLY_CONF         Path to the unbound v6-only config (default: <api>/unbound.v6only.conf)
+  VALKEY_URL                  URL for Valkey/Redis cache; also stores reports if S3_BUCKET/ARCHIVE_DIR are unset
+  S3_BUCKET                   Name of S3 bucket to use for report storage (requires VALKEY_URL)
+  S3_ENDPOINT                 S3 endpoint to use for report storage
   S3_DELIVERY_STRATEGY        'public'    - redirect to S3 bucket using a public URL
                               'presigned' - redirect to S3 bucket using a presigned URL
-                              'private'   - fetch object from S3 and deliver from API
-  ARCHIVE_DIR                 DIR for optional filesystem-based report storage
-  LOCAL_CACHE_DIR             DIR for optional LOCAL filesystem-based cache
-  ENABLE_WHOIS                Enable clients to request whois lookups (default: true)
-  WHOIS_CACHE_TTL             Expiry time for whois cache
-  RESULT_CACHE_TTL            Expiry time for result cache
-  RESULT_ARCHIVE_TTL          Expiry time for result archive
+                              'private'   - fetch object from S3 and deliver from API (default: public)
+  ARCHIVE_DIR                 Directory for optional filesystem-based report storage
+  LOCAL_CACHE_DIR             Directory for optional local filesystem-based cache if VALKEY_URL is unset
+  ENABLE_WHOIS                Enable clients to request WHOIS lookups (default: true)
+  WHOIS_CACHE_TTL             Expiry time for WHOIS cache in seconds (default: 270000)
+  WHOIS_JOBS                  Number of parallel WHOIS lookups per crawl (default: 8)
+  RESULT_CACHE_TTL            Expiry time for result cache in seconds (default: 900)
+  RESULT_ARCHIVE_TTL          Expiry time for result archive in seconds (default: 90 days)
+  ERROR_CACHE_TTL             TTL for caching error responses in seconds (default: 180)
+  ENABLE_SCOREBOARD           Maintain a scoreboard of public results (default: true)
+  SCOREBOARD_REQUEST_LIMIT    Max scoreboard entries returned per request (default: 1024)
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT  OTLP endpoint for trace export (enables tracing when set)
+  OTEL_EXPORTER_OTLP_ENDPOINT Fallback OTLP endpoint if *_TRACES_ENDPOINT unset
+  OTEL_TRACING_ENABLED        Override tracing on/off (defaults to true if an endpoint is set)
+  OTEL_CONSOLE_EXPORTER_ENABLED  Mirror traces to stderr (defaults to true when DEBUG=trace)
+  OTEL_SERVICE_NAME           Service name reported in traces (default: webres6-api)
+  OTEL_DEPLOYMENT_ENVIRONMENT Deployment-environment attribute on traces (default: production)
 
 API endpoints:
-  /ping                       liveliness probe endpoint (just answers ok)
-  /healthz                    readiness probe endpoint (checks backend availability)    
-  /res6/$metadata             get OData metadata document
-  /res6/srvconfig             list available extensions, screenshot-modes, whois support, ...
-  /res6/url(URL)              get JSON results for URL provided
-  /res6/scoreboard            get current scoreboard entries
-  /dnsprobe/ping              liveliness probe endpoint for DNSprobe logic
-  /dnsprobe/resolve6only(host) resolve AAAA records for given hostname ipv6-only
-  /metrics                    Prometheus compatible metrics (requires ADMIN_API_KEY if set)
-  /admin/expire               tell stoarge manager to expire old whois cache and scoreboard entries (requires ADMIN_API_KEY if set)
-  /admin/persist              tell storage manager to persists data to disk (requires ADMIN_API_KEY if set)
+  /ping                       liveliness probe (just answers ok)
+  /healthz                    readiness probe (checks backend availability)
+  /res6/ping                  liveliness probe scoped to the /res6 namespace
+  /res6/$metadata             OData metadata document
+  /res6/serverconfig          list available extensions, screenshot modes, whois support, ...
+  /res6/url(URL)              JSON results for the given URL (kicks off a crawl if needed)
+  /res6/report/<report_id>    fetch a previously generated report by ID
+  /res6/scoreboard            current scoreboard entries
+  /dnsprobe/ping              liveliness probe for DNS-probe logic
+  /dnsprobe/resolve6only(host)  resolve AAAA records for the given hostname IPv6-only
+  /metrics                    Prometheus-compatible metrics
+  /admin/expire               tell storage manager to expire old whois cache and scoreboard entries (requires ADMIN_API_KEY if set)
+  /admin/persist              tell storage manager to persist data to disk (requires ADMIN_API_KEY if set)
   /[#URL]                     Web app to initiate analysis and display results
 ```
 

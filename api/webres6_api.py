@@ -40,7 +40,7 @@ import webres6_nat64  # noqa: F401 — applies NAT64 monkey-patch to IPv6Address
 from webres6_stackoverflow import TracedThreadPoolExecutor
 
 # config/flag variables
-webres6_version   = "1.5.2"
+webres6_version   = "1.6.0"
 debug_whois       = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo    = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask       = 'flask'    in getenv("DEBUG", '').lower().split(',')
@@ -65,9 +65,10 @@ app_home          = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 viewer_dir        = os.path.join(app_home, '..', 'viewer')
 srvconfig_dir     = os.path.join(app_home, 'serverconfig')
 local_cache_dir   = getenv("LOCAL_CACHE_DIR", os.path.join(app_home, '..', 'local_cache'))
-min_timeout       = int(getenv("TIMEOUT_MIN", 20)) # min timeout for selenium operations
-max_timeout       = int(getenv("TIMEOUT", 90)) # max timeout for selenium operations
+min_timeout       = int(getenv("SELENIUM_TIMEOUT_MIN", 20)) # min timeout for selenium operations
+max_timeout       = int(getenv("SELENIUM_TIMEOUT_MAX", 90)) # max timeout for selenium operations
 max_wait          = max_timeout//3 # max wait time for page load
+default_wait      = 2
 crawl_jobs        = int(getenv("CRAWL_JOBS", "4"))
 crawl_timeout     = int(getenv("CRAWL_TIMEOUT", 4*max_timeout)) # timeout for the entire crawl operation, including dnsprobe and whois lookups
 client_retry_base = int(getenv("CLIENT_RETRY_BASE", 6)) # min seconds to wait before client retries fetching report
@@ -915,13 +916,11 @@ def create_http_app():
     print("\t/metrics                      get Prometheus compatible metrics", file=sys.stderr)
     @app.route('/metrics', methods=['GET'])
     def metrics():
-        if check_auth(request):
-            registry = CollectorRegistry()
-            multiprocess.MultiProcessCollector(registry)
-            return app.response_class(generate_latest(registry), mimetype=CONTENT_TYPE_LATEST)
-        else:
-            return app.response_class('Authentication required', mimetype='text/plain', status=401, headers={'WWW-Authenticate': 'Basic realm="webres6 admin"'})
+        registry = CollectorRegistry()
+        multiprocess.MultiProcessCollector(registry)
+        return app.response_class(generate_latest(registry), mimetype=CONTENT_TYPE_LATEST)
 
+    # return the app instance
     return app
 
 
@@ -970,12 +969,8 @@ def setup_res6_endpoints(app, srv_message=None, privacy_policy=None):
             return jsonify({'error': error}), 400
 
         # parse other parameters
-        wait = float(request.args.get('wait')) if request.args.get('wait') else 2
-        if wait > max_wait:
-            wait = max_wait
-        timeout = float(request.args.get('timeout')) if request.args.get('timeout') else max(3*wait, min_timeout)
-        if timeout > max_timeout:
-            timeout = max_timeout
+        wait    = max(min(max_wait,    float(request.args.get('wait'))    if request.args.get('wait')    else default_wait),           0)
+        timeout = max(min(max_timeout, float(request.args.get('timeout')) if request.args.get('timeout') else 3*wait      ), min_timeout)
         scoreboard_entry = request.args.get('scoreboard', 'false').lower() in ['1', 'true', 'yes', 'on']
         ext = request.args.get('ext')
         if ext:

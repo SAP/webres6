@@ -24,11 +24,11 @@
 
 ## About this project
 
-The *IPv6 Web Resource Chceker (webres6)* is a small tool to check IPv6-only readiness of a Web page or app.
+The *IPv6 Web Resource Checker (webres6)* is a small tool to check IPv6-only readiness of a Web page or app.
 It loads a given URL using Selenium and displays the IP addresses of all hosts it fetches resources from.
 It comes with a CLI and Web app.
 
-A pubic demo system is available at [webres6.dev.sap](https://webres6.dev.sap).
+A public demo system is available at [webres6.dev.sap](https://webres6.dev.sap).
 
 The tool is inspired by Paul Marks' [IPvFoo](https://github.com/pmarks-net/ipvfoo) browser extension. While *IPvFoo* is more flexible and interactive, *Webres6* can be run as a service and allows IPv6-only testing without installation or IPv6 on the users' client as well as automated analysis.
 
@@ -38,14 +38,14 @@ The tool is inspired by Paul Marks' [IPvFoo](https://github.com/pmarks-net/ipvfo
 - Shows IPv4 and IPv6 addresses for all hosts used and whether the website is ready for IPv6-only clients.
 - Can take screenshots from the pages crawled for debugging purpose.
 - Can add WHOIS data to provide a hint about the infrastructure behind the resources.
-- Can load load custom Selenium/Python code to instrument the crawling process.
+- Can load custom Selenium/Python code to instrument the crawling process.
 - Can handle NAT64 on the API server side.
 - Exports data using a REST API as JSON for further analysis.
 - Allows caching and archiving of results in Valkey or flat files.
 - Calculates scores based on the share of resources available for IPv6-only clients and keeps a score-board of the results.
 - Splits domain names into host/domain part using [public suffix list](https://publicsuffix.org/).
 
-The tool can be accessed using a [CLI Client](#cli) and a built-in [Web app](#web-app) and en experimental [MCP server](#mcp).
+The tool can be accessed using a [CLI Client](#cli) and a built-in [Web app](#web-app) and an experimental [MCP server](#mcp).
 
 ### Known limitations
 
@@ -60,7 +60,7 @@ As modern Web pages tend to be complex, this will most likely result in many res
  - No efforts are taken to hide this being a robot
  - No delayed on-scroll content loading takes place
  - No Cookie consent interactions are supported (can be added through custom Selenium/Python code – this does not work well in practice though)
- - Because we don't have long-term cooke state, we [expect that some advertisements and analytics may not be loaded](https://doi.org/10.48550/arXiv.2506.11947).
+ - Because we don't have long-term cookie state, we [expect that some advertisements and analytics may not be loaded](https://doi.org/10.48550/arXiv.2506.11947).
  - No authentication/login takes place (could be added through custom Selenium/Python code)
 
 Without *dnsprobe*, it ignores DNS aspects: Even if this tool reports green, it is still necessary to check the whole DNS delegation chain of all hosts involved for IPv6-only realness.
@@ -85,7 +85,7 @@ Containerized setup requires IPv6 being enabled in the container runtime. This c
 ### CLI Client
 
 - Python 3.11+  
-- URLib3 2.6.3+ with URLlib3-future 2.19.913+
+- urllib3 2.6.3+ with urllib3-future 2.19.913+
 - jq to extract further details from the JSON output
 
 ### Web App 
@@ -116,9 +116,9 @@ available as a service and have ```SELENIUM_REMOTE_URL``` environment variable p
 
 The *api*, *cli*, and *viewer* code can be found in the respective folders.
 
-Run the following script to build virtualenvs for *api*, and *cli*: ```bash create-virtualenvs.sh ```
+Run the following script to build virtualenvs for *api*, *cli*, and *mcp*: ```bash create-virtualenvs.sh ```
 
-For *api*, and *cli*, run ```bash source .venv/bin/activate``` within the respective folder before trying to execute the python code.
+For *api*, *cli*, and *mcp*, run ```bash source .venv/bin/activate``` within the respective folder before trying to execute the python code.
 The *viewer* is also served from the *api* development environment. 
 
 The *dnsprobe* implementation in *api* is a little tricky, as it needs a custom *pyunbound* build to work.
@@ -128,13 +128,13 @@ The `webres6` script in the top folder launches *api* first and then passes the 
 
 ## Setup (docker compose):
 
-```bash docker-compose build``` should build the containers for the APi server and an NGNIX container serving the Web app.
+```bash docker-compose build``` should build the containers for the API server and an NGINX container serving the Web app.
 
 ```bash docker-compose up``` launches a demo environment with Selenium deployed in a separate docker container. Please note that this only works properly if your docker setup supports IPv6, which is still challenging (especially on MacOS).
 
 ## Setup (kubernetes):
 
-There is a helm chart available in the `helm` directory with a deployment example in the `deploy` folder.
+There is a helm chart available in the `helm` directory. See `helm/values.yaml` for the available configuration options.
 
 
 ## CLI Client Usage

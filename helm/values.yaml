@@ -33,7 +33,7 @@ serverconfig:
     def finalize_report(report, extension=None, extension_data=None, log_prefix=""):
         return
     print ("loaded empty extension override", file=sys.stderr)
-  url_blacklist:
+  url_blocklist:
     - "example.com"
     - "example.org"
 
@@ -56,11 +56,13 @@ api:
     # This sets the pull policy for images.
     pullPolicy: Always
   port: 6400
-  timeout: 180 # in seconds, this is the maximum time selenium should spent on a crawl
-  crawlJobs: 8 # number of concurrent crawl jobs, this is used to set the number of workers for the crawl component in the API deployment
-  crawlTimeout: {} # in seconds, this is the maximum time a crawl/dnprobe/whois job is allowed to run before being killed by the system defaults to 4*timeout
-  errorCacheTTL: "180"
-  gunicornThreads: 64
+  crawlJobs: 8 # number of concurrent selenium crawl jobs
+  timeout:
+    crawl: 180 # in seconds, the maximum time a crawl/dnprobe/whois job is allowed to run before being killed by the system defaults to 4*timeout
+    seleniumMax: 60 # in seconds, the maximum timeout for selenium operations (page loads, interactions, etc.)
+    seleniumMin: 20 # in seconds, the minimum timeout for selenium operations (page loads, interactions, etc.)
+  clientRetryBaseTime: 10 # in seconds, the base time for clients checking for report availability
+  gunicornThreads: 32
   podAnnotations: {}
   podLabels: {}
   whois:
@@ -165,7 +167,7 @@ dnsprobe:
   image:
     # Overrides the image repository whose default is "" – needs to end with a slash if name is set
     repository: ""
-    # Overrides the image name whose default is "webres6-dnsprobe"
+    # Overrides the image name whose default is "webres6-api" (dnsprobe shares the API image and runs with --dnsprobe-only)
     name: webres6-api
     # Overrides the image tag whose default is "latest"
     tag: ""
@@ -206,32 +208,19 @@ well_known:
     Contact: mailto:security@example.com
 
 # Admin key configuration
+# Set enabled=false to skip the admin secret entirely; the API will then run
+# with /metrics and /admin/* unauthenticated (intended for trusted networks).
 adminSecret:
+  enabled: false
   create: true
   secretName: webres6-admin
   secretKey: admin-key
-
-# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
-autoscaling:
-  enabled: true
-  minReplicas: 1
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
-
-securityContext: {}
-#  capabilities:
-#    drop:
-#    - ALL
-#  readOnlyRootFilesystem: true
-#  runAsNonRoot: true
-#  runAsUser: 1000
 
 nodeSelector: {}
 
 tolerations: []
 
 affinity: {}
-
 
 # curl helper configuration
 curl:

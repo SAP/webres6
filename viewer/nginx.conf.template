@@ -32,6 +32,8 @@ server {
         proxy_pass ${DNSPROBE_API_URL}/dnsprobe/;
         proxy_set_header Host $host;
     }
+    location = /404.html { internal; }
+    location = /50x.html { internal; }
     error_page  404               /404.html;
     error_page  500 502 503 504   /50x.html;
 }

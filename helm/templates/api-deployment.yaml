@@ -44,7 +44,7 @@ spec:
       {{- end }}
       containers:
         - name: webres6-api
-          image: {{ .Values.api.image.repository | default "" .Values.image.repository }}{{ .Values.api.image.name | default "webres6-api" }}:{{ .Values.api.image.tag | default "latest" .Values.image.tag }}
+          image: {{ .Values.api.image.repository | default .Values.image.repository }}{{ .Values.api.image.name | default "webres6-api" }}:{{ .Values.api.image.tag | default .Values.image.tag | default "latest" }}
           imagePullPolicy: {{ .Values.api.image.pullPolicy | default "IfNotPresent" }}
           env:
             - name: DEPLOYMENT
@@ -114,11 +114,17 @@ spec:
               value: {{ .Values.api.scoreboard.enabled | quote | default "true" }}
             - name: CRAWL_JOBS
               value: {{ .Values.api.crawlJobs | quote }}
-            - name: TIMEOUT
-              value: {{ .Values.api.timeout | quote }}
-            {{- if .Values.api.crawlTimeout }}
+            {{- if .Values.api.timeout.crawl }}
             - name: CRAWL_TIMEOUT
-              value: {{ .Values.api.crawlTimeout | quote }}
+              value: {{ .Values.api.timeout.crawl | quote }}
+            {{- end }}
+            - name: SELENIUM_TIMEOUT_MAX
+              value: {{ .Values.api.timeout.seleniumMax | quote }}
+            - name: SELENIUM_TIMEOUT_MIN
+              value: {{ .Values.api.timeout.seleniumMin | quote }}
+            {{- if .Values.api.clientRetryBaseTime }}
+            - name: CLIENT_RETRY_BASE
+              value: {{ .Values.api.clientRetryBaseTime | quote }}
             {{- end }}
             - name: ENABLE_WHOIS
               value: {{ .Values.api.whois.enabled | quote | default "true" }}
@@ -142,11 +148,13 @@ spec:
               value: {{ .Values.api.port | quote }}
             - name: GUNICORN_CMD_ARGS
               value: "--threads {{ .Values.api.gunicornThreads }}"
-            - name: ADMIN_KEY
+            {{- if .Values.adminSecret.enabled }}
+            - name: ADMIN_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.adminSecret.name | default (include "webres6.fullname" .) }}
-                  key: admin-key
+                  name: {{ .Values.adminSecret.secretName | default (include "webres6.fullname" .) }}
+                  key: {{ .Values.adminSecret.secretKey | default "admin-key" }}
+            {{- end }}
             {{- if .Values.otel.enabled }}
             - name: OTEL_SERVICE_NAME
               value: {{ .Values.otel.serviceName | default "webres6-api" | quote }}

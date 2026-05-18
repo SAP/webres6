@@ -115,6 +115,9 @@ h1 {
 meter {
   height: 2ex;
 }
+.overview-item {
+  min-height: 1lh;
+}
 .overview-item .score-label {
   max-width: 11em;
   float: left;
