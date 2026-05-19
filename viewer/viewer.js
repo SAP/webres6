@@ -572,16 +572,15 @@ function renderScoreboard(data, resultsLimit) {
   scoreboardContainer.removeClass('template');
 }
 
-/* Allow to load saved json dumps of previous analysis by dropping them somewhere on the browser window */
-function handleJsonDrop(event) {
+/* Allow to load saved json dumps or css stylesheets by dropping them somewhere on the browser window */
+function handleDrop(event) {
   $.each(event.dataTransfer.files, function(i, file) {
     if (file.type === 'application/json') {
       const reader = new FileReader();
       reader.onload = function(e) {
-        const data = e.target.result;
         let jsonData;
         try {
-          jsonData = JSON.parse(data);
+          jsonData = JSON.parse(e.target.result);
           const [domContainer, overview, domContainerId] = createResultsDomContainer('Dropped URL');
           renderData(jsonData, domContainer, overview, null);
         } catch (e) {
@@ -589,65 +588,82 @@ function handleJsonDrop(event) {
         }
       };
       reader.readAsText(file);
+    } else if (file.type === 'text/css' || file.name.endsWith('.css')) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        $('<style>').text(e.target.result).appendTo('head');
+      };
+      reader.readAsText(file);
     } else {
-      alert('Only IPv6 Web Resource Checker JSON dumps can be rendered!');
+      alert('Only IPv6 Web Resource Checker JSON dumps or CSS stylesheets can be dropped here!');
     }
   });
+}
+    
+/* Handle form submission for URL analysis */
+function handleFormSubmit(e) {
+  let url = $('#urlInput').val().trim();
+
+  // Add https:// if no scheme is present
+  if (url && !url.match(/^[a-z][a-z0-9+.-]*:\/\//i)) {
+    url = 'https://' + url;
+  }
+
+  // Check if URL has a scheme that is not http or https
+  const schemeMatch = url.match(/^([a-z][a-z0-9+.-]*):\/\//i);
+  if (schemeMatch) {
+    const scheme = schemeMatch[1].toLowerCase();
+    if (scheme !== 'http' && scheme !== 'https') {
+      // Show error for invalid scheme
+      const [domContainer, overview] = createResultsDomContainer(url);
+      const errStatus = $('#results-template .overview .status.error').clone();
+      errStatus.find('.placeholder').text(`Invalid URL scheme "${scheme}://". Only http:// and https:// are supported.`);
+      errStatus.removeClass('template');
+      overview.append(errStatus);
+      return;
+    }
+  }
+
+  analyzeURL(url, parseFloat($('#waitTime').val()), $('#scoreboardSwitch').is(':checked'), $('#screenshotSelect').val(), $('#extensionSelect').val(), $('#whoisLookup').is(':checked'));
+  $('#urlInput').val('');
+  $('#scoreboard').addClass('hide');
+}
+
+/* Handle URL anchors for direct loading of reports, URLs or the scoreboard */
+function handleAnchor(anchor) {
+  if (!anchor || anchor.length < 1) { return false; }
+  const verb = anchor[0];
+  const target = anchor[1]
+  if (verb.toLowerCase() === 'url' && target) {
+    $('#input').hide();
+    analyzeURL(decodeURIComponent(target));
+    return true;
+  } else if (verb.toLowerCase() === 'report' && target) {
+    $('#input').hide();
+    srvSupportsArchiveLinks = true; // assume archive link support for direct report loading
+    analyzeReport(target)
+    return true;
+  } else if (verb.toLowerCase() === 'scoreboard') {
+    loadScoreboard(parseInt(target) || scoreboardDefaultLimit);
+    return true;
+  } else {
+    return false;
+  }
 }
 
 /* Load server config and register callbacks */ 
 $(document).ready( async function() {
   // Drag and drop support
   document.body.ondragover = function(e) { e.preventDefault(); }
-  document.body.ondrop = function(e) { e.preventDefault(); handleJsonDrop(e); };
+  document.body.ondrop = function(e) { e.preventDefault(); handleDrop(e); };
   // URL submission handler
-  $('#urlForm').on('submit', function(e) {
-    e.preventDefault();
-    let url = $('#urlInput').val().trim();
-
-    // Add https:// if no scheme is present
-    if (url && !url.match(/^[a-z][a-z0-9+.-]*:\/\//i)) {
-      url = 'https://' + url;
-    }
-
-    // Check if URL has a scheme that is not http or https
-    const schemeMatch = url.match(/^([a-z][a-z0-9+.-]*):\/\//i);
-    if (schemeMatch) {
-      const scheme = schemeMatch[1].toLowerCase();
-      if (scheme !== 'http' && scheme !== 'https') {
-        // Show error for invalid scheme
-        const [domContainer, overview] = createResultsDomContainer(url);
-        const errStatus = $('#results-template .overview .status.error').clone();
-        errStatus.find('.placeholder').text(`Invalid URL scheme "${scheme}://". Only http:// and https:// are supported.`);
-        errStatus.removeClass('template');
-        overview.append(errStatus);
-        return;
-      }
-    }
-
-    analyzeURL(url, parseFloat($('#waitTime').val()), $('#scoreboardSwitch').is(':checked'), $('#screenshotSelect').val(), $('#extensionSelect').val(), $('#whoisLookup').is(':checked'));
-    $('#urlInput').val('');
-    $('#scoreboard').addClass('hide');
-  });
-
+  $('#urlForm').on('submit', function(e) { e.preventDefault(); handleFormSubmit(e); });
   // Load server config and enable features
   s = await loadSrvConfig();
   if (!s) { return; }
   // Check for URL anchor and analyze it if present
   const anchor = document.URL.split('#')[1];
-  if (anchor) {
-    const [verb, target] = anchor.split(':');
-    if (verb.toLowerCase() === 'url' && target) {
-      $('#input').hide();
-      analyzeURL(decodeURIComponent(target));
-    } else if (verb.toLowerCase() === 'report' && target) {
-      $('#input').hide();
-      srvSupportsArchiveLinks = true; // assume archive link support for direct report loading
-      analyzeReport(target)
-    } else if (verb.toLowerCase() === 'scoreboard') {
-      loadScoreboard(parseInt(target) || scoreboardDefaultLimit);
-    }
-  } else {
+  if (!anchor || !handleAnchor(anchor.split(':'))) {
     // enable scoreboard
     loadScoreboard(scoreboardDefaultLimit);
     // show input form and add handlers
