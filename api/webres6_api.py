@@ -206,14 +206,17 @@ def init_storage():
 
     print("Storage abstraction initialized", file=sys.stderr)
 
-# configure DNSProbe
+# initalize DNSProbe
 dnsprobe = None
-if not enable_dnsprobe:
-    dnsprobe = None
-elif dnsprobe_api_url and dnsprobe_api_url.strip() != '':
-    dnsprobe = DNSprobe(remote=dnsprobe_api_url)
-else:
-    dnsprobe = DNSprobe(local=True)
+def init_dnsprobe():
+    global dnsprobe
+    if not enable_dnsprobe:
+        dnsprobe = None
+    elif dnsprobe_api_url and dnsprobe_api_url.strip() != '':
+        dnsprobe = DNSprobe(remote=dnsprobe_api_url)
+    else:
+        dnsprobe = DNSprobe(local=True)
+
 
 # helper function to check if an address is an IP address (IPv4 or IPv6)
 def is_ip(address):
@@ -1095,6 +1098,7 @@ def create_webres6_app():
     """
 
     init_storage()
+    init_dnsprobe()
 
     # Report whois configuration
     print(f"Whois lookups are {'enabled with TTL ' + str(whois_cache_ttl) + 's' if enable_whois else 'disabled'}.", file=sys.stderr)
@@ -1154,6 +1158,8 @@ def create_dnsprobe_app():
     Returns:
         Flask app instance
     """
+
+    init_dnsprobe()
 
     # Only start DNSProbe API if dnsprobe is configured and local
     if not dnsprobe or not dnsprobe.is_local():
