@@ -115,6 +115,15 @@ h1 {
 meter {
   height: 2ex;
 }
+meter ::-webkit-meter-optimum-value, meter:-moz-meter-optimum::-moz-meter-bar {
+  background: #1a7a1a;
+}
+meter ::-webkit-meter-sub-optimum-value, meter:-moz-meter-sub-optimum::-moz-meter-bar {
+  background: #e3b010
+}
+meter ::-webkit-meter-even-less-good-value, meter:-moz-meter-sub-sub-optimum::-moz-meter-bar {
+  background: #b32020;
+}
 .overview-item {
   min-height: 1lh;
 }
@@ -135,7 +144,6 @@ meter {
   float: right;
 }
 progress {
-  accent-color: #1a7a1a;;
   height: 2ex;
 }
 .status-loading .loading-progress-container {
@@ -451,6 +459,15 @@ td.ip-netname {
   }
   .dns-status-ipv6-only-ready {
     color: lightseagreen
+  }
+  meter ::-webkit-meter-optimum-value, meter:-moz-meter-optimum::-moz-meter-bar {
+    background: lightseagreen
+  }
+  meter ::-webkit-meter-sub-optimum-value, meter:-moz-meter-sub-optimum::-moz-meter-bar {
+    background: #e3b010
+  }
+  meter ::-webkit-meter-even-less-good-value, meter:-moz-meter-sub-sub-optimum::-moz-meter-bar {
+    background: red;
   }
   .ipv4 {
     color: red
