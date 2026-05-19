@@ -191,8 +191,11 @@ button {
   0% {
     text-shadow: 1px 1px 2px #f8c39610;
   }
-  50% {
-    text-shadow: 1px 1px 8px #c296f880;
+  40% {
+    text-shadow: 1px 1px 8px #fd56dc9e;
+  }
+  60% {
+    text-shadow: 1px 1px 8px #fd56dc9e;
   }
   100% {
     text-shadow: 1px 1px 2px #f8c39610;
@@ -200,7 +203,7 @@ button {
 }
 .clickable {
   cursor: pointer;
-  animation: clickableShadowPulse 5s ease-in-out;
+  animation: clickableShadowPulse 20s ease-in-out;
 }
 input[type="text"] {
   padding: 10px;
@@ -218,7 +221,7 @@ td.scoreboard-ipv6only-score, th.scoreboard-ipv6only-score {
   min-width: 10em;
 }
 td.scoreboard-ipv6only-score meter {
-  width: calc(100% - 5em);
+  width: calc(100% - 4.2em);
   float: left;
 }
 td.scoreboard-ipv6only-score span.percentage {
@@ -493,12 +496,18 @@ td.ip-netname {
     padding: 16px 16px 12px 16px;
   }
   table.scoreboard-table{
-    table-layout: auto;
     empty-cells: hide;
+  }
+  td.scoreboard-ipv6only-score, th.scoreboard-ipv6only-score {
+    width: 30%;
+  }
+  td.scoreboard-url, th.scoreboard-url {
+    width: 70%;
   }
   td.scoreboard-timestamp, th.scoreboard-timestamp {
     visibility: collapse;
     display: none;
+    max-width: 0;
   }
   td.protocol, th.protocol {
     visibility: collapse;
