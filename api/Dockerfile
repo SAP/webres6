@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ── Stage 1: build unbound with Python bindings ──────────────────────────────
-FROM python:3.15.0b1-slim-trixie AS unbound-builder
+FROM python:3.15.0b1-slim-trixie AS webres6-builder
 WORKDIR /build
 
 # Set MAX_TARGET_NX to 25 (upstream: 5) to work around CDN issues with many IPv4-only DNS servers
@@ -43,6 +43,15 @@ RUN ./configure \
   && make -j"$(nproc)" \
   && make install
 
+WORKDIR /app
+
+# Load root hints for unbound
+RUN curl -fsSL -o named.cache https://www.internic.net/domain/named.cache
+
+# get public suffix list
+RUN curl -fsSL -o public_suffix_list.dat https://publicsuffix.org/list/public_suffix_list.dat
+
+
 # ── Stage 2: runtime image ────────────────────────────────────────────────────
 # Use official debian trixie based Python image as base
 FROM python:3.15.0b1-slim-trixie
@@ -52,8 +61,7 @@ WORKDIR /app
 RUN apt update -q --yes \
   && apt upgrade -q --yes \
   && apt install -q --no-install-recommends --yes -o DPkg::options::="--force-overwrite" -o Dpkg::Options::="--force-confdef" \
-      bash curl ca-certificates \
-      ldnsutils \
+      bash ca-certificates \
       libssl3 libexpat1 \
   && apt clean \
   && rm -rf /var/lib/apt/lists/*
@@ -61,8 +69,11 @@ RUN apt update -q --yes \
 # Copy unbound Python binding (_unbound.so + unbound.py) built in stage 1.
 # Both stages share the same debian:trixie-slim base, so the Python version
 # (and thus dist-packages path) is identical in builder and runtime.
-COPY --from=unbound-builder /usr/local/lib/ /usr/local/lib/
+COPY --from=webres6-builder /usr/local/lib/ /usr/local/lib/
 RUN ldconfig
+
+# copy downloaded root hints and public suffix list from builder stage
+COPY --from=webres6-builder /app/ /app/
 
 # Copy application code
 COPY api/pyproject.toml api/docker-entrypoint api/webres6_api.py api/webres6_*.py api/webres6-api-metadata.xml api/unbound.v6only.conf ./
@@ -75,12 +86,6 @@ RUN pip install --no-cache-dir --progress-bar off . \
 
 # create empty server config folder
 RUN mkdir ./serverconfig
-
-# Load root hints for unbound
-RUN curl -fsSL -o /app/named.cache https://www.internic.net/domain/named.cache
-
-# get public suffix list
-RUN curl -fsSL -O https://publicsuffix.org/list/public_suffix_list.dat
 
 # Create non-root user and switch to it
 RUN mkdir -p /app/run && \
