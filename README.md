@@ -10,13 +10,14 @@
     - [API server (webres6-api)](#api-server-webres6-api)
     - [CLI Client](#cli-client)
     - [Web App](#web-app)
-    - [DNS probe](#dns-probe)
-  - [Setup (development):](#setup-development)
-  - [Setup (docker compose):](#setup-docker-compose)
-  - [Setup (kubernetes):](#setup-kubernetes)
-  - [Usage](#usage)
-    - [API server](#api-server)
-    - [CLI Client](#cli-client-1)
+  - [Setup](#setup)
+    - [CLI only:](#cli-only)
+    - [Setup (MCP server only):](#setup-mcp-server-only)
+    - [Development:](#development)
+    - [Docker compose:](#docker-compose)
+    - [Kubernetes:](#kubernetes)
+  - [CLI Client Usage](#cli-client-usage)
+  - [Web App usage](#web-app-usage)
   - [Support, Feedback, Contributing](#support-feedback-contributing)
   - [Security / Disclosure](#security--disclosure)
   - [Code of Conduct](#code-of-conduct)
@@ -45,7 +46,7 @@ The tool is inspired by Paul Marks' [IPvFoo](https://github.com/pmarks-net/ipvfo
 - Calculates scores based on the share of resources available for IPv6-only clients and keeps a score-board of the results.
 - Splits domain names into host/domain part using [public suffix list](https://publicsuffix.org/).
 
-The tool can be accessed using a [CLI Client](#cli) and a built-in [Web app](#web-app) and an experimental [MCP server](#mcp).
+The tool can be accessed using a [CLI Client](#cli) and a built-in [Web app](#web-app-usage) and an experimental [MCP server](#mcp).
 
 ### Known limitations
 
@@ -93,14 +94,16 @@ Containerized setup requires IPv6 being enabled in the container runtime. This c
 - jquery-3.7.1
 - 72 web font
 
-## Setup (CLI only):
+## Setup
+
+### CLI only:
 <a id="cli"/>
 
 You can install the CLI by using
 `uv tool install --from 'git+https://github.com/SAP/webres6#subdirectory=cli' webres6`.
 This needs the API running elsewhere and defaults to using `http://webres6.dev.sap/` if `WEBRES6_API_URL` is not set.
 
-## Setup (MCP server only):
+### Setup (MCP server only):
 <a id="mcp"/>
 
 You can install the experimental local/stdio MCP server by using 
@@ -109,7 +112,7 @@ and add it, e.g., to *claude* with `claude mcp add webres6 uvx webres6-mcp`
 This needs the API running elsewhere and defaults to using `http://webres6.dev.sap/` if `WEBRES6_API_URL` is not set.
 
 
-## Setup (development):
+### Development:
 
 First, you need to have Selenium installed or 
 available as a service and have ```SELENIUM_REMOTE_URL``` environment variable pointing to it.
@@ -126,13 +129,13 @@ Please see the `Dockerfile` and `create-venv.sh` in the *api* folder for details
 
 The `webres6` script in the top folder launches *api* first and then passes the arguments to the *cli* to check a single URL.
 
-## Setup (docker compose):
+### Docker compose:
 
 ```bash docker-compose build``` should build the containers for the API server and an NGINX container serving the Web app.
 
 ```bash docker-compose up``` launches a demo environment with Selenium deployed in a separate docker container. Please note that this only works properly if your docker setup supports IPv6, which is still challenging (especially on MacOS).
 
-## Setup (kubernetes):
+### Kubernetes:
 
 There is a helm chart available in the `helm` directory. See `helm/values.yaml` for the available configuration options.
 
@@ -174,6 +177,17 @@ Exit codes:
    1 - At least one host has an IPv4 address
    2 - Error occurred (see stderr)
 ```
+
+## Web App usage
+
+The web app can be served via the separate `webres6-viewer` container or directly via the API server.
+Enter a URL in the input field and click **Analyze**. Results appear below the input form once the crawl completes.
+A scoreboard of recent results is shown below the input field when the page first loads.
+
+Alternatively, open `viewer/viewer.html` from the local filesystem.
+In this case, you can only **render saved reports** by dropping them on the browser window.
+
+Custom **CSS stylesheet** dropped on the browser window are also inject into the page. Use this to apply print or custom themes without modifying the viewer source.
 
 ## Support, Feedback, Contributing
 
