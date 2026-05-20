@@ -158,6 +158,57 @@ progress {
 .status-loading span.placeholder {
   float: right;
 }
+button {
+  padding: 8px 20px;
+  background-color: #2a4d7a;
+  color: white;
+  border: none;
+  border-radius: 4px;
+}
+.clickable {
+  cursor: pointer;
+}
+input[type="text"] {
+  padding: 10px;
+  border: 1px solid darkgray;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+.input-parameter-container {
+  display: inline-flex;
+  flex-direction: row;
+  margin-top: 20px;
+  margin-right: 20px;
+  white-space: nowrap;
+}
+#srvmessage {
+  background: #ffa0cd;
+}
+#input form {
+  display: inline-block;
+  width: 100%;
+}
+.input-parameter-container button {
+  min-width: 19%; 
+}
+#submit-button {
+  float: right;
+  min-width: 19%; 
+  margin-right: 0px;
+}
+#submit-button button {
+  width: 100%;
+}
+#urlInput {
+  width: 100%;
+}
+#waitTime{
+  width: 3em; 
+  text-align: right;
+}
+#privacy-policy {
+  text-align: left;
+}
 table {
   border-collapse: collapse;
   width: 100%;
@@ -178,42 +229,14 @@ thead {
   color: #2a4d7a;
 }
 tbody {
-  border-top: 1px solid #b0b0b0;
-}
-button {
-  padding: 8px 20px;
-  background-color: #2a4d7a;
-  color: white;
-  border: none;
-  border-radius: 4px;
-}
-@keyframes clickableShadowPulse {
-  0% {
-    text-shadow: 1px 1px 2px #f8c39610;
-  }
-  40% {
-    text-shadow: 1px 1px 8px #fd56dc9e;
-  }
-  60% {
-    text-shadow: 1px 1px 8px #fd56dc9e;
-  }
-  100% {
-    text-shadow: 1px 1px 2px #f8c39610;
-  }
-}
-.clickable {
-  cursor: pointer;
-  animation: clickableShadowPulse 20s ease-in-out;
-}
-input[type="text"] {
-  padding: 10px;
-  border: 1px solid darkgray;
-  border-radius: 6px;
-  box-sizing: border-box;
+  border-top: 1px solid #eaf1fb;
 }
 table.scoreboard-table{
   table-layout: fixed;
   font-size: small;
+}
+.scoreboard-table tr {
+  border-top: 1px solid #eaf1fb;
 }
 td.scoreboard-ipv6only-score, th.scoreboard-ipv6only-score {
   text-align: left;
@@ -325,41 +348,6 @@ td.ip-netname {
   margin-left: 20px;
   margin-top: 2px;
 }
-.input-parameter-container {
-  display: inline-flex;
-  flex-direction: row;
-  margin-top: 20px;
-  margin-right: 20px;
-  white-space: nowrap;
-}
-#srvmessage {
-  background: #ffa0cd;
-}
-#input form {
-  display: inline-block;
-  width: 100%;
-}
-.input-parameter-container button {
-  min-width: 19%; 
-}
-#submit-button {
-  float: right;
-  min-width: 19%; 
-  margin-right: 0px;
-}
-#submit-button button {
-  width: 100%;
-}
-#urlInput {
-  width: 100%;
-}
-#waitTime{
-  width: 3em; 
-  text-align: right;
-}
-#privacy-policy {
-  text-align: left;
-}
 .hosts table {
   width: 100%;
   empty-cells: hide;
@@ -419,14 +407,23 @@ td.ip-netname {
     color: aliceblue
   }
   h1 {
-    color: #5695e8;
+   color: lightslategray;
+  }
+  button {
+    background-color: #2a3b4e;
   }
   table {
     background: #333;
   }
   thead {
-    background: #26262e;
+    background: #2a3b4e;
     color: #aad4ff;
+  }
+  tbody {
+    border-top: 1px solid #2a3b4e;
+  }
+  .scoreboard-table tr {
+    border-top: 1px solid #2a3b4e;
   }
   input[type="text"] {
     background: #333;
