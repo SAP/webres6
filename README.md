@@ -100,7 +100,7 @@ Containerized setup requires IPv6 being enabled in the container runtime. This c
 <a id="cli"/>
 
 You can install the CLI by using
-`uv tool install --from 'git+https://github.com/SAP/webres6#subdirectory=cli' webres6`.
+`uv tool install --from 'git+https://github.com/SAP/webres6#subdirectory=cli' webres6-cli`.
 This needs the API running elsewhere and defaults to using `http://webres6.dev.sap/` if `WEBRES6_API_URL` is not set.
 
 ### Setup (MCP server only):
