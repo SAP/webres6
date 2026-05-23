@@ -7,14 +7,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "webres6-cli"
-version = "1.4.0"
+version = "1.6.2"
 description = "IPv6 Web Resource Checker CLI"
 readme = "../README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
 dependencies = [
-    "urllib3==2.7.0",
-    "urllib3-future==2.20.904",
+    "urllib3==2.7",
+    "urllib3-future>=2.20",
 ]
 
 [project.scripts]

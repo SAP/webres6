@@ -40,7 +40,7 @@ import webres6_nat64  # noqa: F401 — applies NAT64 monkey-patch to IPv6Address
 from webres6_stackoverflow import TracedThreadPoolExecutor
 
 # config/flag variables
-webres6_version   = "1.6.1"
+webres6_version   = "1.6.2"
 debug_whois       = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo    = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask       = 'flask'    in getenv("DEBUG", '').lower().split(',')
@@ -660,7 +660,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
 
     def send_in_progress_response(report_id, refresh=client_retry_base):
         response = jsonify({ 'error': 'Crawl in progress - please come back later', 'report_id': report_id })
-        response.headers['Refresh'] = str(refresh)
+        response.headers['Refresh'] = int(refresh)
         return response, 202
 
     # initialize otel
@@ -726,7 +726,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
         if error_code != 200:
             error_cache_line = { 'type': 'error', 'ts': ts, 'report_id': report_id,
                                   'data': json_result, 'error_code': error_code }
-            storage_manager.put_result_cacheline(cache_key, error_cache_line, error_cache_ttl, False)
+            storage_manager.put_result_cacheline(cache_key, error_cache_line, error_cache_ttl, True)
             bg_span.add_event("webres6.crawl_error", {"error_code": error_code})
             return
 
@@ -746,7 +746,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
             print(f"{lp}WARNING: archiving report failed, caching report data directly", file=sys.stderr)
             cache_line = { 'type': 'error', 'ts': ts, 'report_id': report_id,
                                   'data': json_result, 'error_code': error_code }
-            storage_manager.put_result_cacheline(cache_key, cache_line, result_cache_ttl, False)
+            storage_manager.put_result_cacheline(cache_key, cache_line, result_cache_ttl, True)
 
     crawl_executor.submit(_background_crawl)
     span.add_event("webres6.crawl_queued", {"report_id": report_id})

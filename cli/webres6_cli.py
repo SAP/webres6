@@ -12,9 +12,11 @@ import argparse
 import json
 from ipaddress import ip_address, ip_network
 from time import sleep
-import urllib3 
+import threading
+import urllib3
 from urllib.parse import urlparse, quote_plus as encodeURIComponent
 
+webres6_version = "1.6.2"
 api_url = environ.get('WEBRES6_API_URL', 'https://webres6.dev.sap').rstrip("/").rstrip("/res6") + "/res6"
 retry = urllib3.util.Retry(total=5, connect=5, backoff_factor=2)
 http = urllib3.PoolManager(happy_eyeballs=True, retries=retry)
@@ -39,7 +41,7 @@ color = {
 }
 
 
-def fetch_res6_json(api_url, url, ext=None, screenshot='none', whois=False, wait=None, timeout=None, scoreboard=True, retry_count=0):
+def fetch_res6_json(api_url, url, ext=None, screenshot='none', whois=False, wait=None, timeout=None, scoreboard=True, quiet=False):
     params = {}
     if whois:
         params['whois'] = "true"
@@ -54,23 +56,61 @@ def fetch_res6_json(api_url, url, ext=None, screenshot='none', whois=False, wait
     if scoreboard:
         params['scoreboard'] = "true"
 
-    r = http.request("GET", f"{api_url}/url({encodeURIComponent(url)})", fields=params)
+    # spinner setup
+    _stop = threading.Event()
+    if not quiet:
+        _frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠣⠏"
+        def _spin():
+            _idx = 0
+            while not _stop.wait(0.2):
+                _idx = (_idx + 1) % len(_frames)
+                print(f'\b\b{_frames[_idx]} ', end='', flush=True, file=sys.stderr)
+        _t = threading.Thread(target=_spin, daemon=True)
+        _t.start()
+    def advance_spinner():
+        if not quiet:
+            print('\b\b⠿  ', end='', flush=True, file=sys.stderr)
+    def stop_spinner():
+        if not quiet:
+            _stop.set()
+            _t.join()
+            print('\b\b⠿ ', end='', flush=True, file=sys.stderr)
 
-    if r.status == 200:
-        return r.json()
-    elif r.status == 202 or r.status == 503:
-        # retry with exponential backoff
-        if retry_count < max_retries:
-            wait_time = 15 * 2 ** retry_count
-            print(f"Server busy {r.status}, retrying in {wait_time}s... (retry {retry_count+1}/{max_retries})", file=sys.stderr)
-            sleep(wait_time)
-            return fetch_res6_json(api_url, url, ext=ext, screenshot=screenshot, whois=whois, wait=wait, timeout=timeout, scoreboard=scoreboard, retry_count=retry_count+1)
-        else:
-            print(f"ERROR: Server busy after {max_retries} retries. Please try again later.", file=sys.stderr)
+    retry_count = 0
+    while retry_count < max_retries:
+        retry_count += 1
+
+        try:
+            r = http.request("GET", f"{api_url}/url({encodeURIComponent(url)})", fields=params)
+        except Exception as e:
+            stop_spinner()
+            print(f"\nERROR: Failed to connect to {api_url}: {e}", file=sys.stderr)
             return None
-    else:
-        print(f"ERROR: Server returned status {r.status} with message: {r.data.decode('utf-8')}", file=sys.stderr)
-        return None
+
+        if r.status == 200:
+            stop_spinner()
+            return r.json()
+        elif r.status == 202:
+                advance_spinner()
+                if r.headers.get('refresh'):
+                    wait_time = int(float(r.headers['refresh']))
+                else:
+                    wait_time = 20
+                sleep(wait_time)
+        elif r.status == 503:
+                # retry with exponential backoff
+                wait_time = 15 * 2 ** retry_count
+                print(f"\nServer busy {r.status}, retrying in {wait_time}s... (retry {retry_count+1}/{max_retries})  ", end='', file=sys.stderr)
+                sleep(wait_time)
+        else:
+            stop_spinner()
+            print(f"\nERROR: Server returned status {r.status} with message: {r.data.decode('utf-8')}", file=sys.stderr)
+            return None
+
+    # max retries reached
+    stop_spinner()
+    print(f"\rERROR: Maximum retries ({max_retries}) reached. Please try again later.", file=sys.stderr)
+    return None
 
 def fetch_res6_report(api_url, report_id):
     r = http.request("GET", f"{api_url}/report/{report_id}")
@@ -383,6 +423,7 @@ def main():
     parser.add_argument("-n", "--show-network", action="store_true", help="Show whois network name")
     parser.add_argument("-p", "--private", action="store_true", help="Do not add test result to server scoreboard")
     parser.add_argument("-q", "--quiet", action="store_true", help="Do not print the host list to stdout")
+    parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {webres6_version}")
     parser.add_argument("url", nargs='?', help="URL to analyze (will be passed to /res6)")
     args = parser.parse_args()
 
@@ -438,12 +479,12 @@ def main():
             url = 'https://' + url
 
         print(f"API endpoint: {args.api}", file=sys.stderr)
-        print(f"Fetching results for: {url} ...", file=sys.stderr, end=' ', flush=True)
-        try:
-            res = fetch_res6_json(args.api, url, ext=args.extension, screenshot=args.screenshot,
-                                  whois=True, wait=args.wait, timeout=args.timeout, scoreboard=(not args.private))
+        print(f"Fetching results for: {url}   ", file=sys.stderr, end='', flush=True)
+        if res := fetch_res6_json(args.api, url, ext=args.extension, screenshot=args.screenshot,
+                                  whois=True, wait=args.wait, timeout=args.timeout, scoreboard=(not args.private),
+                                  quiet=args.quiet):
             print("done", file=sys.stderr)
-        except Exception as e:
+        else:
             print(f"ERROR: Failed to fetch from {args.api}: {e}", file=sys.stderr)
             sys.exit(2)
 
