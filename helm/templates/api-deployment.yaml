@@ -89,12 +89,22 @@ spec:
             {{- if .Values.api.valkeyURL }}
             - name: VALKEY_URL
               value: {{ .Values.api.valkeyURL | quote }}
+            {{- if .Values.api.resultCDNTemplate }}
+            - name: RESULT_CDN_TEMPLATE
+              value: {{ .Values.api.resultCDNTemplate | quote }}
+            {{- end }}
             {{- if .Values.api.s3Bucket }}
             - name: S3_BUCKET
               value: {{ .Values.api.s3Bucket | quote }}
+            - name: S3_DELIVERY_STRATEGY
+              value: {{ .Values.api.s3DeliveryStrategy | quote }}
             {{- if .Values.api.s3Endpoint }}
             - name: S3_ENDPOINT
               value: {{ .Values.api.s3Endpoint | quote }}
+            {{- end }}
+            {{- if .Values.api.s3PresignedExpiry | quote }}
+            - name: S3_PRESIGNED_URL_EXPIRY
+              value: {{ .Values.api.s3PresignedExpiry | quote }}
             {{- end }}
             {{- end }}
             {{- end }}

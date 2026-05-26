@@ -56,7 +56,9 @@ enable_dnsprobe   = getenv("ENABLE_DNSPROBE", 'true').lower() in ['true', '1', '
 valkey_url        = getenv("VALKEY_URL", None)
 s3_bucket         = getenv("S3_BUCKET", None)
 s3_endpoint       = getenv("S3_ENDPOINT", None)
-s3_strategy       = getenv("S3_DELIVERY_STRATEGY", "public")
+s3_strategy       = getenv("S3_DELIVERY_STRATEGY", "public") # "public", "presigned", or "private"
+s3_presigned_url_expiry = int(getenv("S3_PRESIGNED_URL_EXPIRY", 3600)) # seconds
+result_cdn_template = getenv("RESULT_CDN_TEMPLATE", None)
 archive_dir       = getenv("ARCHIVE_DIR", None)
 result_cache_ttl  = int(getenv("RESULT_CACHE_TTL", 900))  # Default 15min
 result_archive_ttl = int(getenv("RESULT_ARCHIVE_TTL", 3600*24*90))  # Default 3 month
@@ -186,11 +188,13 @@ def init_storage():
         if s3_bucket and s3_bucket.strip() != '':
             print("Valkey client and S3 endpoint configured, using ValkeyS3HybridStorageManager", file=sys.stderr)
             storage_manager = ValkeyS3HybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
-                                                valkey_url=valkey_url, s3_bucket=s3_bucket, s3_endpoint=s3_endpoint, s3_delivery_strategy=s3_strategy)
+                                                valkey_url=valkey_url, s3_bucket=s3_bucket, s3_endpoint=s3_endpoint, 
+                                                s3_delivery_strategy=s3_strategy, s3_presigned_url_expiry=s3_presigned_url_expiry,
+                                                result_cdn_template=result_cdn_template)
         elif archive_dir and archive_dir.strip() != '':
             print("Valkey client and local archive dir configured, using ValkeyFileHybridStorageManager", file=sys.stderr)
             storage_manager = ValkeyFileHybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
-                                                                valkey_url=valkey_url, archive_dir=archive_dir)
+                                                                valkey_url=valkey_url, archive_dir=archive_dir, result_cdn_template=result_cdn_template)
         else:
             print("Valkey client configured, using ValkeyStorageManager", file=sys.stderr)
             storage_manager = ValkeyStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, valkey_url=valkey_url)
@@ -204,6 +208,8 @@ def init_storage():
     if storage_manager.can_archive() and enable_scoreboard:
         scoreboard = Scoreboard(storage_manager=storage_manager)
 
+    print(f"Result URL template: {storage_manager.url_template}", file=sys.stderr)
+    storage_manager.check_url_template()
     print("Storage abstraction initialized", file=sys.stderr)
 
 # initalize DNSProbe
@@ -735,7 +741,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
         bg_span.add_event("webres6.crawl_success", attributes={"archived": archived})
         if archived:
             cache_line = { 'type': 'report', 'ts': ts, 'report_id': report_id,
-                            'data': "./reports/" + report_id }
+                            'data': storage_manager.url_template.replace('{report_id}', report_id) }
             storage_manager.put_result_cacheline(cache_key, cache_line, result_cache_ttl, True)
             print(f"{lp}report archived successfully as {report_id}", file=sys.stderr)
 

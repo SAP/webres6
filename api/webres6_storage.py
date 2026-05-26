@@ -38,13 +38,23 @@ class StorageManager:
     whois_cache_ttl = 3600
     result_archive_ttl = 3600*24
     url_expiry = 0
-    url_template = '/res6/report/{report_id}'
+    url_template = './report/{report_id}'
 
     def can_archive(self):
         pass
 
     def can_persist(self):
         pass
+
+    def check_url_template(self):
+        if not self.url_template or self.url_template.strip() == '':
+            print("WARNING: url_template is not set, URL generation will fail!", file=sys.stderr)
+            return False
+        if '{report_id}' not in self.url_template:
+            print(f"WARNING: url_template \"{self.url_template}\" does not contain '{{report_id}}' placeholder, URL generation may fail!", file=sys.stderr)
+            return False
+        else:
+            return True
     
     def archive_result(self, report_id, data):
         pass
@@ -656,11 +666,13 @@ class ValkeyFileHybridStorageManager(ValkeyStorageManager):
 
     local_storage_manager = None
 
-    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, archive_dir=None, whois_mem_cache_size_max=2048):
+    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, archive_dir=None, result_cdn_template=None, whois_mem_cache_size_max=2048):
         super().__init__(whois_cache_ttl, result_archive_ttl, valkey_url, whois_mem_cache_size_max)
         if archive_dir and os.path.isdir(archive_dir):
             self.local_storage_manager = LocalStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
                                                               cache_dir=None, archive_dir=archive_dir)
+        if result_cdn_template and result_cdn_template.strip() != '':
+            self.url_template = result_cdn_template
 
     def can_archive(self):
         return self.local_storage_manager.can_archive()
@@ -691,17 +703,20 @@ class ValkeyS3HybridStorageManager(ValkeyStorageManager):
     s3_bucket = None
     s3_delivery_strategy = None
 
-    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, s3_bucket, s3_endpoint, s3_delivery_strategy = 'public', s3_presigned_url_expiry=3600, whois_mem_cache_size_max=2048):
+    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, s3_bucket, s3_endpoint, s3_delivery_strategy = 'presigned', s3_presigned_url_expiry=3600, result_cdn_template=None, whois_mem_cache_size_max=2048):
         super().__init__(whois_cache_ttl, result_archive_ttl, valkey_url, whois_mem_cache_size_max)
         self.url_expiry = s3_presigned_url_expiry
         self.s3_client = boto3.client('s3', endpoint_url=s3_endpoint)
         self.s3_bucket = s3_bucket
         if s3_delivery_strategy not in ['public', 'presigned', 'private']:
-            print(f"WARNING: invalid s3_delivery_strategy {s3_delivery_strategy}, defaulting to 'public'", file=sys.stderr)
-            s3_delivery_strategy = 'public'
-        if s3_delivery_strategy == 'public':
-            self.url_template = f"{self.s3_client.meta.endpoint_url}/{self.s3_bucket}/report-{{report_id}}.json"
+            print(f"WARNING: invalid s3_delivery_strategy {s3_delivery_strategy}, defaulting to 'presigned'", file=sys.stderr)
+            s3_delivery_strategy = 'presigned'
         self.s3_delivery_strategy = s3_delivery_strategy
+        # update url_template
+        if result_cdn_template and result_cdn_template.strip() != '':
+            self.url_template = result_cdn_template
+        elif s3_delivery_strategy == 'public':
+            self.url_template = f"{self.s3_client.meta.endpoint_url}/{self.s3_bucket}/report-{{report_id}}.json"
 
     def can_archive(self):
         return True
@@ -754,7 +769,10 @@ class ValkeyS3HybridStorageManager(ValkeyStorageManager):
         try:
             response = self.s3_client.get_object(Bucket=self.s3_bucket, Key=self._make_s3_key(report_id))
             if 'Body' in response:
-                body = response['Body'].read()
+                if response.get('ContentEncoding', '') == 'gzip':
+                    body = gzip.decompress(response['Body'].read())
+                else:
+                    body = response['Body'].read()
                 data = json.loads(body)
                 data['ts'] = datetime.fromisoformat(data['ts'])
                 return data
@@ -777,10 +795,18 @@ class ValkeyS3HybridStorageManager(ValkeyStorageManager):
             return f"{self.s3_client.meta.endpoint_url}/{self.s3_bucket}/{self._make_s3_key(report_id)}"
         elif self.s3_delivery_strategy == 'private':
             return None
+        # self.s3_delivery_strategy == 'presigned':
         try:
+            # check for cached URL in valkey first
+            if response := super().get_result_cacheline(f"s3report:{report_id}"):
+                return response
+            # generate a presigned URL for the S3 object with the specified expiry time
             response = self.s3_client.generate_presigned_url('get_object',
                                                         Params={'Bucket': self.s3_bucket, 'Key': self._make_s3_key(report_id)},
                                                         ExpiresIn=self.url_expiry)
+            if response:
+                # cache the URL in valkey for future requests
+                super().put_result_cacheline(f"s3report:{report_id}", response, ttl=self.url_expiry-5, overwrite=True)
             return response
         except Exception as e:
             print(f"WARNING: failed getting presigned archive url for {report_id} from S3: {e}", file=sys.stderr)

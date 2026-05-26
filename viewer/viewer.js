@@ -73,6 +73,10 @@ async function loadSrvConfig() {
       if (srvconfig && srvconfig.archive) {
         srvSupportsArchiveLinks = true;
         if (srvconfig.archive_url_template) {
+          // resolve relative URL template against API base URL
+          if (srvconfig.archive_url_template.startsWith('.')) {
+            srvconfig.archive_url_template = getAPIBase() + srvconfig.archive_url_template.substring(1);
+          }
           srvArchiveLinkTemplate = function(report_id) { return srvconfig.archive_url_template.replace('{report_id}', report_id); };
         } 
       }
