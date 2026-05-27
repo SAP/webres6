@@ -10,12 +10,14 @@ on:
     paths:
       - 'api/**'
       - 'viewer/**'
+      - 'mcp/**'
     tags: ['v*']
   pull_request:
     branches: [main]
     paths:
       - 'api/**'
       - 'viewer/**'
+      - 'mcp/**'
 
 jobs:
   build:
@@ -37,6 +39,9 @@ jobs:
           - service: viewer
             dockerfile: viewer/Dockerfile
             image: ghcr.io/sap/webres6-viewer
+          - service: mcp
+            dockerfile: mcp/Dockerfile
+            image: ghcr.io/sap/webres6-mcp
 
     steps:
       - uses: actions/checkout@v4

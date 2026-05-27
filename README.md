@@ -106,10 +106,16 @@ This needs the API running elsewhere and defaults to using `http://webres6.dev.s
 ### Setup (MCP server only):
 <a id="mcp"/>
 
-You can install the experimental local/stdio MCP server by using 
-`uv tool install --from 'git+https://github.com/SAP/webres6#subdirectory=mcp' webres6-mcp`.
-and add it, e.g., to *claude* with `claude mcp add webres6 uvx webres6-mcp` 
+The MCP server supports two transports:
+
+**Local stdio MCP** — install per user with
+`uv tool install --from 'git+https://github.com/SAP/webres6#subdirectory=mcp' webres6-mcp`
+and register it, e.g., with `claude mcp add webres6 uvx webres6-mcp`.
 This needs the API running elsewhere and defaults to using `http://webres6.dev.sap/` if `WEBRES6_API_URL` is not set.
+
+**Remote HTTPS MCP** — when deployed via the Helm chart, the MCP is exposed 
+at `https://<host>/mcp` (streamable-http transport). Register a remote MCP with
+`claude mcp add --transport http webres6 https://<host>/mcp`. No per-user setup required.
 
 
 ### Development:

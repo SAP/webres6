@@ -99,6 +99,28 @@ services:
       retries: 5
       start_period: 20s
 
+  webres6-mcp:
+    image: webres6-mcp:latest
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: mcp/Dockerfile
+      x-bake:
+        platforms:
+          - linux/amd64
+          - linux/arm64
+    container_name: webres6-mcp
+    networks:
+      - webres6-network
+    ports:
+      - "6470:6470"
+    environment:
+      - WEBRES6_MCP_TRANSPORT=http
+      - WEBRES6_API_URL=http://webres6-api:6400/res6
+      - DNSPROBE_API_URL=http://webres6-dnsprobe:6453/dnsprobe
+    depends_on:
+      - webres6-api
+
   selenium:
     image: selenium/standalone-chromium:4.43.0
     container_name: webres6-selenium

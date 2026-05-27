@@ -26,12 +26,19 @@ jQuery SPA. All result rows are rendered by cloning hidden `<template>`-class DO
 
 ### MCP server (`mcp/`)
 FastMCP server that wraps the webres6 API for use with AI assistants (Claude Code, etc.).
-Communicates over stdio; the host process launches it directly.
+Supports two transports:
+- **stdio** (default): the host process launches `webres6-mcp` directly.
+- **streamable-http**: long-running HTTP server, mounted on `/mcp`. Used by the
+  Helm chart and `docker-compose.dev.yml` to provide a shared remote MCP endpoint.
+
+Mode is selected by `--transport {stdio,http}` (CLI flag) or `WEBRES6_MCP_TRANSPORT` env var.
+The flag overrides the env var.
 
 **Run manually:**
 ```bash
 cd mcp && source .venv/bin/activate
-webres6-mcp
+webres6-mcp                                # stdio (default)
+webres6-mcp --transport http               # HTTP on FASTMCP_HOST:FASTMCP_PORT
 ```
 
 **Configuration (environment variables):**
@@ -39,8 +46,27 @@ webres6-mcp
 |----------|---------|---------|
 | `WEBRES6_API_URL` | `https://webres6.dev.sap/res6` | API endpoint for crawl requests |
 | `DNSPROBE_API_URL` | `https://webres6.dev.sap/dnsprobe` | DNS probe endpoint |
+| `WEBRES6_VIEWER_URL` | derived from `WEBRES6_API_URL` (strips `/res6`) | Browsable UI base, used in `viewer_url` field of trimmed reports |
+| `WEBRES6_MCP_TRANSPORT` | `stdio` | Transport: `stdio` or `http` |
+| `WEBRES6_HTTP_CACHE_TTL` | `600` | Max seconds to cache upstream API responses (caps `Cache-Control` from upstream so immutable headers don't pin entries for weeks). Set to `0` to disable. |
+| `FASTMCP_HOST` | `127.0.0.1` | Listen address (HTTP mode) |
+| `FASTMCP_PORT` | `8000` | Listen port (HTTP mode) |
 
-**Exposed tools:** `check_website_ipv6_readiness`, `resolve_dns_v6only`, `get_website_scoreboard`, `get_report`
+**Exposed tools:** `check_website_ipv6_readiness`, `resolve_dns_v6only`, `get_websites_IPv6only_scoreboard`
+
+**Exposed resources** (templated, addressed by URI):
+- `webres6://report/{report_id}` — full trimmed report
+- `webres6://report/{report_id}/summary` — top-level scores + counts only
+- `webres6://report/{report_id}/host/{hostname}` — full untrimmed host subtree
+- `webres6://report/{report_id}/host/{hostname}/dns_trace` — base64 libunbound trace
+- `webres6://report/{report_id}/screenshot` — PNG screenshot of the page (when the crawl was run with `screenshot != none`)
+
+The `check_website_ipv6_readiness` tool returns a trimmed report (heavy fields like
+`urls`, `subject_alt_names`, full `whois.network`, `dns.unbound_trace`, and `screenshot`
+collapsed to counts/flags) plus `resource_link` content blocks pointing at the per-host
+detail, DNS-trace, and screenshot resources for drill-down. The tool's `screenshot`
+parameter (`none`/`small`/`medium`/`full`, default `none`) controls whether a screenshot
+is captured.
 
 ## Commands
 
@@ -79,4 +105,4 @@ Then run `curl http://localhost:6400/res6/url(URL)` and analyze the output.
 
 ## Versioning
 
-The canonical version lives in `VERSION`. The pre-commit hook (registered by `create-virtualenvs.sh`) enforces that `api/webres6_api.py` and both `version` and `appVersion` fields in `helm/Chart.yaml` all match `VERSION`. Update all three when bumping the version.
+The canonical version lives in `VERSION`. The pre-commit hook (registered by `create-virtualenvs.sh`) enforces that `api/webres6_api.py`, `api/pyproject.toml`, `mcp/pyproject.toml`, and both `version` and `appVersion` fields in `helm/Chart.yaml` all match `VERSION`. Update all of them when bumping the version.

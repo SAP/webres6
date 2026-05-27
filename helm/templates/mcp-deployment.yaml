@@ -1,0 +1,107 @@
+{{- if .Values.mcp.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # SPDX-FileCopyrightText: 2026 SAP SE and IPv6 Web Resource Checker contributors
+  # SPDX-License-Identifier: Apache-2.0
+  name: {{ include "webres6.fullname" . }}-mcp
+  labels:
+    {{- include "webres6.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.mcp.autoscaling.enabled }}
+  replicas: {{ .Values.mcp.replicas | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "webres6.selectorLabels" . | nindent 6 }}
+      app: webres6-mcp
+  template:
+    metadata:
+      {{- with .Values.mcp.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "webres6.labels" . | nindent 8 }}
+        {{- with .Values.mcp.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        app: webres6-mcp
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mcp.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: webres6-mcp
+          image: {{ .Values.mcp.image.repository | default .Values.image.repository }}{{ .Values.mcp.image.name | default "webres6-mcp" }}:{{ .Values.mcp.image.tag | default .Values.image.tag | default "latest" }}
+          imagePullPolicy: {{ .Values.mcp.image.pullPolicy | default "IfNotPresent" }}
+          env:
+            - name: DEPLOYMENT
+              value: {{ .Release.Name | quote }}
+            - name: WEBRES6_MCP_TRANSPORT
+              value: "http"
+            - name: FASTMCP_HOST
+              value: "0.0.0.0"
+            - name: FASTMCP_PORT
+              value: {{ .Values.mcp.port | quote }}
+            - name: WEBRES6_API_URL
+              value: "http://{{ include "webres6.fullname" . }}-api:{{ .Values.api.service.port }}/res6"
+            {{- if eq .Values.dnsprobe.mode "service" }}
+            - name: DNSPROBE_API_URL
+              value: "http://{{ include "webres6.fullname" . }}-dnsprobe:{{ .Values.dnsprobe.service.port }}/dnsprobe"
+            {{- else if eq .Values.dnsprobe.mode "external" }}
+            - name: DNSPROBE_API_URL
+              value: {{ .Values.dnsprobe.url | quote }}
+            {{- else }}
+            - name: DNSPROBE_API_URL
+              value: "http://{{ include "webres6.fullname" . }}-api:{{ .Values.api.service.port }}/dnsprobe"
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.mcp.port }}
+              protocol: TCP
+          startupProbe:
+            tcpSocket:
+              port: {{ .Values.mcp.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.mcp.port }}
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 1
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.mcp.port }}
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 5
+          {{- with .Values.mcp.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.mcp.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

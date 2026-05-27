@@ -58,6 +58,15 @@ spec:
                 port:
                   number: {{ $.Values.api.service.port }}
           {{- end }}
+          {{- if $.Values.mcp.enabled }}
+          - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "webres6.fullname" $ }}-mcp
+                port:
+                  number: {{ $.Values.mcp.service.port }}
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:
