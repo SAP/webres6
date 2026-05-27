@@ -43,10 +43,6 @@ spec:
           env:
             - name: DEPLOYMENT
               value: {{ .Release.Name | quote }}
-            - name: WEBRES6_MCP_TRANSPORT
-              value: "http"
-            - name: FASTMCP_HOST
-              value: "0.0.0.0"
             - name: FASTMCP_PORT
               value: {{ .Values.mcp.port | quote }}
             - name: WEBRES6_API_URL

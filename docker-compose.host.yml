@@ -46,12 +46,30 @@ services:
       dockerfile: viewer/Dockerfile
     container_name: webres6-viewer
     environment:
-      - WEBRES6_API_URL=http://localhost:6400/
-      - DNSPROBE_API_URL=http://localhost:6400/
+      - WEBRES6_API_URL=http://localhost:6400
+      - DNSPROBE_API_URL=http://localhost:6400
+      - WEBRES6_MCP_URL=http://localhost:6470
     restart: unless-stopped
     network_mode: host
     volumes:
       - ./data/reports:/usr/share/nginx/html/res6/report:ro
+    depends_on:
+      - webres6-api
+
+  webres6-mcp:
+    image: webres6-mcp:latest
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: mcp/Dockerfile
+    container_name: webres6-mcp
+    ports:
+      - "6470:6470"
+    environment:
+      - WEBRES6_API_URL=http://localhost:6400/
+      - DNSPROBE_API_URL=http://localhost:6400/
+    restart: unless-stopped
+    network_mode: host
     depends_on:
       - webres6-api
 

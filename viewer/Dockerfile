@@ -6,8 +6,9 @@
 FROM nginx:1.31.0
 
 # Set default environment variables
-ENV WEBRES6_API_URL=http://localhost:6400/
-ENV DNSPROBE_API_URL=http://localhost:6453/
+ENV WEBRES6_API_URL=http://localhost:6400
+ENV DNSPROBE_API_URL=http://localhost:6453
+ENV WEBRES6_MCP_URL=http://localhost:6470
 ENV NGINX_PORT=6480
 
 # Copy viewer files

@@ -28,10 +28,15 @@ server {
         proxy_pass ${WEBRES6_API_URL}/$uri;
         proxy_set_header Host $host;
     }
-    location /dnsprobe/ {
+    location /dnsprobe/  {
         proxy_pass ${DNSPROBE_API_URL}/dnsprobe/;
         proxy_set_header Host $host;
     }
+
+    location = /mcp        { proxy_pass ${WEBRES6_MCP_URL}; proxy_set_header Host $host; }
+    location = /mcp/       { rewrite ^ /mcp permanent; }
+    location ^~ /mcp/      { proxy_pass ${WEBRES6_MCP_URL}; proxy_set_header Host $host; }
+
     location = /404.html { internal; }
     location = /50x.html { internal; }
     error_page  404               /404.html;
