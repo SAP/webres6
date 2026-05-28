@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2026 SAP SE and IPv6 Web Resource Checker contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# docker-compose.https.yml
+#
+# Usage:
+#   DOMAIN=yourdomain.com docker-compose \
+#     -f docker-compose.dev.yml \
+#     -f doc/acme/docker-compose.https.yml \
+#     up -d
+
+services:
+  webres6-viewer:
+    ports:
+      - "80:${NGINX_PORT:-6480}"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - acme-state:/var/cache/nginx/acme
+      - ./doc/acme/05-load-acme-module.sh:/docker-entrypoint.d/05-load-acme-module.sh:ro
+      - ./doc/acme/webres6-https.conf.template:/etc/nginx/templates/webres6-https.conf.template:ro
+
+volumes:
+  acme-state:

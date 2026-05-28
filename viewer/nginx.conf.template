@@ -4,6 +4,7 @@
 server {
     listen [::]:${NGINX_PORT};
     listen 0.0.0.0:${NGINX_PORT};
+    listen unix:/var/run/nginx.webres6.sock;
     merge_slashes off;
     rewrite ^/+(.*)$ /$1;
     root /usr/share/nginx/html;
@@ -39,6 +40,18 @@ server {
 
     location = /404.html { internal; }
     location = /50x.html { internal; }
+    location = /disabled.html { internal; }
     error_page  404               /404.html;
     error_page  500 502 503 504   /50x.html;
+}
+server {
+    listen unix:/var/run/nginx.disabled.sock;
+    root /usr/share/nginx/html;
+    rewrite ^/(.*)$ /disabled.html;
+}
+upstream webres6-viewer {
+    server unix:/var/run/nginx.webres6.sock;
+}
+upstream disabled {
+    server unix:/var/run/nginx.disabled.sock;
 }

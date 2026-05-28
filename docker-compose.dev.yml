@@ -9,7 +9,6 @@
 services:
   webres6-api:
     image: webres6-api:latest
-    pull_policy: build
     build:
       context: .
       dockerfile: api/Dockerfile
@@ -101,7 +100,6 @@ services:
 
   webres6-mcp:
     image: webres6-mcp:latest
-    pull_policy: build
     build:
       context: .
       dockerfile: mcp/Dockerfile

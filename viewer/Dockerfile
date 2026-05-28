@@ -6,14 +6,14 @@
 FROM nginx:1.31.0
 
 # Set default environment variables
-ENV WEBRES6_API_URL=http://localhost:6400
-ENV DNSPROBE_API_URL=http://localhost:6453
-ENV WEBRES6_MCP_URL=http://localhost:6470
+ENV WEBRES6_API_URL=http://disabled
+ENV DNSPROBE_API_URL=http://disabled
+ENV WEBRES6_MCP_URL=http://disabled
 ENV NGINX_PORT=6480
 
 # Copy viewer files
 WORKDIR /usr/share/nginx/html
-COPY viewer/viewer.* viewer/favicon.* viewer/404.html viewer/50x.html ./
+COPY viewer/viewer.* viewer/favicon.* viewer/404.html viewer/50x.html viewer/disabled.html ./
 COPY viewer/fonts/ ./fonts/
 COPY viewer/nginx.conf.template /etc/nginx/templates/default.conf.template
 RUN mkdir -p .well-known/acme-challenge res6/report
