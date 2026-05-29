@@ -189,6 +189,10 @@ class DNSprobe:
             self.res_v6only = lambda _: {}
             self.ping = lambda: (False, "unbound module not found")
 
+    def shutdown(self):
+        if self.local and hasattr(self, '_executor'):
+            self._executor.shutdown(wait=True)
+
     @tracer.start_as_current_span("dnsprobe.resolve6only_remote")
     def _res_v6only_remote(self, hostname):
         span = trace.get_current_span()

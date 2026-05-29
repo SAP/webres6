@@ -86,13 +86,19 @@ spec:
             - name: ENABLE_DNSPROBE
               value: "false"
             {{- end }}
+            {{- if .Values.dnsprobe.jobs }}
+            - name: DNSPROBE_JOBS
+              value: "{{ .Values.dnsprobe.jobs }}"
+            {{- end }}
             {{- if .Values.api.valkeyURL }}
             - name: VALKEY_URL
               value: {{ .Values.api.valkeyURL | quote }}
+            {{- end }}
             {{- if .Values.api.resultCDNTemplate }}
             - name: RESULT_CDN_TEMPLATE
               value: {{ .Values.api.resultCDNTemplate | quote }}
             {{- end }}
+            {{- if .Values.api.valkeyURL }}
             {{- if .Values.api.s3Bucket }}
             - name: S3_BUCKET
               value: {{ .Values.api.s3Bucket | quote }}
@@ -102,7 +108,7 @@ spec:
             - name: S3_ENDPOINT
               value: {{ .Values.api.s3Endpoint | quote }}
             {{- end }}
-            {{- if .Values.api.s3PresignedExpiry | quote }}
+            {{- if .Values.api.s3PresignedExpiry }}
             - name: S3_PRESIGNED_URL_EXPIRY
               value: {{ .Values.api.s3PresignedExpiry | quote }}
             {{- end }}
@@ -138,6 +144,10 @@ spec:
             {{- end }}
             - name: ENABLE_WHOIS
               value: {{ .Values.api.whois.enabled | quote | default "true" }}
+            {{- if .Values.api.whois.jobs }}
+            - name: WHOIS_JOBS
+              value: "{{ .Values.api.whois.jobs }}"
+            {{- end }}
             {{- if .Values.api.whois.cacheTTL }}
             - name: WHOIS_CACHE_TTL
               value: {{ .Values.api.whois.cacheTTL | quote }}

@@ -63,14 +63,16 @@ spec:
                   key: {{ .Values.adminSecret.secretKey | default "admin-key" }}
             {{- end }}
             {{- if .Values.otel.enabled }}
+            - name: OTEL_TRACING_ENABLED
+              value: "true"
             - name: OTEL_SERVICE_NAME
-              value: {{ .Values.otel.serviceName | default "webres6-api" | quote }}
+              value: {{ .Values.otel.serviceName | default "webres6-dnsprobe" | quote }}
             - name: OTEL_SERVICE_VERSION
               value: {{ .Chart.AppVersion | quote }}
             - name: OTEL_DEPLOYMENT_ENVIRONMENT
               value: {{ .Values.otel.environment | quote }}
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: {{ .Values.otel.endpoint | quote }}
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: {{ printf "%s/v1/traces" .Values.otel.endpoint | quote }}
             - name: OTEL_EXPORTER_OTLP_PROTOCOL
               value: "http/protobuf"
             - name: OTEL_TRACES_SAMPLER

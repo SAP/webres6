@@ -45,7 +45,7 @@ Environment variables:
   NAT64_PREFIXES              Comma-separated list of NAT64 prefixes (default: 64:ff9b::/96)
   ENABLE_DNSPROBE             Check DNS entries encountered during the crawl for IPv6-only readiness (default: true)
   DNSPROBE_API_URL            Use external DNS-probe service at this URL (uses internal implementation if unset)
-  DNSPROBE_JOBS               Number of parallel DNS probe lookups per crawl (default: 8)
+  DNSPROBE_JOBS               Number of parallel DNS probe lookups (default: 8)
   DNSPROBE_WORKERS            Number of unbound resolver workers (default: 4)
   DNSPROBE_CACHE_TTL          DNS-probe in-process result cache TTL in seconds (default: 60)
   DNSPROBE_TIMEOUT            DNS-probe per-query timeout in seconds (default: 30)
@@ -61,7 +61,7 @@ Environment variables:
   LOCAL_CACHE_DIR             Directory for optional local filesystem-based cache if VALKEY_URL is unset
   ENABLE_WHOIS                Enable clients to request WHOIS lookups (default: true)
   WHOIS_CACHE_TTL             Expiry time for WHOIS cache in seconds (default: 270000)
-  WHOIS_JOBS                  Number of parallel WHOIS lookups per crawl (default: 8)
+  WHOIS_JOBS                  Number of parallel WHOIS lookups (default: 8)
   RESULT_CACHE_TTL            Expiry time for result cache in seconds (default: 900)
   RESULT_ARCHIVE_TTL          Expiry time for result archive in seconds (default: 90 days)
   ERROR_CACHE_TTL             TTL for caching error responses in seconds (default: 180)
