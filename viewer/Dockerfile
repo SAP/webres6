@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Use official NGINX mainline image
-FROM nginx:1.31.0
+FROM nginx:1.31.1
 
 # Set default environment variables
 ENV WEBRES6_API_URL=http://disabled
