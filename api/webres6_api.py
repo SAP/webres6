@@ -51,7 +51,6 @@ selenium_username = getenv("SELENIUM_USERNAME", None)
 selenium_password = getenv("SELENIUM_PASSWORD", None)
 headless_selenium = getenv("HEADLESS_SELENIUM", False)
 dnsprobe_api_url  = getenv("DNSPROBE_API_URL", None)
-dnsprobe_jobs     = int(getenv("DNSPROBE_JOBS", "8"))
 enable_dnsprobe   = getenv("ENABLE_DNSPROBE", 'true').lower() in ['true', '1', 'yes']
 valkey_url        = getenv("VALKEY_URL", None)
 s3_bucket         = getenv("S3_BUCKET", None)
@@ -71,12 +70,13 @@ min_timeout       = int(getenv("SELENIUM_TIMEOUT_MIN", 20)) # min timeout for se
 max_timeout       = int(getenv("SELENIUM_TIMEOUT_MAX", 90)) # max timeout for selenium operations
 max_wait          = max_timeout//3 # max wait time for page load
 default_wait      = 2
-crawl_jobs        = int(getenv("CRAWL_JOBS", "4"))
 crawl_timeout     = int(getenv("CRAWL_TIMEOUT", 4*max_timeout)) # timeout for the entire crawl operation, including dnsprobe and whois lookups
 client_retry_base = int(getenv("CLIENT_RETRY_BASE", 6)) # min seconds to wait before client retries fetching report
 enable_whois      = getenv("ENABLE_WHOIS", 'true').lower() in ['true', '1', 'yes']
 whois_cache_ttl   = int(getenv("WHOIS_CACHE_TTL", 270000)) # seconds
-whois_jobs        = int(getenv("WHOIS_JOBS", "8"))
+crawl_jobs        = int(getenv("CRAWL_JOBS", "4"))
+dnsprobe_jobs     = int(getenv("DNSPROBE_JOBS", 2*crawl_jobs))
+whois_jobs        = int(getenv("WHOIS_JOBS", 2*crawl_jobs))
 enable_scoreboard = getenv("ENABLE_SCOREBOARD", 'true').lower() in ['true', '1', 'yes']
 scoreboard_request_limit = int(getenv("SCOREBOARD_REQUEST_LIMIT", 1024))
 screenshot_modes  = ['none', 'small', 'medium', 'full']
@@ -144,8 +144,9 @@ def init_tracing():
 # Initialize tracing
 tracer = init_tracing()
 
-# Background crawl worker pool — shared across all requests
+# Background worker pools — shared across all requests
 crawl_executor = TracedThreadPoolExecutor(tracer, max_workers=crawl_jobs, thread_name_prefix="crawl-")
+whois_executor = TracedThreadPoolExecutor(tracer, max_workers=whois_jobs, thread_name_prefix="whois-")
 
 # Prometheus metrics
 prometheus_mp_temp_dir = None
@@ -167,7 +168,7 @@ from webres6_extension import check_extension_parameter, get_extensions, init_se
 
 # load additional modules after setting up config and tracing
 from webres6_storage import StorageManager, LocalStorageManager, ValkeyStorageManager, ValkeyFileHybridStorageManager, ValkeyS3HybridStorageManager, Scoreboard, export_scoreboard_entries, import_scoreboard_entries, export_archived_reports, import_archived_reports
-from webres6_dnsprobe import DNSprobe
+from webres6_dnsprobe import DNSprobe, dnsprobe_workers
 from webres6_whois import get_whois_info
 from webres6_crawler import init_webdriver, crawl_page, load_public_suffix_list, take_screenshot, split_hostname, get_hostinfo, cleanup_crawl, check_selenium, add_url_blocklist
 
@@ -214,15 +215,18 @@ def init_storage():
 
 # initalize DNSProbe
 dnsprobe = None
+dnsprobe_executor = None
 def init_dnsprobe():
     global dnsprobe
+    global dnsprobe_executor
     if not enable_dnsprobe:
         dnsprobe = None
     elif dnsprobe_api_url and dnsprobe_api_url.strip() != '':
         dnsprobe = DNSprobe(remote=dnsprobe_api_url)
+        dnsprobe_executor = TracedThreadPoolExecutor(tracer, max_workers=dnsprobe_jobs, thread_name_prefix="dnsprobe-")
     else:
         dnsprobe = DNSprobe(local=True)
-
+        dnsprobe_executor = TracedThreadPoolExecutor(tracer, max_workers=min(dnsprobe_jobs, dnsprobe_workers), thread_name_prefix="dnsprobe-")
 
 # helper function to check if an address is an IP address (IPv4 or IPv6)
 def is_ip(address):
@@ -264,27 +268,26 @@ def add_dnsprobe_info(hosts, log_prefix=''):
         return total
 
     span.add_event("dnsprobe_lookups_started", {"total_lookups": len(hosts), "dnsprobe_jobs": dnsprobe_jobs})
-    with TracedThreadPoolExecutor(tracer, max_workers=min(len(hosts), dnsprobe_jobs)) as executor:
-        futures = {executor.submit(dnsprobe.res_v6only, hostname): (hostname, info)
-                   for hostname, info in hosts.items()}
-        for future in as_completed(futures):
-            hostname, info = futures[future]
-            dnsprobe_data = future.result()
-            total += 1
-            webres6_dnsprobe_results_total.labels(rcode=dnsprobe_data.get('rcode', 'unknown')).inc()
-            if dnsprobe_data.get('success', False):
-                success += 1
-                dnsprobe_data['ipv6_only_ready'] = True
-            elif dnsprobe_data.get('rcode', '') == 'no error':
-                noerror += 1
-                dnsprobe_data['ipv6_only_ready'] = True
-            elif dnsprobe_data.get('rcode', '') == 'serv fail':
-                servfail += 1
-                dnsprobe_data['ipv6_only_ready'] = False
-            else:
-                other_rcode += 1
-                # inconclusive answer, don't set ipv6_only_ready flag
-            info['dns'] = dnsprobe_data
+    futures = {dnsprobe_executor.submit(dnsprobe.res_v6only, hostname): (hostname, info)
+                for hostname, info in hosts.items()}
+    for future in as_completed(futures):
+        hostname, info = futures[future]
+        dnsprobe_data = future.result()
+        total += 1
+        webres6_dnsprobe_results_total.labels(rcode=dnsprobe_data.get('rcode', 'unknown')).inc()
+        if dnsprobe_data.get('success', False):
+            success += 1
+            dnsprobe_data['ipv6_only_ready'] = True
+        elif dnsprobe_data.get('rcode', '') == 'no error':
+            noerror += 1
+            dnsprobe_data['ipv6_only_ready'] = True
+        elif dnsprobe_data.get('rcode', '') == 'serv fail':
+            servfail += 1
+            dnsprobe_data['ipv6_only_ready'] = False
+        else:
+            other_rcode += 1
+            # inconclusive answer, don't set ipv6_only_ready flag
+        info['dns'] = dnsprobe_data
 
     span.add_event("dnsprobe_lookups_completed", {"total": total, "success": success, "noerror": noerror, "servfail": servfail, "other_rcode": other_rcode})
     print(f"{log_prefix}dnsprobe lookups completed: {total} total, {noerror} no error, {success} success, {servfail} servfail, {other_rcode} inconclusive", file=sys.stderr)
@@ -344,14 +347,13 @@ def add_whois_info(hosts, log_prefix=''):
 
     # execute jobs in parallel and update host info with results
     span.add_event("whois_lookups_started", {"total_lookups": len(tasks), "whois_jobs": whois_jobs})
-    with TracedThreadPoolExecutor(tracer, max_workers=min(len(tasks), whois_jobs)) as executor:
-        future_to_ip = {executor.submit(get_whois_info, ip, local_cache, local_cache_lock, storage_manager, debug=debug_whois): (whois_data, ip_in, ip) for whois_data, ip_in, ip in tasks}
-        for future in as_completed(future_to_ip):
-            whois_data, ip_in, ip = future_to_ip[future]
-            whois_info, source = future.result()
-            if whois_info:
-                whois_data[ip_in] = whois_info
-            stats[source] += 1
+    future_to_ip = {whois_executor.submit(get_whois_info, ip, local_cache, local_cache_lock, storage_manager, debug=debug_whois): (whois_data, ip_in, ip) for whois_data, ip_in, ip in tasks}
+    for future in as_completed(future_to_ip):
+        whois_data, ip_in, ip = future_to_ip[future]
+        whois_info, source = future.result()
+        if whois_info:
+            whois_data[ip_in] = whois_info
+        stats[source] += 1
 
     span.add_event("whois_lookups_completed", stats)
     print(f"{log_prefix}whois lookups: {stats['whois_lookup']} successful, {stats['whois_failed']} failed, {stats['global_cache_hit']} global cache hits, {stats['local_cache_hit']} local cache hits", file=sys.stderr)
@@ -1191,6 +1193,12 @@ def signal_handler(sig, frame):
     print(f"Received signal {sig}, shutting down...", file=sys.stderr)
     if crawl_executor:
         crawl_executor.shutdown(wait=True)
+        # after shutdown, remaining tasks should be empty anyway
+        if whois_executor:
+            whois_executor.shutdown(wait=False)
+        if dnsprobe:
+            dnsprobe_executor.shutdown(wait=False)
+            dnsprobe.shutdown()
     if storage_manager and storage_manager.can_persist():
         print("Persisting local cache to disk...", file=sys.stderr)
         storage_manager.persist()

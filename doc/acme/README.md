@@ -20,8 +20,8 @@ Three volume mounts are enough:
 | `webres6-https.conf.template` | `/etc/nginx/templates/webres6-https.conf.template` | ACME issuer config + HTTPS vhost (processed by `envsubst`) |
 | *(named volume)* | `/var/cache/nginx/acme` | Persists account key and certificates across restarts |
 
-The HTTPS vhost proxies all traffic to `127.0.0.1:${NGINX_PORT}` (the existing HTTP
-vhost), so there is no duplication of location blocks. The ACME module intercepts
+The HTTPS vhost proxies all traffic to the default container HTTP vhost,
+so there is no duplication of location blocks. The ACME module intercepts
 `/.well-known/acme-challenge/` requests automatically for HTTP-01 validation.
 
 ## Usage

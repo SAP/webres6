@@ -1,16 +1,19 @@
-# Default values for IPv6 Web Resource Checker.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
+# Default values for webres6 (IPv6 Web Resource Checker).
 
-# This is to override the chart name.
+# Chart name overrides
 nameOverride: ""
 fullnameOverride: ""
 
-# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
-imagePullSecrets: 
-- name: hyperspace-docker
+# Image pull secrets for private registries
+imagePullSecrets:
+  - name: hyperspace-docker
 
-# API server based server message and privacy text configuration
+# Default image for all services unless overridden per-service
+image:
+  repository: my-repository/  # must end with a slash
+  tag: "latest"
+
+# Server message, privacy text, and extension hook configuration
 serverconfig:
   privacy: |-
     <p>All data input is processed in accordance with <a href="https://www.sap.com/about/legal/privacy.html">SAP privacy policy</a>.<br/>
@@ -40,53 +43,57 @@ serverconfig:
     - "example.com"
     - "example.org"
 
-# Default image for both API and Viewer unless overridden
-image:
-  # Image repository (default is "") – needs to end with a slash if name is set
-  repository: my-repository/
-  # Overrides the image tag whose default is "latest"
-  tag: "latest"
-
-# API server specific configuration
+# API server configuration
 api:
   image:
-    # Overrides the image repository whose default is "" – needs to end with a slash if name is set
-    repository: ""
-    # Overrides the image name whose default is "webres6-api"
+    repository: ""      # overrides image.repository; must end with a slash if set
     name: webres6-api
-    # Overrides the image tag whose default is "latest"
-    tag: ""
-    # This sets the pull policy for images.
+    tag: ""             # overrides image.tag
     pullPolicy: Always
   port: 6400
-  crawlJobs: 8 # number of concurrent selenium crawl jobs
+  service:
+    type: ClusterIP
+    port: 80
+  # crawl performance
+  crawlJobs: 8          # concurrent selenium crawl jobs
   timeout:
-    crawl: 180 # in seconds, the maximum time a crawl/dnprobe/whois job is allowed to run before being killed by the system defaults to 4*timeout
-    seleniumMax: 60 # in seconds, the maximum timeout for selenium operations (page loads, interactions, etc.)
-    seleniumMin: 20 # in seconds, the minimum timeout for selenium operations (page loads, interactions, etc.)
-  clientRetryBaseTime: 10 # in seconds, the base time for clients checking for report availability
+    crawl: 180          # max seconds for a full crawl/dnsprobe/whois job
+    seleniumMax: 60     # max seconds for individual selenium operations
+    seleniumMin: 20     # min seconds for individual selenium operations
+  clientRetryBaseTime: 10  # seconds between client retries while a report is in progress
   gunicornThreads: 32
-  podAnnotations: {}
-  podLabels: {}
+  # whois
   whois:
     enabled: true
+    jobs: 32            # concurrent whois lookups; high values may trigger rate limiting
     cacheTTL: "86400"
+  # storage
   serviceAccountName: ""
-  awsSecret: ""
+  awsSecret: ""         # Kubernetes secret name with accessKeyID and secretAccessKey keys
   valkeyURL: ""
   s3Bucket: ""
   s3Endpoint: ""
-  s3DeliveryStrategy: "presigned" # "public", "presigned", or "private"
-  s3PresignedExpiry: 3600 # in seconds, only used if s3DeliveryStrategy is "presigned"
-  resultCDNTemplate: {}
+  s3DeliveryStrategy: "presigned"  # "public", "presigned", or "private"
+  s3PresignedExpiry: 3600          # seconds; only used when s3DeliveryStrategy is "presigned"
+  resultCDNTemplate: ""
   results:
     cacheTTL: "180"
     errorCacheTTL: "90"
     archiveTTL: "7776000"
+  # scoreboard
   scoreboard:
     enabled: true
     S3backup: true
     S3backupSchedule: "@daily"
+    backupHistoryLimit: 3
+    backupResources: {}
+  # scaling
+  replicas: 1
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
   resources:
     requests:
       cpu: "500m"
@@ -94,17 +101,10 @@ api:
     limits:
       cpu: "1000m"
       memory: "1024Mi"
-  replicas: 1
-  autoscaling:
-    enabled: true
-    minReplicas: 1
-    maxReplicas: 10
-    targetCPUUtilizationPercentage: 80
-  service:
-    type: ClusterIP
-    port: 80
-  securityContext: {}
+  podAnnotations: {}
+  podLabels: {}
   podSecurityContext: {}
+  securityContext: {}
 
 # Selenium hub configuration
 seleniumHub:
@@ -112,7 +112,7 @@ seleniumHub:
   username: "admin"
   password: "admin"
 
-# Prometheteus Operator configuration
+# Prometheus Operator configuration
 prometheus:
   enabled: true
 
@@ -120,6 +120,7 @@ prometheus:
 otel:
   enabled: false
   endpoint: "http://otel-collector:4318"
+  serviceName: ""       # defaults to "webres6-api" / "webres6-dnsprobe" per service
   environment: "production"
   sampler: "always_on"
   samplerArg: "1.0"
@@ -129,60 +130,51 @@ otel:
 viewer:
   enabled: true
   image:
-    # Overrides the image repository whose default is "" – needs to end with a slash if name is set
-    repository: ""
-    # Overrides the image name whose default is "webres6-viewer"
+    repository: ""      # overrides image.repository; must end with a slash if set
     name: webres6-viewer
-    # Overrides the image tag whose default is "latest"
-    tag: ""
-    # This sets the pull policy for images.
+    tag: ""             # overrides image.tag
     pullPolicy: Always
   port: 6480
   service:
-    port: 80
     type: ClusterIP
-  podAnnotations: {}
-  podLabels: {}
-  resources: 
-    requests:
-      cpu: "100m"
-      memory: "128Mi"
-    limits:
-      cpu: "200m"
-      memory: "256Mi"
+    port: 80
   replicas: 1
   autoscaling:
     enabled: false
     minReplicas: 1
     maxReplicas: 10
     targetCPUUtilizationPercentage: 80
-  securityContext: {}
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  podAnnotations: {}
+  podLabels: {}
   podSecurityContext: {}
+  securityContext: {}
 
-# DNS Probe configuration
+# DNS probe configuration
 dnsprobe:
-  mode: "internal" # "disabled", "internal", "service" or "external"
-  # external URL to dnsprobe service (only used if mode is "external")
-  url: ""
-  # number of worker processes for the dnsprobe component (only used if mode is "service" or "internal")
-  # note that this is per gunicorn worker (*1 by default)
-  workers: 16
-  # number of threads for the dnsprobe deployment (only used if mode is "service")
-  gunicornThreads: 24
-  # image configuration
+  mode: "internal"      # "disabled", "internal", "service", or "external"
+  url: ""               # only used when mode is "external"
   image:
-    # Overrides the image repository whose default is "" – needs to end with a slash if name is set
-    repository: ""
-    # Overrides the image name whose default is "webres6-api" (dnsprobe shares the API image and runs with --dnsprobe-only)
-    name: webres6-api
-    # Overrides the image tag whose default is "latest"
-    tag: ""
-    # This sets the pull policy for images.
+    repository: ""      # overrides image.repository; must end with a slash if set
+    name: webres6-api   # dnsprobe shares the API image, run with --dnsprobe-only
+    tag: ""             # overrides image.tag
     pullPolicy: Always
   port: 6453
   service:
     type: ClusterIP
     port: 80
+  jobs: 16              # concurrent dnsprobe lookups sent from the API
+  workers: 32           # dnsprobe worker processes (used when mode is "service" or "internal")
+  gunicornThreads: 24   # gunicorn threads for the dnsprobe service (only when mode is "service")
+  replicas: 1
+  exposeIngress: false  # expose /dnsprobe path on the ingress
+  unboundDebugLevel: ""
   podAnnotations: {}
   podLabels: {}
   resources:
@@ -192,27 +184,27 @@ dnsprobe:
     limits:
       cpu: "200m"
       memory: "512Mi"
-  securityContext: {}
   podSecurityContext: {}
+  securityContext: {}
 
-# MCP server (HTTPS, streamable-http transport) configuration
+# MCP server (streamable-http transport) configuration
 mcp:
   enabled: false
   image:
-    # Overrides the image repository whose default is "" – needs to end with a slash if name is set
-    repository: ""
-    # Overrides the image name whose default is "webres6-mcp"
+    repository: ""      # overrides image.repository; must end with a slash if set
     name: webres6-mcp
-    # Overrides the image tag whose default is "latest"
-    tag: ""
-    # This sets the pull policy for images.
+    tag: ""             # overrides image.tag
     pullPolicy: Always
   port: 6470
   service:
     type: ClusterIP
     port: 80
-  podAnnotations: {}
-  podLabels: {}
+  replicas: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 80
   resources:
     requests:
       cpu: "50m"
@@ -220,22 +212,18 @@ mcp:
     limits:
       cpu: "200m"
       memory: "128Mi"
-  replicas: 1
-  autoscaling:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 3
-    targetCPUUtilizationPercentage: 80
-  securityContext: {}
+  podAnnotations: {}
+  podLabels: {}
   podSecurityContext: {}
+  securityContext: {}
 
-# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+# Ingress configuration
 ingress:
   enabled: true
   className: "nginx"
   annotations: {}
   hosts:
-     - webres6.example.com
+    - webres6.example.com
   tls:
     - secretName: prod-tls
       hosts:
@@ -243,13 +231,12 @@ ingress:
   additionalPaths: {}
 
 # .well-known file contents
-well_known: 
+well_known:
   security.txt: |-
     Contact: mailto:security@example.com
 
-# Admin key configuration
-# Set enabled=false to skip the admin secret entirely; the API will then run
-# with /metrics and /admin/* unauthenticated (intended for trusted networks).
+# Admin API key configuration
+# When enabled=false, /metrics and /admin/* are unauthenticated (intended for trusted networks).
 adminSecret:
   enabled: false
   create: true
@@ -257,12 +244,10 @@ adminSecret:
   secretKey: admin-key
 
 nodeSelector: {}
-
 tolerations: []
-
 affinity: {}
 
-# curl helper configuration
+# curl helper used in Helm tests
 curl:
   image:
     repository: curlimages/curl
