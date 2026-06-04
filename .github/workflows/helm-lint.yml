@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: 2026 SAP SE and IPv6 Web Resource Checker contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Helm Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Add chart repositories
+        run: |
+          helm repo add docker-selenium https://www.selenium.dev/docker-selenium
+          helm repo add valkey https://valkey.io/valkey-helm/
+          helm repo update
+
+      - name: Update dependencies
+        run: helm dependency update helm/
+
+      - name: Lint
+        run: helm lint helm/
+
+      - name: Render default values
+        run: helm template webres6 helm/ -f helm/values.yaml > /dev/null
+
+      - name: Render with valkey and selenium subcharts
+        run: helm template webres6 helm/ --set selenium.deploy=true --set valkey.deploy=true > /dev/null
