@@ -18,7 +18,7 @@ appVersion: "1.7.0"
 
 dependencies:
   - name: selenium-grid
-    version: 0.55.0
+    version: 1.0.0
     repository: "https://www.selenium.dev/docker-selenium"
     condition: selenium.deploy
   - name: valkey
