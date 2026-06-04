@@ -12,3 +12,4 @@ api/public_suffix_list.dat
 api/named.cache
 api/serverconfig/*.crx
 api/TEST*
+helm/charts/**
