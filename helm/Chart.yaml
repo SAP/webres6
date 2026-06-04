@@ -28,3 +28,7 @@ dependencies:
     version: "0.34.0"
     repository: "https://www.selenium.dev/docker-selenium"
     condition: selenium.deploy
+  - name: valkey
+    version: "0.9.4"
+    repository: "https://valkey.io/valkey-helm/"
+    condition: valkey.deploy

@@ -70,8 +70,6 @@ api:
   # storage
   serviceAccountName: ""
   awsSecret: ""         # Kubernetes secret name with accessKeyID and secretAccessKey keys
-  valkeyURL: ""
-  valkeySecret: ""      # Kubernetes secret name with optional username and password keys
   s3Bucket: ""
   s3Endpoint: ""
   s3DeliveryStrategy: "presigned"  # "public", "presigned", or "private"
@@ -123,6 +121,44 @@ selenium-grid:
     enabled: true
     username: "admin"
     password: "admin"
+  hub:
+    ingress:
+      enabled: false
+    serviceType: ClusterIP
+  autoscaling:
+    enabled: true
+    scaledOptions:
+      minReplicaCount: 1
+      maxReplicaCount: 10 # set to crawlJobs + 1 to ensure enough capacity for all crawl jobs plus the hub
+      pollingInterval: 5
+    terminationGracePeriodSeconds: 300
+  chromeNode:
+    enabled: true
+    imageName: node-chromium
+    scaledOptions:
+      minReplicaCount: 2
+    extraEnvironmentVariables:
+      - name: SE_NODE_SESSION_TIMEOUT
+        value: "300"
+      - name: SE_NODE_OVERRIDE_MAX_SESSIONS
+        value: "true"
+    resources:
+      requests:
+        cpu: "0.3"
+        memory: "1Gi"
+
+# Valkey configuration.
+# deploy/url/secret are webres6-specific; all other keys are passed through to the valkey subchart.
+# Refer to https://github.com/valkey-io/valkey-helm/blob/main/valkey/values.yaml
+# for the full list of tunable subchart parameters.
+valkey:
+  deploy: false         # deploy valkey as a subchart; when true, url is auto-derived
+  url: ""               # explicit connection URL, e.g. redis://valkey:6379/0; ignored when deploy is true
+  auth:
+    enabled: false
+    usersExistingSecret: ""   # secret name; keys are usernames, values are passwords (compatible with valkey chart format)
+    webres6:
+      apiUserName: ""         # valkey username for the API; VALKEY_USERNAME is set to this value and VALKEY_PASSWORD is read from auth.usersExistingSecret using this as the key
 
 # Prometheus Operator configuration
 prometheus:
@@ -231,8 +267,8 @@ mcp:
 
 # Ingress configuration
 ingress:
-  enabled: true
-  className: "nginx"
+  enabled: false
+  className: "traefik"
   annotations: {}
   hosts:
     - webres6.example.com

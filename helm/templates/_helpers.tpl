@@ -82,3 +82,14 @@ Selenium basic-auth secret name — auto-derived when selenium.deploy is true, o
 {{ .Values.selenium.secret }}
 {{- end -}}
 {{- end }}
+
+{{/*
+Valkey connection URL — auto-derived when valkey.deploy is true, otherwise uses valkey.url.
+*/}}
+{{- define "webres6.valkey.url" -}}
+{{- if .Values.valkey.deploy -}}
+valkey://{{ .Release.Name }}-valkey:6379/0
+{{- else -}}
+{{ .Values.valkey.url }}
+{{- end -}}
+{{- end }}

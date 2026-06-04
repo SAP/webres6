@@ -105,29 +105,27 @@ spec:
             - name: DNSPROBE_JOBS
               value: "{{ .Values.dnsprobe.jobs }}"
             {{- end }}
-            {{- if .Values.api.valkeyURL }}
+            {{- if or .Values.valkey.deploy .Values.valkey.url }}
             - name: VALKEY_URL
-              value: {{ .Values.api.valkeyURL | quote }}
+              value: {{ include "webres6.valkey.url" . | quote }}
             {{- end }}
-            {{- if .Values.api.valkeySecret }}
+            {{- if .Values.valkey.auth.webres6.apiUserName }}
             - name: VALKEY_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.api.valkeySecret }}
-                  key: username
-                  optional: true
+              value: {{ .Values.valkey.auth.webres6.apiUserName | quote }}
+            {{- end }}
+            {{- if and .Values.valkey.auth.webres6.apiUserName .Values.valkey.auth.usersExistingSecret }}
             - name: VALKEY_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.api.valkeySecret }}
-                  key: password
+                  name: {{ .Values.valkey.auth.usersExistingSecret }}
+                  key: {{ .Values.valkey.auth.webres6.apiUserName }}
                   optional: true
             {{- end }}
             {{- if .Values.api.resultCDNTemplate }}
             - name: RESULT_CDN_TEMPLATE
               value: {{ .Values.api.resultCDNTemplate | quote }}
             {{- end }}
-            {{- if .Values.api.valkeyURL }}
+            {{- if or .Values.valkey.deploy .Values.valkey.url }}
             {{- if .Values.api.s3Bucket }}
             - name: S3_BUCKET
               value: {{ .Values.api.s3Bucket | quote }}
