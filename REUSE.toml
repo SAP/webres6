@@ -12,7 +12,7 @@ SPDX-License-Identifier = "CC-BY-4.0"
 SPDX-FileType = "DOCUMENTATION"
 
 [[annotations]]
-path = [".gitignore", ".pipeline/config.yml", "helm/.helmignore", "helm/Chart.yaml", "helm/values.yaml", "helm/templates/*", "viewer/nginx.conf.docker-compose", "viewer/unicorn.css"]
+path = [".gitignore", "**/.dockerignore", "helm/.helmignore", "helm/values.yaml", "helm/templates/_helpers.tpl", "viewer/unicorn.css"]
 SPDX-FileCopyrightText = "2025 SAP SE"
 SPDX-License-Identifier = "Apache-2.0"
 
