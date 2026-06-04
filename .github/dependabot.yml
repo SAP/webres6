@@ -24,6 +24,9 @@ updates:
     schedule:
       interval: weekly
     labels: [dependencies]
+    groups:
+      all:
+        patterns: ["*"]
   
   - package-ecosystem: docker
     directory: /api
@@ -41,10 +44,10 @@ updates:
     directory: /
     multi-ecosystem-group: docker
     patterns: ["*"]
-    labels: [dev-environment]
+    labels: [dependencies]
 
   - package-ecosystem: helm
     directory: /helm
     schedule:
       interval: weekly
-    labels: [deployment]
+    labels: [dependencies]
