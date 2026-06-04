@@ -299,7 +299,7 @@ affinity: {}
 curl:
   image:
     repository: curlimages/curl
-    tag: "7.72.0"
+    tag: "8.20.0"
   securityContext: {}
   resources:
     requests:
