@@ -74,7 +74,7 @@ services:
       - webres6-api
 
   selenium:
-    image: selenium/standalone-chromium:4.43.0
+    image: selenium/standalone-chromium:148.0.7778.178
     environment:
       - SE_HOST=localhost
     restart: unless-stopped

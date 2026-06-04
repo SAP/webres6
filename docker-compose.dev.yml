@@ -120,7 +120,7 @@ services:
       - webres6-api
 
   selenium:
-    image: selenium/standalone-chromium:4.43.0
+    image: selenium/standalone-chromium:148.0.7778.178
     container_name: webres6-selenium
     networks:
       - webres6-network
@@ -129,7 +129,7 @@ services:
     #   - "4444:4444"
 
   valkey:
-    image: valkey/valkey:9.0
+    image: valkey/valkey:9.1
     container_name: webres6-valkey
     networks:
       - webres6-network
