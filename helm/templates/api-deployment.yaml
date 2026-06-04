@@ -49,17 +49,32 @@ spec:
           env:
             - name: DEPLOYMENT
               value: {{ .Release.Name | quote }}
-            {{- if .Values.seleniumHub.url }}
+            {{- if or .Values.selenium.deploy .Values.selenium.url }}
             - name: SELENIUM_REMOTE_URL
-              value: {{ .Values.seleniumHub.url | quote }}
+              value: {{ include "webres6.selenium.url" . | quote }}
             {{- end }}
-            {{- if .Values.seleniumHub.username }}
+            {{- if or .Values.selenium.deploy .Values.selenium.secret }}
             - name: SELENIUM_USERNAME
-              value: {{ .Values.seleniumHub.username | quote }}
-            {{- end }}
-            {{- if .Values.seleniumHub.password }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "webres6.selenium.secret" . }}
+                  key: SE_ROUTER_USERNAME
+                  optional: true
             - name: SELENIUM_PASSWORD
-              value: {{ .Values.seleniumHub.password | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "webres6.selenium.secret" . }}
+                  key: SE_ROUTER_PASSWORD
+                  optional: true
+            {{- else }}
+            {{- if .Values.selenium.username }}
+            - name: SELENIUM_USERNAME
+              value: {{ .Values.selenium.username | quote }}
+            {{- end }}
+            {{- if .Values.selenium.password }}
+            - name: SELENIUM_PASSWORD
+              value: {{ .Values.selenium.password | quote }}
+            {{- end }}
             {{- end }}
             {{- if and (eq .Values.dnsprobe.mode "external") .Values.dnsprobe.url }}
             - name: ENABLE_DNSPROBE
@@ -90,15 +105,27 @@ spec:
             - name: DNSPROBE_JOBS
               value: "{{ .Values.dnsprobe.jobs }}"
             {{- end }}
-            {{- if .Values.api.valkeyURL }}
+            {{- if or .Values.valkey.deploy .Values.valkey.url }}
             - name: VALKEY_URL
-              value: {{ .Values.api.valkeyURL | quote }}
+              value: {{ include "webres6.valkey.url" . | quote }}
+            {{- end }}
+            {{- if .Values.valkey.auth.webres6.apiUserName }}
+            - name: VALKEY_USERNAME
+              value: {{ .Values.valkey.auth.webres6.apiUserName | quote }}
+            {{- end }}
+            {{- if and .Values.valkey.auth.webres6.apiUserName .Values.valkey.auth.usersExistingSecret }}
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.valkey.auth.usersExistingSecret }}
+                  key: {{ .Values.valkey.auth.webres6.apiUserName }}
+                  optional: true
             {{- end }}
             {{- if .Values.api.resultCDNTemplate }}
             - name: RESULT_CDN_TEMPLATE
               value: {{ .Values.api.resultCDNTemplate | quote }}
             {{- end }}
-            {{- if .Values.api.valkeyURL }}
+            {{- if or .Values.valkey.deploy .Values.valkey.url }}
             {{- if .Values.api.s3Bucket }}
             - name: S3_BUCKET
               value: {{ .Values.api.s3Bucket | quote }}

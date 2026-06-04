@@ -38,9 +38,9 @@ spec:
               imagePullPolicy: {{ .Values.api.image.pullPolicy | default "IfNotPresent" }}
               args: [ "--export-scoreboard", "s3:{{ .Values.api.s3Endpoint }}/{{ .Values.api.s3Bucket }}/" ]
               env:
-                {{- if .Values.api.valkeyURL }}
+                {{- if or .Values.valkey.deploy .Values.valkey.url }}
                 - name: VALKEY_URL
-                  value: {{ .Values.api.valkeyURL | quote }}
+                  value: {{ include "webres6.valkey.url" . | quote }}
                 {{- end }}
                 {{- if .Values.api.s3Bucket }}
                 - name: S3_BUCKET

@@ -60,3 +60,36 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Selenium hub URL — auto-derived when selenium.deploy is true, otherwise uses selenium.url.
+*/}}
+{{- define "webres6.selenium.url" -}}
+{{- if .Values.selenium.deploy -}}
+http://{{ .Release.Name }}-selenium-hub:4444/wd/hub
+{{- else -}}
+{{ .Values.selenium.url }}
+{{- end -}}
+{{- end }}
+
+{{/*
+Selenium basic-auth secret name — auto-derived when selenium.deploy is true, otherwise uses selenium.secret.
+*/}}
+{{- define "webres6.selenium.secret" -}}
+{{- if .Values.selenium.deploy -}}
+{{ .Release.Name }}-selenium-basic-auth-secrets
+{{- else -}}
+{{ .Values.selenium.secret }}
+{{- end -}}
+{{- end }}
+
+{{/*
+Valkey connection URL — auto-derived when valkey.deploy is true, otherwise uses valkey.url.
+*/}}
+{{- define "webres6.valkey.url" -}}
+{{- if .Values.valkey.deploy -}}
+valkey://{{ .Release.Name }}-valkey:6379/0
+{{- else -}}
+{{ .Values.valkey.url }}
+{{- end -}}
+{{- end }}

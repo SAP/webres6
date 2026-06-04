@@ -28,14 +28,23 @@ updates:
   - package-ecosystem: docker
     directory: /api
     multi-ecosystem-group: docker
+    patterns: ["*"]
     labels: [dependencies]
 
   - package-ecosystem: docker
     directory: /viewer
     multi-ecosystem-group: docker
+    patterns: ["*"]
     labels: [dependencies]
 
   - package-ecosystem: docker-compose
     directory: /
     multi-ecosystem-group: docker
+    patterns: ["*"]
     labels: [dev-environment]
+
+  - package-ecosystem: helm
+    directory: /helm
+    schedule:
+      interval: weekly
+    labels: [deployment]

@@ -399,14 +399,16 @@ class ValkeyStorageManager(StorageManager):
     whois_mem_cache = {}
     whois_mem_cache_size_max = 0
 
-    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, whois_mem_cache_size_max=2048):
+    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, whois_mem_cache_size_max=2048, valkey_username=None, valkey_password=None):
         self.whois_cache_ttl = whois_cache_ttl
         self.result_archive_ttl = result_archive_ttl
         self.whois_mem_cache_size_max = whois_mem_cache_size_max
 
         # initialize valkey client if valkey url is set
         if valkey_url and valkey_url.strip() != '':
-            self.valkey_client = valkey.from_url(valkey_url, decode_responses=False)
+            self.valkey_client = valkey.from_url(valkey_url, decode_responses=False,
+                                                 username=valkey_username or None,
+                                                 password=valkey_password or None)
         if not self.valkey_client:
             print("ERROR: ValkeyStorageManager requires a valid Valkey URL!", file=sys.stderr)
             return None
@@ -666,8 +668,8 @@ class ValkeyFileHybridStorageManager(ValkeyStorageManager):
 
     local_storage_manager = None
 
-    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, archive_dir=None, result_cdn_template=None, whois_mem_cache_size_max=2048):
-        super().__init__(whois_cache_ttl, result_archive_ttl, valkey_url, whois_mem_cache_size_max)
+    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, archive_dir=None, result_cdn_template=None, whois_mem_cache_size_max=2048, valkey_username=None, valkey_password=None):
+        super().__init__(whois_cache_ttl, result_archive_ttl, valkey_url, whois_mem_cache_size_max, valkey_username, valkey_password)
         if archive_dir and os.path.isdir(archive_dir):
             self.local_storage_manager = LocalStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
                                                               cache_dir=None, archive_dir=archive_dir)
@@ -703,8 +705,8 @@ class ValkeyS3HybridStorageManager(ValkeyStorageManager):
     s3_bucket = None
     s3_delivery_strategy = None
 
-    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, s3_bucket, s3_endpoint, s3_delivery_strategy = 'presigned', s3_presigned_url_expiry=3600, result_cdn_template=None, whois_mem_cache_size_max=2048):
-        super().__init__(whois_cache_ttl, result_archive_ttl, valkey_url, whois_mem_cache_size_max)
+    def __init__(self, whois_cache_ttl, result_archive_ttl, valkey_url, s3_bucket, s3_endpoint, s3_delivery_strategy = 'presigned', s3_presigned_url_expiry=3600, result_cdn_template=None, whois_mem_cache_size_max=2048, valkey_username=None, valkey_password=None):
+        super().__init__(whois_cache_ttl, result_archive_ttl, valkey_url, whois_mem_cache_size_max, valkey_username, valkey_password)
         self.url_expiry = s3_presigned_url_expiry
         self.s3_client = boto3.client('s3', endpoint_url=s3_endpoint)
         self.s3_bucket = s3_bucket

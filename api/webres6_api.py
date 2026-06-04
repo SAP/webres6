@@ -53,6 +53,8 @@ headless_selenium = getenv("HEADLESS_SELENIUM", False)
 dnsprobe_api_url  = getenv("DNSPROBE_API_URL", None)
 enable_dnsprobe   = getenv("ENABLE_DNSPROBE", 'true').lower() in ['true', '1', 'yes']
 valkey_url        = getenv("VALKEY_URL", None)
+valkey_username   = getenv("VALKEY_USERNAME", None)
+valkey_password   = getenv("VALKEY_PASSWORD", None)
 s3_bucket         = getenv("S3_BUCKET", None)
 s3_endpoint       = getenv("S3_ENDPOINT", None)
 s3_strategy       = getenv("S3_DELIVERY_STRATEGY", "public") # "public", "presigned", or "private"
@@ -189,16 +191,19 @@ def init_storage():
         if s3_bucket and s3_bucket.strip() != '':
             print("Valkey client and S3 endpoint configured, using ValkeyS3HybridStorageManager", file=sys.stderr)
             storage_manager = ValkeyS3HybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
-                                                valkey_url=valkey_url, s3_bucket=s3_bucket, s3_endpoint=s3_endpoint, 
+                                                valkey_url=valkey_url, s3_bucket=s3_bucket, s3_endpoint=s3_endpoint,
                                                 s3_delivery_strategy=s3_strategy, s3_presigned_url_expiry=s3_presigned_url_expiry,
-                                                result_cdn_template=result_cdn_template)
+                                                result_cdn_template=result_cdn_template,
+                                                valkey_username=valkey_username, valkey_password=valkey_password)
         elif archive_dir and archive_dir.strip() != '':
             print("Valkey client and local archive dir configured, using ValkeyFileHybridStorageManager", file=sys.stderr)
             storage_manager = ValkeyFileHybridStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl,
-                                                                valkey_url=valkey_url, archive_dir=archive_dir, result_cdn_template=result_cdn_template)
+                                                                valkey_url=valkey_url, archive_dir=archive_dir, result_cdn_template=result_cdn_template,
+                                                                valkey_username=valkey_username, valkey_password=valkey_password)
         else:
             print("Valkey client configured, using ValkeyStorageManager", file=sys.stderr)
-            storage_manager = ValkeyStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, valkey_url=valkey_url)
+            storage_manager = ValkeyStorageManager(whois_cache_ttl=whois_cache_ttl, result_archive_ttl=result_archive_ttl, valkey_url=valkey_url,
+                                                   valkey_username=valkey_username, valkey_password=valkey_password)
     else:
         print("Valkey client not configured, using LocalStorageManager", file=sys.stderr)
         LocalStorageManager.print_warnings(None)
