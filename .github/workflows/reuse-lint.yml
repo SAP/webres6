@@ -10,6 +10,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   reuse:
     runs-on: ubuntu-latest
