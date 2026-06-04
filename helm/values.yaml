@@ -112,6 +112,7 @@ seleniumHub:
   url: "http://selenium-hub.default.svc.cluster.local:4444/wd/hub"
   username: "admin"
   password: "admin"
+  secret: ""            # Kubernetes secret name from docker-selenium chart (keys: SE_ROUTER_USERNAME, SE_ROUTER_PASSWORD); takes precedence over username/password above
 
 # Prometheus Operator configuration
 prometheus:

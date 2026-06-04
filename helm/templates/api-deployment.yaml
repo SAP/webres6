@@ -53,6 +53,20 @@ spec:
             - name: SELENIUM_REMOTE_URL
               value: {{ .Values.seleniumHub.url | quote }}
             {{- end }}
+            {{- if .Values.seleniumHub.secret }}
+            - name: SELENIUM_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.seleniumHub.secret }}
+                  key: SE_ROUTER_USERNAME
+                  optional: true
+            - name: SELENIUM_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.seleniumHub.secret }}
+                  key: SE_ROUTER_PASSWORD
+                  optional: true
+            {{- else }}
             {{- if .Values.seleniumHub.username }}
             - name: SELENIUM_USERNAME
               value: {{ .Values.seleniumHub.username | quote }}
@@ -60,6 +74,7 @@ spec:
             {{- if .Values.seleniumHub.password }}
             - name: SELENIUM_PASSWORD
               value: {{ .Values.seleniumHub.password | quote }}
+            {{- end }}
             {{- end }}
             {{- if and (eq .Values.dnsprobe.mode "external") .Values.dnsprobe.url }}
             - name: ENABLE_DNSPROBE
