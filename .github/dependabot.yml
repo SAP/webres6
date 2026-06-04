@@ -51,3 +51,6 @@ updates:
     schedule:
       interval: weekly
     labels: [dependencies]
+    ignore:
+      - dependency-name: "selenium-grid"
+        versions: ["1.0.0"]
