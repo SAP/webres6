@@ -98,6 +98,12 @@ A Helm chart in `helm/` is available for Kubernetes deployments. It covers the A
 helm install webres6 ./helm -f helm/values.yaml
 ```
 
+After any change to `helm/`, always lint and validate rendering:
+```bash
+helm lint helm/
+helm template webres6 helm/ -f helm/values.yaml > /dev/null
+```
+
 ## Integration testing
 
 To do proper integration testing, build the latest docker containers and start them using `docker-compose.dev.yml`.

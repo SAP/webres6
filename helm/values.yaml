@@ -71,6 +71,7 @@ api:
   serviceAccountName: ""
   awsSecret: ""         # Kubernetes secret name with accessKeyID and secretAccessKey keys
   valkeyURL: ""
+  valkeySecret: ""      # Kubernetes secret name with optional username and password keys
   s3Bucket: ""
   s3Endpoint: ""
   s3DeliveryStrategy: "presigned"  # "public", "presigned", or "private"

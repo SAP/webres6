@@ -94,6 +94,20 @@ spec:
             - name: VALKEY_URL
               value: {{ .Values.api.valkeyURL | quote }}
             {{- end }}
+            {{- if .Values.api.valkeySecret }}
+            - name: VALKEY_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.api.valkeySecret }}
+                  key: username
+                  optional: true
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.api.valkeySecret }}
+                  key: password
+                  optional: true
+            {{- end }}
             {{- if .Values.api.resultCDNTemplate }}
             - name: RESULT_CDN_TEMPLATE
               value: {{ .Values.api.resultCDNTemplate | quote }}
