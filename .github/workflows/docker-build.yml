@@ -7,17 +7,9 @@ name: Build Docker Images
 on:
   push:
     branches: [main]
-    paths:
-      - 'api/**'
-      - 'viewer/**'
-      - 'mcp/**'
     tags: ['v*']
   pull_request:
     branches: [main]
-    paths:
-      - 'api/**'
-      - 'viewer/**'
-      - 'mcp/**'
 
 jobs:
   build:

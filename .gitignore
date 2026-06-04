@@ -1,4 +1,3 @@
-.github/
 .vscode/
 */.venv/
 **/__pycache__/
@@ -13,3 +12,4 @@ api/named.cache
 api/serverconfig/*.crx
 api/TEST*
 helm/charts/**
+helm/Chart.lock
