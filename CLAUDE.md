@@ -104,6 +104,11 @@ helm lint helm/
 helm template webres6 helm/ -f helm/values.yaml > /dev/null
 ```
 
+When adding or updating chart dependencies, also run:
+```bash
+helm dependency update helm/
+```
+
 ## Integration testing
 
 To do proper integration testing, build the latest docker containers and start them using `docker-compose.dev.yml`.

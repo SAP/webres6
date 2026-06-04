@@ -107,12 +107,22 @@ api:
   podSecurityContext: {}
   securityContext: {}
 
-# Selenium hub configuration
-seleniumHub:
+# Selenium configuration
+selenium:
+  deploy: false         # deploy selenium-grid as a subchart; when true, url and secret are auto-derived
   url: "http://selenium-hub.default.svc.cluster.local:4444/wd/hub"
   username: "admin"
   password: "admin"
   secret: ""            # Kubernetes secret name from docker-selenium chart (keys: SE_ROUTER_USERNAME, SE_ROUTER_PASSWORD); takes precedence over username/password above
+
+# Selenium subchart values — only used when selenium.deploy is true.
+# Refer to https://github.com/SeleniumHQ/docker-selenium/blob/trunk/charts/selenium-grid/values.yaml
+# for the full list of tunable parameters.
+selenium-grid:
+  basicAuth:
+    enabled: true
+    username: "admin"
+    password: "admin"
 
 # Prometheus Operator configuration
 prometheus:

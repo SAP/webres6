@@ -49,31 +49,31 @@ spec:
           env:
             - name: DEPLOYMENT
               value: {{ .Release.Name | quote }}
-            {{- if .Values.seleniumHub.url }}
+            {{- if or .Values.selenium.deploy .Values.selenium.url }}
             - name: SELENIUM_REMOTE_URL
-              value: {{ .Values.seleniumHub.url | quote }}
+              value: {{ include "webres6.selenium.url" . | quote }}
             {{- end }}
-            {{- if .Values.seleniumHub.secret }}
+            {{- if or .Values.selenium.deploy .Values.selenium.secret }}
             - name: SELENIUM_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.seleniumHub.secret }}
+                  name: {{ include "webres6.selenium.secret" . }}
                   key: SE_ROUTER_USERNAME
                   optional: true
             - name: SELENIUM_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.seleniumHub.secret }}
+                  name: {{ include "webres6.selenium.secret" . }}
                   key: SE_ROUTER_PASSWORD
                   optional: true
             {{- else }}
-            {{- if .Values.seleniumHub.username }}
+            {{- if .Values.selenium.username }}
             - name: SELENIUM_USERNAME
-              value: {{ .Values.seleniumHub.username | quote }}
+              value: {{ .Values.selenium.username | quote }}
             {{- end }}
-            {{- if .Values.seleniumHub.password }}
+            {{- if .Values.selenium.password }}
             - name: SELENIUM_PASSWORD
-              value: {{ .Values.seleniumHub.password | quote }}
+              value: {{ .Values.selenium.password | quote }}
             {{- end }}
             {{- end }}
             {{- if and (eq .Values.dnsprobe.mode "external") .Values.dnsprobe.url }}

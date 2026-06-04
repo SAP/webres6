@@ -39,3 +39,9 @@ updates:
     directory: /
     multi-ecosystem-group: docker
     labels: [dev-environment]
+
+  - package-ecosystem: helm
+    directory: /helm
+    schedule:
+      interval: weekly
+    labels: [dependencies]
