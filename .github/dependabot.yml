@@ -8,9 +8,6 @@ multi-ecosystem-groups:
   docker:
     schedule:
       interval: "weekly"
-    ignore:
-      - dependency-name: "selenium-grid"
-        versions: ["1.0.0"]
     groups:
       selenium:
         patterns: ["selenium*"]
@@ -85,3 +82,6 @@ updates:
     multi-ecosystem-group: docker
     patterns: ["*"]
     labels: [dependencies]
+    ignore:
+      - dependency-name: "selenium-grid"
+        versions: ["1.0.0"]
