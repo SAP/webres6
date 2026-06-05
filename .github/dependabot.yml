@@ -8,13 +8,6 @@ multi-ecosystem-groups:
   docker:
     schedule:
       interval: "weekly"
-    groups:
-      selenium:
-        patterns: ["selenium*"]
-      valkey:
-        patterns: ["valkey*"]
-      telemetry:
-        patterns: ["opentelemetry*", "otel*", "jaeger*"]
 
 updates:
   - package-ecosystem: github-actions
