@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) and Github Copilot when working with code in this repository.
 
 ## What this project does
 
@@ -113,6 +113,14 @@ helm dependency update helm/
 
 To do proper integration testing, build the latest docker containers and start them using `docker-compose.dev.yml`.
 Then run `curl http://localhost:6400/res6/url(URL)` and analyze the output.
+
+## CI
+
+GitHub Actions workflows are in `.github/workflows/`:
+- `api-tests.yml` — runs the API unit test suite on Python 3.14; triggers on changes to `api/`
+- `helm-lint.yml` — lints and renders the Helm chart; triggers on changes to `helm/`
+- `docker-build.yml` — builds and pushes Docker images for api, viewer, and mcp; triggers on every push to `main` and version tags (no path filter — it is a required status check on GitHub so it must always run)
+- `reuse-lint.yml` — checks REUSE license compliance
 
 ## Versioning
 

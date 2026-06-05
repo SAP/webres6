@@ -488,5 +488,340 @@ class TestScoreboard(unittest.TestCase):
         self.mock_storage.get_scorecards.assert_called_once_with(max_entries=10)
 
 
+class TestValkeyStorageManagerCacheOps(unittest.TestCase):
+    """Test ValkeyStorageManager cache and archive operations not covered elsewhere"""
+
+    def setUp(self):
+        self.mock_valkey = MagicMock()
+        with patch('webres6_storage.valkey.from_url', return_value=self.mock_valkey):
+            self.storage = ValkeyStorageManager(
+                whois_cache_ttl=3600,
+                result_archive_ttl=86400,
+                valkey_url='valkey://localhost:6379'
+            )
+
+    def test_list_archived_reports(self):
+        self.mock_valkey.keys.return_value = [
+            b'webres6:archive:report-abc',
+            b'webres6:archive:report-def',
+        ]
+        result = self.storage.list_archived_reports()
+        self.assertEqual(sorted(result), ['report-abc', 'report-def'])
+
+    def test_list_archived_reports_valkey_error(self):
+        self.mock_valkey.keys.side_effect = Exception('connection refused')
+        result = self.storage.list_archived_reports()
+        self.assertEqual(result, [])
+
+    def test_retrieve_result_found(self):
+        ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        data = {'ID': 'abc', 'url': 'https://example.com', 'ts': ts.isoformat()}
+        self.mock_valkey.get.return_value = json.dumps(data).encode('utf-8')
+        result = self.storage.retrieve_result('abc')
+        self.assertEqual(result['ID'], 'abc')
+        self.assertIsInstance(result['ts'], datetime)
+
+    def test_retrieve_result_not_found(self):
+        self.mock_valkey.get.return_value = None
+        result = self.storage.retrieve_result('missing')
+        self.assertIsNone(result)
+
+    def test_retrieve_result_valkey_error(self):
+        self.mock_valkey.get.side_effect = Exception('timeout')
+        result = self.storage.retrieve_result('abc')
+        self.assertIsNone(result)
+
+    def test_put_result_cacheline(self):
+        self.mock_valkey.set.return_value = True
+        result = self.storage.put_result_cacheline('key1', {'ts': datetime.now(timezone.utc)}, ttl=60)
+        self.assertTrue(result)
+        self.mock_valkey.set.assert_called_once()
+
+    def test_get_result_cacheline_found(self):
+        ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        data = {'ts': ts.isoformat(), 'value': 42}
+        self.mock_valkey.get.return_value = json.dumps(data).encode('utf-8')
+        result = self.storage.get_result_cacheline('key1')
+        self.assertEqual(result['value'], 42)
+        self.assertIsInstance(result['ts'], datetime)
+
+    def test_get_result_cacheline_miss(self):
+        self.mock_valkey.get.return_value = None
+        result = self.storage.get_result_cacheline('key1')
+        self.assertIsNone(result)
+
+    def test_delete_result_cacheline(self):
+        self.mock_valkey.delete.return_value = 1
+        result = self.storage.delete_result_cacheline('key1')
+        self.assertTrue(result)
+        self.mock_valkey.delete.assert_called_once()
+
+    def test_delete_result_cacheline_error(self):
+        self.mock_valkey.delete.side_effect = Exception('error')
+        result = self.storage.delete_result_cacheline('key1')
+        self.assertFalse(result)
+
+    def test_put_scorecard(self):
+        self.mock_valkey.lpush.return_value = 1
+        result = self.storage.put_scorecard({'score': 1.0, 'ts': datetime.now(timezone.utc)})
+        self.assertTrue(result)
+
+    def test_get_scorecards(self):
+        ts = datetime.now(timezone.utc)
+        raw = [json.dumps({'score': 1.0, 'ts': ts.isoformat()}).encode('utf-8')]
+        self.mock_valkey.lrange.return_value = raw
+        result = self.storage.get_scorecards(max_entries=10)
+        self.assertEqual(len(result), 1)
+        self.assertIsInstance(result[0]['ts'], datetime)
+
+    def test_get_scorecards_expired_filtered(self):
+        old_ts = datetime(2000, 1, 1, tzinfo=timezone.utc)
+        raw = [json.dumps({'score': 0.5, 'ts': old_ts.isoformat()}).encode('utf-8')]
+        self.mock_valkey.lrange.return_value = raw
+        result = self.storage.get_scorecards(max_entries=10)
+        self.assertEqual(result, [])
+
+    def test_whois_mem_cache_eviction(self):
+        self.storage.whois_mem_cache_size_max = 2
+        ip1 = ip_address('1.1.1.1')
+        ip2 = ip_address('2.2.2.2')
+        ip3 = ip_address('3.3.3.3')
+        ts = datetime.now(timezone.utc)
+        self.mock_valkey.set.return_value = True
+        self.storage.put_whois_cacheline(ip1, {'ts': ts, 'asn': 'AS1'})
+        self.storage.put_whois_cacheline(ip2, {'ts': ts, 'asn': 'AS2'})
+        # this should trigger eviction of the in-memory cache
+        self.storage.put_whois_cacheline(ip3, {'ts': ts, 'asn': 'AS3'})
+        # cache should have been flushed and only ip3 added back
+        self.assertIn(ip3, self.storage.whois_mem_cache)
+
+
+class TestValkeyS3HybridManagerExtra(unittest.TestCase):
+    """Test ValkeyS3HybridStorageManager methods not covered in existing tests"""
+
+    def setUp(self):
+        self.mock_valkey = MagicMock()
+        self.mock_valkey.ping.return_value = True
+        self.mock_s3 = MagicMock()
+        self.mock_s3.meta.endpoint_url = 'https://s3.example.com'
+
+        with patch('webres6_storage.valkey.from_url', return_value=self.mock_valkey):
+            with patch('webres6_storage.boto3.client', return_value=self.mock_s3):
+                self.storage = ValkeyS3HybridStorageManager(
+                    whois_cache_ttl=3600,
+                    result_archive_ttl=86400,
+                    valkey_url='valkey://localhost:6379',
+                    s3_bucket='test-bucket',
+                    s3_endpoint='https://s3.example.com',
+                    s3_delivery_strategy='presigned',
+                )
+
+    def test_list_archived_reports(self):
+        self.mock_s3.list_objects_v2.return_value = {
+            'Contents': [
+                {'Key': 'report-abc123.json'},
+                {'Key': 'report-def456.json'},
+                {'Key': 'other-file.txt'},  # should be ignored
+            ]
+        }
+        result = self.storage.list_archived_reports()
+        self.assertIn('abc123', result)
+        self.assertIn('def456', result)
+        self.assertEqual(len(result), 2)
+
+    def test_list_archived_reports_empty_bucket(self):
+        self.mock_s3.list_objects_v2.return_value = {}
+        result = self.storage.list_archived_reports()
+        self.assertEqual(result, [])
+
+    def test_list_archived_reports_s3_error(self):
+        self.mock_s3.list_objects_v2.side_effect = Exception('Access Denied')
+        result = self.storage.list_archived_reports()
+        self.assertEqual(result, [])
+
+    def test_retrieve_result_found_gzip(self):
+        from compression import gzip
+        import json as _json
+        ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        data = {'ID': 'abc', 'ts': ts.isoformat(), 'url': 'https://example.com'}
+        body_bytes = gzip.compress(_json.dumps(data).encode('utf-8'))
+        mock_body = MagicMock()
+        mock_body.read.return_value = body_bytes
+        self.mock_s3.get_object.return_value = {'Body': mock_body, 'ContentEncoding': 'gzip'}
+        result = self.storage.retrieve_result('abc')
+        self.assertEqual(result['ID'], 'abc')
+        self.assertIsInstance(result['ts'], datetime)
+
+    def test_retrieve_result_not_found(self):
+        self.mock_s3.get_object.return_value = {}
+        result = self.storage.retrieve_result('abc')
+        self.assertIsNone(result)
+
+    def test_retrieve_result_s3_error(self):
+        self.mock_s3.get_object.side_effect = Exception('NoSuchKey')
+        result = self.storage.retrieve_result('abc')
+        self.assertIsNone(result)
+
+    def test_retrieve_result_url_public(self):
+        with patch('webres6_storage.valkey.from_url', return_value=self.mock_valkey):
+            with patch('webres6_storage.boto3.client', return_value=self.mock_s3):
+                storage = ValkeyS3HybridStorageManager(
+                    whois_cache_ttl=3600, result_archive_ttl=86400,
+                    valkey_url='valkey://localhost:6379',
+                    s3_bucket='test-bucket', s3_endpoint='https://s3.example.com',
+                    s3_delivery_strategy='public',
+                )
+        url = storage.retrieve_result_url('abc')
+        self.assertIn('abc', url)
+        self.assertIn('test-bucket', url)
+
+    def test_retrieve_result_url_private_returns_none(self):
+        with patch('webres6_storage.valkey.from_url', return_value=self.mock_valkey):
+            with patch('webres6_storage.boto3.client', return_value=self.mock_s3):
+                storage = ValkeyS3HybridStorageManager(
+                    whois_cache_ttl=3600, result_archive_ttl=86400,
+                    valkey_url='valkey://localhost:6379',
+                    s3_bucket='test-bucket', s3_endpoint='https://s3.example.com',
+                    s3_delivery_strategy='private',
+                )
+        self.assertIsNone(storage.retrieve_result_url('abc'))
+
+    def test_retrieve_result_url_presigned(self):
+        self.mock_valkey.get.return_value = None  # no cached URL
+        self.mock_s3.generate_presigned_url.return_value = 'https://presigned.url/abc'
+        self.mock_valkey.set.return_value = True
+        url = self.storage.retrieve_result_url('abc')
+        self.assertEqual(url, 'https://presigned.url/abc')
+        self.mock_s3.generate_presigned_url.assert_called_once()
+
+    def test_retrieve_result_url_presigned_cached(self):
+        cached = {'ts': datetime.now(timezone.utc).isoformat()}
+        # simulate a cached presigned URL response in valkey
+        self.mock_valkey.get.return_value = json.dumps('https://cached.url/abc').encode('utf-8')
+        url = self.storage.retrieve_result_url('abc')
+        # cached value is returned as-is
+        self.assertIsNotNone(url)
+        self.mock_s3.generate_presigned_url.assert_not_called()
+
+
+class TestExportImportFunctions(unittest.TestCase):
+    """Test export_scoreboard_entries, import_scoreboard_entries,
+    export_archived_reports, and import_archived_reports"""
+
+    def setUp(self):
+        from webres6_storage import export_scoreboard_entries, import_scoreboard_entries
+        from webres6_storage import export_archived_reports, import_archived_reports
+        self.export_scoreboard = export_scoreboard_entries
+        self.import_scoreboard = import_scoreboard_entries
+        self.export_archived = export_archived_reports
+        self.import_archived = import_archived_reports
+
+        self.test_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir)
+
+    def test_export_scoreboard_to_file(self):
+        mock_storage = MagicMock()
+        ts = datetime.now(timezone.utc)
+        mock_storage.get_scorecards.return_value = [
+            {'score': 1.0, 'ts': ts, 'url': 'https://example.com'}
+        ]
+        out_file = os.path.join(self.test_dir, 'scoreboard.json')
+        self.export_scoreboard(mock_storage, file=out_file)
+        with open(out_file, 'r') as f:
+            data = json.load(f)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]['score'], 1.0)
+
+    def test_export_scoreboard_to_stdout(self):
+        mock_storage = MagicMock()
+        mock_storage.get_scorecards.return_value = [
+            {'score': 0.5, 'ts': datetime.now(timezone.utc)}
+        ]
+        out_file = os.path.join(self.test_dir, 'scoreboard_stdout.json')
+        self.export_scoreboard(mock_storage, file=out_file)
+        with open(out_file, 'r') as f:
+            data = json.load(f)
+        self.assertEqual(data[0]['score'], 0.5)
+
+    def test_import_scoreboard_from_file(self):
+        mock_storage = MagicMock()
+        ts = datetime.now(timezone.utc)
+        entries = [{'score': 1.0, 'ts': ts.isoformat(), 'url': 'https://example.com'}]
+        in_file = os.path.join(self.test_dir, 'scoreboard.json')
+        with open(in_file, 'w') as f:
+            json.dump(entries, f)
+        self.import_scoreboard(mock_storage, file=in_file)
+        mock_storage.put_scorecard.assert_called_once()
+        call_arg = mock_storage.put_scorecard.call_args[0][0]
+        self.assertIsInstance(call_arg['ts'], datetime)
+
+    def test_export_archived_reports_no_archive(self):
+        mock_storage = MagicMock()
+        mock_storage.can_archive.return_value = False
+        result = self.export_archived(mock_storage, self.test_dir, 86400)
+        self.assertFalse(result)
+
+    def test_export_archived_reports_nonexistent_dir(self):
+        mock_storage = MagicMock()
+        mock_storage.can_archive.return_value = True
+        result = self.export_archived(mock_storage, '/nonexistent/path', 86400)
+        self.assertFalse(result)
+
+    def test_export_archived_reports_empty(self):
+        mock_storage = MagicMock()
+        mock_storage.can_archive.return_value = True
+        mock_storage.list_archived_reports.return_value = []
+        result = self.export_archived(mock_storage, self.test_dir, 86400)
+        self.assertTrue(result)
+
+    def test_export_archived_reports_copies_reports(self):
+        src_dir = os.path.join(self.test_dir, 'src')
+        dst_dir = os.path.join(self.test_dir, 'dst')
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        src_storage = LocalStorageManager(result_archive_ttl=86400, archive_dir=src_dir)
+        ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        src_storage.archive_result('report-001', {'ID': 'report-001', 'ts': ts, 'url': 'https://example.com'})
+        result = self.export_archived(src_storage, dst_dir, 86400)
+        self.assertTrue(result)
+        dst_storage = LocalStorageManager(result_archive_ttl=86400, archive_dir=dst_dir)
+        self.assertIn('report-001', dst_storage.list_archived_reports())
+
+    def test_import_archived_reports_no_archive(self):
+        mock_storage = MagicMock()
+        mock_storage.can_archive.return_value = False
+        result = self.import_archived(mock_storage, self.test_dir, 86400)
+        self.assertFalse(result)
+
+    def test_import_archived_reports_nonexistent_dir(self):
+        mock_storage = MagicMock()
+        mock_storage.can_archive.return_value = True
+        result = self.import_archived(mock_storage, '/nonexistent/path', 86400)
+        self.assertFalse(result)
+
+    def test_import_archived_reports_empty(self):
+        mock_storage = MagicMock()
+        mock_storage.can_archive.return_value = True
+        src_dir = os.path.join(self.test_dir, 'empty')
+        os.makedirs(src_dir)
+        result = self.import_archived(mock_storage, src_dir, 86400)
+        self.assertTrue(result)
+
+    def test_import_archived_copies_reports(self):
+        src_dir = os.path.join(self.test_dir, 'src')
+        dst_dir = os.path.join(self.test_dir, 'dst')
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        src_storage = LocalStorageManager(result_archive_ttl=86400, archive_dir=src_dir)
+        ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        src_storage.archive_result('report-002', {'ID': 'report-002', 'ts': ts, 'url': 'https://example.com'})
+        dst_storage = LocalStorageManager(result_archive_ttl=86400, archive_dir=dst_dir)
+        result = self.import_archived(dst_storage, src_dir, 86400)
+        self.assertTrue(result)
+        self.assertIn('report-002', dst_storage.list_archived_reports())
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

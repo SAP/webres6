@@ -5,6 +5,8 @@
 name: Build Docker Images
 
 on:
+  # No path filter intentional — this workflow is a required status check on GitHub
+  # and must run on every PR regardless of which files changed.
   push:
     branches: [main]
     tags: ['v*']

@@ -1,0 +1,68 @@
+# SPDX-FileCopyrightText: 2026 SAP SE and IPv6 Web Resource Checker contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: API Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'api/**'
+      - '.github/workflows/api-tests.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'api/**'
+      - '.github/workflows/api-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-3.14-${{ hashFiles('api/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-3.14-
+
+      - name: Install dependencies
+        # unbound/pyunbound is a C extension built from source in the Dockerfile.
+        # Tests mock all dnsprobe calls so unbound is not needed here.
+        run: |
+          cd api
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+
+      - name: Run tests with coverage
+        run: |
+          cd api
+          export PROMETHEUS_MULTIPROC_DIR=$(mktemp -d)
+          pytest \
+            --cov=webres6_api \
+            --cov=webres6_storage \
+            --cov=webres6_whois \
+            --cov=webres6_nat64 \
+            --cov=webres6_crawler \
+            --cov-report=term \
+            --cov-report=xml \
+            -v
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: api/coverage.xml

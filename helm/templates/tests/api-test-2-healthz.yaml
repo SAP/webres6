@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  # SPDX-FileCopyrightText: 2026 SAP SE and IPv6 Web Resource Checker contributors
+  # SPDX-License-Identifier: Apache-2.0
+  name: "{{ include "webres6.fullname" . }}-test-healthz"
+  labels:
+    {{- include "webres6.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: curl
+      image: "{{ .Values.curl.image.repository | default "curlimages/curl" }}:{{ .Values.curl.image.tag | default "latest" }}"
+      imagePullPolicy: {{ .Values.curl.image.pullPolicy }}
+      # Retry for up to 3 minutes (18 × 10s) to allow backends to become available after DEGRADED startup.
+      command: ['sh', '-c']
+      args:
+        - |
+          for i in $(seq 1 18); do
+            echo "Attempt $i/18: checking /healthz..."
+            curl --no-progress-meter --fail \
+              http://{{ include "webres6.fullname" . }}-api:{{ .Values.api.service.port }}/healthz \
+              && echo "OK" && exit 0
+            echo "Not ready yet, retrying in 10s"
+            sleep 10
+          done
+          echo "FAILED: /healthz did not return 200 after 3 minutes"
+          exit 1
+      {{- with .Values.curl.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.curl.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  restartPolicy: Never
