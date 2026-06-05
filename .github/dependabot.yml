@@ -83,4 +83,5 @@ updates:
   - package-ecosystem: helm
     directory: /helm
     multi-ecosystem-group: docker
+    patterns: ["*"]
     labels: [dependencies]
