@@ -48,7 +48,7 @@ jobs:
         run: |
           # Read values from the live release. If none exists yet, bootstrap manually first.
           # See deploy/README.md – "Deploy manually once"
-          if ! helm get values "${HELM_RELEASE}" -n "${NAMESPACE}" -o yaml > current-values.yaml 2>/dev/null; then
+          if ! helm get values "${HELM_RELEASE}" -n "${NAMESPACE}" -o yaml > current-values.yaml; then
             echo "No existing release found in namespace '${NAMESPACE}'."
             echo "Bootstrap the first deployment manually. See deploy/README.md for instructions."
             exit 1
