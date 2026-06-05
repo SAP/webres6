@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: 2026 SAP SE and IPv6 Web Resource Checker contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Deploy to test namespace
+
+on:
+  workflow_run:
+    workflows: ["Build Docker Images"]
+    branches: [main]
+    types: [completed]
+
+jobs:
+  deploy:
+    name: Helm upgrade – test namespace
+    runs-on: ubuntu-latest
+    # GitHub Environment "test" provides SHOOT_API_URL and SHOOT_CA_DISCOVERY_URL.
+    # Setup instructions: deploy/README.md
+    environment: test
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          echo "value=sha-$(echo '${{ github.event.workflow_run.head_sha }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to Shoot cluster
+        uses: gardener/cc-utils/.github/actions/kubernetes-auth@b7e4d874f30171964c5262a0bc20d644f4bcedba
+        with:
+          server: ${{ vars.SHOOT_API_URL }}
+          server-ca-discovery-url: ${{ vars.SHOOT_CA_DISCOVERY_URL }}
+          audience: webres6-deploy
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Helm upgrade
+        env:
+          KUBECONFIG: kubeconfig.yaml
+        run: |
+          # Read values from the live release. If none exists yet, bootstrap manually first.
+          # See deploy/README.md – "Deploy manually once"
+          if ! helm get values webres6 -n test -o yaml > current-values.yaml 2>/dev/null; then
+            echo "No existing release found in namespace 'test'."
+            echo "Bootstrap the first deployment manually. See deploy/README.md for instructions."
+            exit 1
+          fi
+          helm upgrade --install webres6 ./helm \
+            -f helm/values.yaml \
+            -f current-values.yaml \
+            --namespace test \
+            --set image.repository=ghcr.io/sap/ \
+            --set image.tag=${{ steps.tag.outputs.value }} \
+            --wait --timeout 5m
