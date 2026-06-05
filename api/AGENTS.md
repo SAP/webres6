@@ -23,6 +23,14 @@ pytest test_webres6_api.py::ClassName::test_method  # single test
 ```
 Tests use mocked Selenium, Valkey, S3, and DNSProbe — no real services required - but therefore ignore important code paths.
 
+Test files and what they cover:
+- `test_webres6_api.py` — API endpoints, `is_ip`, `DateTimeEncoder`, `gen_json` (all IP address families), `add_dnsprobe_info`, `get_ipv6_only_score`, `check_auth`, `validate_url`
+- `test_webres6_storage.py` — all four `StorageManager` implementations, `Scoreboard`, export/import functions
+- `test_webres6_crawler.py` — `split_hostname`
+- `test_webres6_nat64.py` — NAT64 monkey-patch: `is_nat64`, `nat64_extract_ipv4`, custom `__str__`
+
+CI runs the full test suite on Python 3.14 via `.github/workflows/api-tests.yml`.
+
 ## Architecture
 
 ### Request flow

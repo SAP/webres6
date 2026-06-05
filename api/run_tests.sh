@@ -83,7 +83,7 @@ if [ $VERBOSE -eq 1 ]; then
 fi
 
 if [ $COVERAGE -eq 1 ]; then
-    PYTEST_CMD="$PYTEST_CMD --cov=webres6_api --cov=webres6_storage --cov=webres6_whois --cov-report=term --cov-report=html"
+    PYTEST_CMD="$PYTEST_CMD --cov=webres6_api --cov=webres6_storage --cov=webres6_whois --cov=webres6_nat64 --cov=webres6_crawler --cov-report=term --cov-report=html"
     echo -e "${GREEN}Running tests with coverage...${NC}"
 else
     echo -e "${GREEN}Running tests...${NC}"

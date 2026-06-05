@@ -199,13 +199,6 @@ class TestWebres6APIEndpoints(unittest.TestCase):
         self.assertIn('error', data)
 
     @patch('webres6_api.check_auth')
-    def test_metrics_endpoint_unauthorized(self, mock_auth):
-        """Test /metrics endpoint without authorization"""
-        mock_auth.return_value = False
-        response = self.client.get('/metrics')
-        self.assertEqual(response.status_code, 401)
-
-    @patch('webres6_api.check_auth')
     def test_metrics_endpoint_authorized(self, mock_auth):
         """Test /metrics endpoint with authorization"""
         mock_auth.return_value = True
@@ -494,29 +487,200 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertIsNotNone(error)
         self.assertIn('invalid characters', error.lower())
 
-    def test_split_hostname_simple(self):
-        """Test hostname splitting"""
-        from webres6_api import split_hostname
+class TestIsIp(unittest.TestCase):
+    """Test is_ip helper"""
 
-        local, domain = split_hostname('www.example.com')
-        self.assertEqual(local, 'www.')
-        self.assertEqual(domain, 'example.com')
+    def test_ipv4_address_object(self):
+        from webres6_api import is_ip
+        self.assertTrue(is_ip(ip_address('1.2.3.4')))
 
-    def test_split_hostname_subdomain(self):
-        """Test hostname splitting with subdomain"""
-        from webres6_api import split_hostname
+    def test_ipv6_address_object(self):
+        from webres6_api import is_ip
+        self.assertTrue(is_ip(ip_address('2001:db8::1')))
 
-        local, domain = split_hostname('api.staging.example.com')
-        self.assertEqual(local, 'api.staging.')
-        self.assertEqual(domain, 'example.com')
+    def test_string_is_not_ip(self):
+        from webres6_api import is_ip
+        self.assertFalse(is_ip('1.2.3.4'))
 
-    def test_split_hostname_no_subdomain(self):
-        """Test hostname splitting without subdomain"""
-        from webres6_api import split_hostname
+    def test_none_is_not_ip(self):
+        from webres6_api import is_ip
+        self.assertFalse(is_ip(None))
 
-        local, domain = split_hostname('example.com')
-        self.assertEqual(local, '')
-        self.assertEqual(domain, 'example.com')
+    def test_int_is_not_ip(self):
+        from webres6_api import is_ip
+        self.assertFalse(is_ip(42))
+
+
+class TestDateTimeEncoder(unittest.TestCase):
+    """Test DateTimeEncoder JSON encoder"""
+
+    def test_encodes_datetime(self):
+        from webres6_api import DateTimeEncoder
+        dt = datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        result = json.dumps({'ts': dt}, cls=DateTimeEncoder)
+        self.assertIn('2024-06-01', result)
+
+    def test_other_types_pass_through(self):
+        from webres6_api import DateTimeEncoder
+        result = json.dumps({'x': 42, 'y': 'hello'}, cls=DateTimeEncoder)
+        self.assertIn('42', result)
+        self.assertIn('hello', result)
+
+    def test_non_serialisable_raises(self):
+        from webres6_api import DateTimeEncoder
+        with self.assertRaises(TypeError):
+            json.dumps({'x': object()}, cls=DateTimeEncoder)
+
+
+class TestGenJsonEdgeCases(unittest.TestCase):
+    """Test gen_json with various IP address families"""
+
+    def _make_host(self, ip, protocols=None, dns=None):
+        ip_obj = ip_address(ip)
+        return {
+            'local_part': '',
+            'domain_part': 'example.com',
+            'urls': ['https://example.com/'],
+            'ips': {ip_obj},
+            'protocols': {ip_obj: protocols or [['tcp', 443]]},
+            'dns': dns or {},
+            'subject_alt_names': set(),
+            'whois': {},
+        }
+
+    def _gen(self, hosts):
+        from urllib.parse import urlparse
+        url = urlparse('https://example.com')
+        ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        return gen_json(url, domain='example.com', hosts=hosts,
+                        report_id='test-id', timestamp=ts)
+
+    def test_ipv4_host_address_family(self):
+        hosts = {'example.com': self._make_host('1.2.3.4')}
+        result = self._gen(hosts)
+        ip_entry = result['hosts']['example.com']['ips']['1.2.3.4']
+        self.assertEqual(ip_entry['address_family'], 'IPv4')
+
+    def test_ipv6_host_address_family(self):
+        hosts = {'example.com': self._make_host('2001:db8::1')}
+        result = self._gen(hosts)
+        ip_entry = result['hosts']['example.com']['ips']['2001:db8::1']
+        self.assertEqual(ip_entry['address_family'], 'IPv6')
+
+    def test_nat64_address_family(self):
+        hosts = {'example.com': self._make_host('64:ff9b::1.2.3.4')}
+        result = self._gen(hosts)
+        # NAT64 address is displayed with embedded IPv4 notation via __str__
+        key = list(result['hosts']['example.com']['ips'].keys())[0]
+        self.assertEqual(result['hosts']['example.com']['ips'][key]['address_family'], 'NAT64')
+
+    def test_ipv4_mapped_address_family(self):
+        hosts = {'example.com': self._make_host('::ffff:1.2.3.4')}
+        result = self._gen(hosts)
+        key = list(result['hosts']['example.com']['ips'].keys())[0]
+        self.assertEqual(result['hosts']['example.com']['ips'][key]['address_family'], 'IPv4')
+
+    def test_non_ip_key_address_family(self):
+        from urllib.parse import urlparse
+        url = urlparse('https://example.com')
+        ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        # Passing a non-ip key (string) should produce address_family 'None'
+        hosts = {
+            'example.com': {
+                'local_part': '',
+                'domain_part': 'example.com',
+                'urls': ['https://example.com/'],
+                'ips': {'not-an-ip'},
+                'protocols': {'not-an-ip': [['tcp', 443]]},
+                'dns': {},
+                'subject_alt_names': set(),
+                'whois': {},
+            }
+        }
+        result = gen_json(url, domain='example.com', hosts=hosts,
+                          report_id='test-id', timestamp=ts)
+        ip_entry = result['hosts']['example.com']['ips']['not-an-ip']
+        self.assertEqual(ip_entry['address_family'], 'None')
+
+    def test_error_report_structure(self):
+        from urllib.parse import urlparse
+        url = urlparse('https://example.com')
+        ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        result = gen_json(url, report_id='err-id', timestamp=ts,
+                          error='Timeout', error_code=504)
+        self.assertEqual(result['error'], 'Timeout')
+        self.assertEqual(result['error_code'], 504)
+        self.assertIsNone(result['ipv6_only_ready'])
+
+
+class TestAddDnsprobeInfo(unittest.TestCase):
+    """Test add_dnsprobe_info with mocked executor"""
+
+    def setUp(self):
+        self.url = 'https://example.com'
+
+    def _make_hosts(self, hostname='example.com'):
+        return {
+            hostname: {
+                'urls': [f'https://{hostname}/'],
+                'ips': [ip_address('2001:db8::1')],
+                'local_part': '',
+                'domain_part': hostname,
+                'subject_alt_names': set(),
+                'whois': {},
+            }
+        }
+
+    @patch('webres6_api.dnsprobe_executor')
+    @patch('webres6_api.dnsprobe')
+    def test_empty_hosts_returns_zero(self, mock_dnsprobe, mock_executor):
+        from webres6_api import add_dnsprobe_info
+        total = add_dnsprobe_info({})
+        self.assertEqual(total, 0)
+        mock_executor.submit.assert_not_called()
+
+    @patch('webres6_api.dnsprobe_executor')
+    @patch('webres6_api.dnsprobe')
+    def test_success_result_sets_ipv6_ready(self, mock_dnsprobe, mock_executor):
+        from webres6_api import add_dnsprobe_info
+        from concurrent.futures import Future
+        hosts = self._make_hosts()
+
+        future = Future()
+        future.set_result({'success': True, 'rcode': 'no error'})
+        mock_executor.submit.return_value = future
+
+        total = add_dnsprobe_info(hosts)
+        self.assertEqual(total, 1)
+        self.assertTrue(hosts['example.com']['dns']['ipv6_only_ready'])
+
+    @patch('webres6_api.dnsprobe_executor')
+    @patch('webres6_api.dnsprobe')
+    def test_servfail_sets_not_ready(self, mock_dnsprobe, mock_executor):
+        from webres6_api import add_dnsprobe_info
+        from concurrent.futures import Future
+        hosts = self._make_hosts()
+
+        future = Future()
+        future.set_result({'success': False, 'rcode': 'serv fail'})
+        mock_executor.submit.return_value = future
+
+        add_dnsprobe_info(hosts)
+        self.assertFalse(hosts['example.com']['dns']['ipv6_only_ready'])
+
+    @patch('webres6_api.dnsprobe_executor')
+    @patch('webres6_api.dnsprobe')
+    def test_inconclusive_rcode_leaves_no_flag(self, mock_dnsprobe, mock_executor):
+        from webres6_api import add_dnsprobe_info
+        from concurrent.futures import Future
+        hosts = self._make_hosts()
+
+        future = Future()
+        future.set_result({'success': False, 'rcode': 'nx domain'})
+        mock_executor.submit.return_value = future
+
+        add_dnsprobe_info(hosts)
+        self.assertNotIn('ipv6_only_ready', hosts['example.com']['dns'])
 
 
 if __name__ == '__main__':

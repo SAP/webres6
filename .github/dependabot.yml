@@ -8,8 +8,27 @@ multi-ecosystem-groups:
   docker:
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "selenium-grid"
+        versions: ["1.0.0"]
+    groups:
+      selenium:
+        patterns: ["selenium*"]
+      valkey:
+        patterns: ["valkey*"]
+      telemetry:
+        patterns: ["opentelemetry*", "otel*", "jaeger*"]
 
 updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+    groups:
+      all:
+        patterns: ["*"]
+
   - package-ecosystem: pip
     directory: /api
     schedule:
@@ -19,6 +38,12 @@ updates:
       opentelemetry:
         patterns: ["opentelemetry-*"]
 
+  - package-ecosystem: docker
+    directory: /api
+    multi-ecosystem-group: docker
+    patterns: ["*"]
+    labels: [dependencies]
+
   - package-ecosystem: pip
     directory: /cli
     schedule:
@@ -27,9 +52,18 @@ updates:
     groups:
       all:
         patterns: ["*"]
-  
+
+  - package-ecosystem: pip
+    directory: /mcp
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+    groups:
+      all:
+        patterns: ["*"]
+
   - package-ecosystem: docker
-    directory: /api
+    directory: /mcp
     multi-ecosystem-group: docker
     patterns: ["*"]
     labels: [dependencies]
@@ -48,9 +82,6 @@ updates:
 
   - package-ecosystem: helm
     directory: /helm
-    schedule:
-      interval: weekly
+    multi-ecosystem-group: docker
+    patterns: ["*"]
     labels: [dependencies]
-    ignore:
-      - dependency-name: "selenium-grid"
-        versions: ["1.0.0"]

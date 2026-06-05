@@ -76,8 +76,8 @@ Containerized setup requires IPv6 being enabled in the container runtime. This c
 ### API server (webres6-api)
 <a id="api"/>
 
-- Python 3.11+  
-- Flask 3.1.2+
+- Python 3.14+
+- Flask 3.1.3+
 - Selenium 4.33+ with [ChromeDriver](https://chromedriver.chromium.org/) and Python support
 - A dual-stack or IPv6-only host with NAT64 connectivity to run Selenium on
 - libunbound with python bindings (built integrated in `Dockerfile` / `create-venv.sh`)
@@ -85,7 +85,7 @@ Containerized setup requires IPv6 being enabled in the container runtime. This c
 
 ### CLI Client
 
-- Python 3.11+  
+- Python 3.11+
 - urllib3 2.6.3+ with urllib3-future 2.19.913+
 - jq to extract further details from the JSON output
 

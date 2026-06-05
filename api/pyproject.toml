@@ -7,10 +7,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "webres6-api"
-version = "1.7.0"
+version = "1.7.1"
 description = "IPv6 Web Resource Checker API server"
 license = "Apache-2.0"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
     "Flask==3.1.3",
     "selenium==4.44.0",
