@@ -10,6 +10,15 @@ multi-ecosystem-groups:
       interval: "weekly"
 
 updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+    groups:
+      all:
+        patterns: ["*"]
+
   - package-ecosystem: pip
     directory: /api
     schedule:
