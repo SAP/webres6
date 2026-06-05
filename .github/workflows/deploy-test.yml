@@ -43,18 +43,20 @@ jobs:
       - name: Helm upgrade
         env:
           KUBECONFIG: kubeconfig.yaml
+          HELM_RELEASE: ${{ vars.HELM_RELEASE }}
+          NAMESPACE: ${{ vars.NAMESPACE }}
         run: |
           # Read values from the live release. If none exists yet, bootstrap manually first.
           # See deploy/README.md – "Deploy manually once"
-          if ! helm get values webres6 -n test -o yaml > current-values.yaml 2>/dev/null; then
-            echo "No existing release found in namespace 'test'."
+          if ! helm get values "${HELM_RELEASE}" -n "${NAMESPACE}" -o yaml > current-values.yaml 2>/dev/null; then
+            echo "No existing release found in namespace '${NAMESPACE}'."
             echo "Bootstrap the first deployment manually. See deploy/README.md for instructions."
             exit 1
           fi
-          helm upgrade --install webres6 ./helm \
+          helm upgrade --install "${HELM_RELEASE}" ./helm \
+            -n "${NAMESPACE}" \
             -f helm/values.yaml \
             -f current-values.yaml \
-            --namespace test \
             --set image.repository=ghcr.io/sap/ \
             --set image.tag=${{ steps.tag.outputs.value }} \
             --wait --timeout 5m
