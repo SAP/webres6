@@ -23,7 +23,7 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Resolve image tag
         id: tag
@@ -31,14 +31,14 @@ jobs:
           echo "value=sha-$(echo '${{ github.event.workflow_run.head_sha }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
 
       - name: Authenticate to Shoot cluster
-        uses: gardener/cc-utils/.github/actions/kubernetes-auth@b7e4d874f30171964c5262a0bc20d644f4bcedba
+        uses: gardener/cc-utils/.github/actions/kubernetes-auth@85be6ceff4a98696b20f37b41c580a171bb217f5
         with:
           server: ${{ vars.SHOOT_API_URL }}
           server-ca-discovery-url: ${{ vars.SHOOT_CA_DISCOVERY_URL }}
           audience: webres6-deploy
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
 
       - name: Helm upgrade
         env:
