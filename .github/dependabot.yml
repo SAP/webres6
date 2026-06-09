@@ -77,4 +77,4 @@ updates:
     labels: [dependencies]
     ignore:
       - dependency-name: "selenium-grid"
-        versions: ["1.0.0"]
+        versions: ["~1.0", "1.0.0-nightly"]
