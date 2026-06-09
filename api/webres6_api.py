@@ -156,13 +156,13 @@ disable_created_metrics()
 webres6_tested_total = Counter('webres6_tested_total', 'Total number of checks performed')
 webres6_tested_results = Counter('webres6_results_total', 'Total number of results for checks performed', ['result'])
 webres6_scores_total = Histogram('webres6_scores_total', 'Histogram of scores results ', ['score_type'], buckets=(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0))
-webres6_cache_hits_total = Counter('webres6_cache_hits_total', 'Total number of cache hits')
-webres6_archive_total = Counter('webres6_archive_hits_total', 'Total number of archive hits', ['result'])
+webres6_cache_hits_total = Counter('webres6_cache_hits_total', 'Total number of cache hits', ['type'])
+webres6_archive_total = Counter('webres6_archive_hits_total', 'Total number reports requested from archive', ['result'])
 webres6_time_spent = Counter('webres6_time_spent_seconds_total', 'Time spent in different processing phases', ['phase'])
 webres6_response_time = Histogram('webres6_response_time_seconds_total', 'Response time for checks performed', ['whois', 'screenshot'], buckets=(0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 90, 120, 150, 180))
 webres6_whois_cache_size = Gauge('webres6_whois_cache_size_total', 'Number of entries in whois cache')
 webres6_whois_cache_size.set_function(lambda: storage_manager.whois_cache_size() if storage_manager else 0)
-webres6_dnsprobe_results_total = Counter('webres6_dnsprobe_results_total', 'Total number of DNSProbe results', ['rcode'])
+webres6_dnsprobe_results_total = Counter('webres6_dnsprobe_results_total', 'Total number of DNSProbe results', ['rcode', 'aaaa_ok'])
 
 # allow overrides in serverconfig directory)
 sys.path.insert(0, srvconfig_dir)
@@ -279,7 +279,7 @@ def add_dnsprobe_info(hosts, log_prefix=''):
         hostname, info = futures[future]
         dnsprobe_data = future.result()
         total += 1
-        webres6_dnsprobe_results_total.labels(rcode=dnsprobe_data.get('rcode', 'unknown')).inc()
+        webres6_dnsprobe_results_total.labels(rcode=dnsprobe_data.get('rcode', 'unknown'), aaaa_ok=dnsprobe_data.get('success', False)).inc()
         if dnsprobe_data.get('success', False):
             success += 1
             dnsprobe_data['ipv6_only_ready'] = True
@@ -378,7 +378,7 @@ def get_ipv6_only_score(hosts):
     resources_ipv6_http = 0
     resources_ipv6_dns = 0
     resources_ipv6_overall = 0
-    has_dnsinfo = True
+    has_dnsinfo = False
     for hostname, info in hosts.items():
         # calculate http score
         has_ipv6 = False
@@ -394,14 +394,14 @@ def get_ipv6_only_score(hosts):
         else:
             resources_ipv6_http += resources
         # calculate dns score
-        if info.get('dns', None) and 'ipv6_only_ready' in info['dns']:
-            if info['dns'].get('ipv6_only_ready'):
+        if info.get('dns', None):
+            has_dnsinfo = True
+            # count inconclusive dnsprobe results as not ipv6-only ready
+            if info['dns'].get('ipv6_only_ready', False):
                 resources_ipv6_dns += resources
             else:
                 ipv6_only_ready = False
                 has_ipv6 = False
-        else:
-            has_dnsinfo = False
         # calculate overall score
         if has_ipv6:
             resources_ipv6_overall += resources
@@ -684,7 +684,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
     json_result = storage_manager.get_result_cacheline(cache_key)
     if json_result:
         # update statistics
-        webres6_cache_hits_total.inc()
+        webres6_cache_hits_total.labels(type=json_result.get('type', 'unknown')).inc()
         # update logging
         ts = json_result.get('ts')
         report_id = json_result.get('report_id', 'unknown')
