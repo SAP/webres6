@@ -74,6 +74,7 @@ The API emits OpenTelemetry traces (OTLP) and exposes Prometheus metrics. An exa
 | `NAT64_PREFIXES` | Comma-separated NAT64 prefixes |
 | `ADMIN_API_KEY` | Required for `/admin/*` endpoints (open when unset, intentional for trusted networks) |
 | `ENABLE_WHOIS` | Enable WHOIS lookups |
+| `BLOCK_IP_LITERALS` | `true` | Reject URLs with IP address literals as hostname (SSRF prevention); set to `false` for test environments that crawl internal hosts directly |
 | `VALKEY_URL` | Valkey/Redis URL |
 | `S3_BUCKET`, `S3_ENDPOINT` | S3 storage backend |
 | `S3_DELIVERY_STRATEGY` | `public`, `presigned`, or `private` (default: `public`) |

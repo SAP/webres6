@@ -59,6 +59,7 @@ Environment variables:
                               'private'   - fetch object from S3 and deliver from API (default: public)
   ARCHIVE_DIR                 Directory for optional filesystem-based report storage
   LOCAL_CACHE_DIR             Directory for optional local filesystem-based cache if VALKEY_URL is unset
+  BLOCK_IP_LITERALS           Reject URLs with IP address literals as hostname, SSRF prevention (default: true)
   ENABLE_WHOIS                Enable clients to request WHOIS lookups (default: true)
   WHOIS_CACHE_TTL             Expiry time for WHOIS cache in seconds (default: 270000)
   WHOIS_JOBS                  Number of parallel WHOIS lookups (default: 8)
