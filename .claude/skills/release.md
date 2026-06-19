@@ -41,9 +41,29 @@ git checkout -b release/vA.B.C origin/main
 
 If there are uncommitted changes in the working tree, warn the user and ask whether to stash them or stop.
 
-### Step 2 — pre-release gate: security review + regression tests
+### Step 2 — pre-release gate: REUSE lint, security review, regression tests
 
-Before touching any files, run both checks in parallel:
+#### 2a — REUSE lint (fast, run first)
+
+```bash
+reuse lint 2>&1
+```
+
+If `reuse` is not on PATH, mark this check SKIPPED with reason and continue.
+
+Cross-reference any files flagged by `reuse lint` against tracked files:
+
+```bash
+git ls-files
+```
+
+Only care about files that are **both** flagged by `reuse lint` **and** listed by `git ls-files`. Untracked files in the lint output are irrelevant — ignore them.
+
+If any tracked files are flagged: **stop and report** which ones before running the slow checks below. Do not proceed until the user fixes the compliance issue or explicitly accepts the risk.
+
+If no tracked files are flagged, continue to 2b.
+
+#### 2b — security review + regression tests (slow, run in parallel)
 
 ```
 Launch security-reviewer agent: full codebase security review (same prompt as /security-review)
@@ -62,7 +82,8 @@ Present a brief summary to the user and ask for confirmation before continuing.
 
 Show a summary:
 ```
-Security review: PASS (or: N findings — user accepted)
+REUSE lint:       PASS (or: SKIPPED — reuse not on PATH)
+Security review:  PASS (or: N findings — user accepted)
 Regression tests: PASS
 
 Bumping version: X.Y.Z → A.B.C
