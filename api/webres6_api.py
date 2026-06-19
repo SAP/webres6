@@ -18,7 +18,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from os import getenv
-from ipaddress import IPv4Address, IPv6Address
+from ipaddress import ip_address, IPv4Address, IPv6Address
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from tempfile import mkdtemp
@@ -80,6 +80,7 @@ crawl_jobs        = int(getenv("CRAWL_JOBS", "4"))
 dnsprobe_jobs     = int(getenv("DNSPROBE_JOBS", 2*crawl_jobs))
 whois_jobs        = int(getenv("WHOIS_JOBS", 2*crawl_jobs))
 enable_scoreboard = getenv("ENABLE_SCOREBOARD", 'true').lower() in ['true', '1', 'yes']
+block_ip_literals     = getenv("BLOCK_IP_LITERALS", 'true').lower() in ['true', '1', 'yes']
 scoreboard_request_limit = int(getenv("SCOREBOARD_REQUEST_LIMIT", 1024))
 screenshot_modes  = ['none', 'small', 'medium', 'full']
 check_selenium_health = True
@@ -818,6 +819,14 @@ def validate_url(url):
     # Check for spaces or control characters in hostname
     if any(c.isspace() or ord(c) < 32 for c in hostname):
         return None, 'Invalid URL: hostname contains invalid characters'
+
+    # Block all IP address literals — only DNS hostnames are accepted (SSRF prevention)
+    if block_ip_literals:
+        try:
+            ip_address(hostname)
+            return None, 'Invalid URL: IP address literals are not allowed, use a hostname'
+        except ValueError:
+            pass
 
     # Port validation (additional range check if port is present)
     if port is not None:

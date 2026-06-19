@@ -114,7 +114,7 @@ function renderData(data, domContainer, overview, apiBase=getAPIBase()) {
   }
   // URL
   if(data.url) {
-    domContainer.find('.url').html(data.url);
+    domContainer.find('.url').text(data.url);
   }
   // set report anchor link
   if (data.ID) {
@@ -218,7 +218,8 @@ function renderHostsTable(data, hostsContainer) {
       const info = data.hosts[hostname];
       const ips = info.ips ? Object.keys(info.ips).sort() : [];
       const hostsTableBlock = $('<tbody>').addClass('host-block');
-      const hostCells = $(`<td rowspan=1 class="hostname host-localpart">${info.local_part}</td><td rowspan=1 class="hostname host-dompart">${info.domain_part}</td>`);
+      const hostCells = $('<td rowspan=1 class="hostname host-localpart">').text(info.local_part)
+        .add($('<td rowspan=1 class="hostname host-dompart">').text(info.domain_part));
       row.append(hostCells);
       const dnsCell = $('<td rowspan=1 class="dns-status"></td>'); 
       row.append(dnsCell);
@@ -245,8 +246,8 @@ function renderHostsTable(data, hostsContainer) {
               const traceWindow = window.open('', '_blank');
               traceWindow.document.title = `Unbound debug trace for ${hostname}`;
               const body = $(traceWindow.document.body);
-              body.append('<h1>Unbound debug trace for ' + hostname + '</h1>');
-              body.append('<pre>' + atob(info.dns.unbound_trace) + '</pre>');
+              body.append($('<h1>').text('Unbound debug trace for ' + hostname));
+              body.append($('<pre>').text(atob(info.dns.unbound_trace)));
             });
           }
         }
@@ -266,14 +267,14 @@ function renderHostsTable(data, hostsContainer) {
       $.each(ips, function(i, ip) {
         // prepare to render protocols as sub-rows
         let pr = info.ips[ip].transport.map(function(v, n, a) {
-          return `<td class="protocol">${v.length>0?v[0]:'_'}</td>`+
-                  `<td class="protocol">${v.length>1?v[1]:'_'}</td>`;
+          return [$('<td class="protocol">').text(v.length>0 ? v[0] : '_'),
+                  $('<td class="protocol">').text(v.length>1 ? v[1] : '_')];
         });
         // render IP and whois cells
         const asnCell       = $(`<td rowspan="${pr.length}" class="as-number" />`);
         const asDescrCell   = $(`<td rowspan="${pr.length}" class="as-descr" />`);
-        const ipCell        = $(`<td rowspan="${pr.length}" class="ip-address ${info.ips[ip].address_family.toLowerCase()}" >${ip}</td>`);
-        const ipNetnameCell = $(`<td rowspan="${pr.length}" class="ip-netname ${info.ips[ip].address_family.toLowerCase()}" />`);
+        const ipCell        = $('<td>').attr('rowspan', pr.length).addClass('ip-address').addClass(info.ips[ip].address_family.toLowerCase()).text(ip);
+        const ipNetnameCell = $('<td>').attr('rowspan', pr.length).addClass('ip-netname').addClass(info.ips[ip].address_family.toLowerCase());
         // add whois info if available
         if (info.ips[ip].whois) {
           hasWhoisInfo = true;
@@ -317,7 +318,7 @@ function renderHostsTable(data, hostsContainer) {
         hostInfoDiv.append('<strong>URLs</strong>');
         let urlList = $('<ul class="urls">');
         $.each(info.urls, function(i, url) {
-          urlList.append(`<li>${url}</li>`);
+          urlList.append($('<li>').text(url));
         });
         hostInfoDiv.append(urlList);
       }
@@ -325,7 +326,7 @@ function renderHostsTable(data, hostsContainer) {
         hostInfoDiv.append('<strong>Subject Alt Names</strong>');
         const sanList = $('<ul class="subject-alts">');
         $.each(info.subject_alt_names, function(i, san) {
-          sanList.append(`<li>${san}</li>`);
+          sanList.append($('<li>').text(san));
         });
         hostInfoDiv.append(sanList);
       }

@@ -42,7 +42,7 @@ if selenium_remote:
     )
 
 # URL blocklist — defaults plus optional override file
-url_blocklist = ["*://*.local/*", "*://*.internal/*"]
+url_blocklist = ["*://localhost/*", "*://localhost.localdomain/*", "*://*.local/*", "*://*.internal/*"]
 
 def add_url_blocklist(entries):
     """Append additional URL patterns to the active blocklist."""

@@ -2,8 +2,13 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+import re
+from urllib.parse import quote
+
 from webres6_mcp.server import mcp, http_client
 from webres6_mcp.config import DNSPROBE_URL
+
+_HOSTNAME_RE = re.compile(r'^[A-Za-z0-9._-]{1,253}\Z')
 
 dns_hint = """
     For hosts that are not IPv6-only ready or the test was inconclusive,
@@ -25,6 +30,8 @@ async def resolve_dns_v6only(hostname: str) -> dict:
     whether the hostname is considered IPv6-only ready.
 
     """ + dns_hint
-    r = await http_client.get(f"{DNSPROBE_URL}/dnsprobe/resolve6only({hostname})")
+    if not _HOSTNAME_RE.match(hostname):
+        raise ValueError(f"Invalid hostname: {hostname!r}")
+    r = await http_client.get(f"{DNSPROBE_URL}/dnsprobe/resolve6only({quote(hostname, safe='')})")
     r.raise_for_status()
     return r.json()
