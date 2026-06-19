@@ -1,6 +1,6 @@
 # Release skill
 
-Bump the version across all five version-tracked files, commit, and tag — after a security review and regression test pass.
+Bump the version across all five version-tracked files, open a PR, and tag the merge commit on `main` after it lands.
 
 ## Files that must all match
 
@@ -25,13 +25,29 @@ Validate that the new version:
 
 If any check fails, stop and report why.
 
+Then set up the release branch. Check the current branch:
+
+```bash
+git branch --show-current
+```
+
+- If already on `release/vA.B.C`, continue.
+- If on `main` or any other branch, create a release branch from the current `main`:
+
+```bash
+git fetch origin main
+git checkout -b release/vA.B.C origin/main
+```
+
+If there are uncommitted changes in the working tree, warn the user and ask whether to stash them or stop.
+
 ### Step 2 — pre-release gate: security review + regression tests
 
 Before touching any files, run both checks in parallel:
 
 ```
 Launch security-reviewer agent: full codebase security review (same prompt as /security-review)
-Launch regression-tester agent: full working tree regression test
+Run /regression-tester skill: full working tree regression test
 ```
 
 Wait for both to complete. Then:
@@ -59,8 +75,10 @@ Files to update:
   helm/Chart.yaml         version: A.B.C  +  appVersion: "A.B.C"
 
 Will create:
-  git commit  "Bump version to A.B.C"
-  git tag     vA.B.C
+  git commit  "Bump version to A.B.C"  on branch release/vA.B.C
+  gh pr       "Release vA.B.C" → main
+
+Tag vA.B.C will be created after the PR is merged (see Step 6).
 
 Proceed? (yes / no)
 ```
@@ -85,7 +103,7 @@ grep -h 'webres6_version\|^version\|^appVersion' \
 ```
 All values shown must equal A.B.C. If any mismatch is found, stop and report — do not commit.
 
-### Step 5 — commit and tag
+### Step 5 — commit and open PR
 
 Check for uncommitted changes in the five version files before staging:
 ```bash
@@ -103,31 +121,57 @@ Commit (the pre-commit hook will re-verify consistency — if it fails, somethin
 git commit -m "Bump version to A.B.C"
 ```
 
-If the commit fails (hook rejection or other error), stop and report. Do not tag.
+If the commit fails, stop and report. Do not push.
 
-Tag:
+Push the branch and open a PR targeting `main`:
 ```bash
-git tag vA.B.C
+git push -u origin release/vA.B.C
+```
+
+```bash
+gh pr create \
+  --base main \
+  --title "Release vA.B.C" \
+  --body "$(cat <<'EOF'
+Version bump A.B.C → A.B.C.
+
+Pre-release checks:
+- Security review: PASS (or: N findings — user accepted)
+- Regression tests: PASS
+
+After merging, tag the merge commit:
+\`\`\`
+git fetch origin main
+git tag vA.B.C $(git rev-parse origin/main)
+git push origin vA.B.C
+\`\`\`
+Pushing the tag triggers the docker-build.yml CI workflow.
+EOF
+)"
 ```
 
 ### Step 6 — report
 
 ```
-Release A.B.C complete.
+PR opened: <PR URL>
 
-  Commit: <short hash> "Bump version to A.B.C"
-  Tag:    vA.B.C (local only)
+CI will run on the branch. Once the PR is approved and merged:
 
-To publish:
-  git push && git push origin vA.B.C
+  1. Fetch main:
+       git fetch origin main
 
-Pushing the tag triggers the docker-build.yml CI workflow, which builds
-and pushes Docker images for webres6-api, webres6-viewer, and webres6-mcp.
+  2. Tag the merge commit:
+       git tag vA.B.C $(git rev-parse origin/main)
+       git push origin vA.B.C
+
+Pushing the tag triggers docker-build.yml, which builds and pushes
+Docker images for webres6-api, webres6-viewer, and webres6-mcp.
 ```
 
 ## Safety rules
 
-- **Never push automatically.** Always leave push to the user.
+- **Never push or tag automatically.** The tag step is always left to the user, after merge.
 - **Do not bump if there are uncommitted changes** in any of the five version files before Step 4 begins — check with `git status` and warn if any are modified.
 - **Do not proceed past Step 3 without explicit user confirmation.**
 - **Do not skip the security review and regression test gate** in Step 2, even if the user asks to go fast. If the user wants to bypass it, ask them to confirm explicitly that they accept the risk.
+- **Do not tag before the PR is merged.** The tag must point at the merge commit on `main`, not the pre-merge bump commit on the release branch.
