@@ -1,0 +1,77 @@
+{{- if .Values.api.scoreboard.PVCbackup}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  # SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+  # SPDX-License-Identifier: Apache-2.0
+  name: {{ include "webres6.fullname" . }}-scoreboard-pvc-backup
+  labels:
+    {{- include "webres6.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.api.scoreboard.PVCbackupSchedule | default "5 0 * * *" | quote }}
+  successfulJobsHistoryLimit: {{ .Values.api.scoreboard.backupHistoryLimit | default 3 }}
+  failedJobsHistoryLimit: {{ .Values.api.scoreboard.backupHistoryLimit | default 3 }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "webres6.labels" . | nindent 12 }}
+            app: webres6-scoreboard-pvc-backup
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.api.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.api.serviceAccountName }}
+          serviceAccountName: {{ .Values.api.serviceAccountName }}
+          {{- end }}
+          restartPolicy: OnFailure
+          volumes:
+            - name: scoreboard-backup
+              persistentVolumeClaim:
+                claimName: {{ required "api.scoreboard.PVCbackupClaimName is required when PVCbackup is enabled" .Values.api.scoreboard.PVCbackupClaimName }}
+          containers:
+            - name: scoreboard-backup
+              image: {{ .Values.api.image.repository | default .Values.image.repository }}{{ .Values.api.image.name | default "webres6-api" }}:{{ .Values.api.image.tag | default .Values.image.tag | default "latest" }}
+              imagePullPolicy: {{ .Values.api.image.pullPolicy | default "IfNotPresent" }}
+              args: [ "--export-scoreboard", {{ printf "/backup/%s" (.Values.api.scoreboard.PVCbackupPathPrefix | default "") | quote }} ]
+              env:
+                {{- if or .Values.valkey.deploy .Values.valkey.url }}
+                - name: VALKEY_URL
+                  value: {{ include "webres6.valkey.url" . | quote }}
+                {{- end }}
+                - name: ENABLE_SCOREBOARD
+                  value: "true"
+              volumeMounts:
+                - name: scoreboard-backup
+                  mountPath: "/backup"
+                  {{- if .Values.api.scoreboard.PVCbackupPathPrefix }}
+                  subPath: {{ .Values.api.scoreboard.PVCbackupPathPrefix | quote }}
+                  {{- end }}
+              {{- with .Values.api.securityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              {{- with .Values.api.scoreboard.backupResources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

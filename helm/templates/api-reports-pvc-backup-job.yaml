@@ -1,0 +1,99 @@
+{{- if .Values.api.reports.PVCbackup}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  # SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+  # SPDX-License-Identifier: Apache-2.0
+  name: {{ include "webres6.fullname" . }}-reports-pvc-backup
+  labels:
+    {{- include "webres6.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.api.reports.PVCbackupSchedule | default "15 0 * * *" | quote }}
+  successfulJobsHistoryLimit: {{ .Values.api.reports.backupHistoryLimit | default 3 }}
+  failedJobsHistoryLimit: {{ .Values.api.reports.backupHistoryLimit | default 3 }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "webres6.labels" . | nindent 12 }}
+            app: webres6-reports-pvc-backup
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.api.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.api.serviceAccountName }}
+          serviceAccountName: {{ .Values.api.serviceAccountName }}
+          {{- end }}
+          restartPolicy: OnFailure
+          volumes:
+            - name: reports-backup
+              persistentVolumeClaim:
+                claimName: {{ required "api.reports.PVCbackupClaimName is required when api.reports.PVCbackup is enabled" .Values.api.reports.PVCbackupClaimName }}
+          containers:
+            - name: reports-backup
+              image: {{ .Values.api.image.repository | default .Values.image.repository }}{{ .Values.api.image.name | default "webres6-api" }}:{{ .Values.api.image.tag | default .Values.image.tag | default "latest" }}
+              imagePullPolicy: {{ .Values.api.image.pullPolicy | default "IfNotPresent" }}
+              args: [ "--export-reports", {{ printf "/backup/%s" (.Values.api.reports.PVCbackupPathPrefix | default "") | quote }} ]
+              env:
+                {{- if or .Values.valkey.deploy .Values.valkey.url }}
+                - name: VALKEY_URL
+                  value: {{ include "webres6.valkey.url" . | quote }}
+                {{- end }}
+                {{- if .Values.api.s3Bucket }}
+                - name: S3_BUCKET
+                  value: {{ .Values.api.s3Bucket | quote }}
+                {{- end }}
+                {{- if .Values.api.s3Endpoint }}
+                - name: S3_ENDPOINT
+                  value: {{ .Values.api.s3Endpoint | quote }}
+                {{- end }}
+                {{- if .Values.api.awsSecret }}
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.api.awsSecret }}
+                      key: accessKeyID
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.api.awsSecret }}
+                      key: secretAccessKey
+                {{- end }}
+                {{- if .Values.api.archiveDir }}
+                - name: ARCHIVE_DIR
+                  value: {{ .Values.api.archiveDir | quote }}
+                {{- end }}
+              volumeMounts:
+                - name: reports-backup
+                  mountPath: "/backup"
+                  {{- if .Values.api.reports.PVCbackupPathPrefix }}
+                  subPath: {{ .Values.api.reports.PVCbackupPathPrefix | quote }}
+                  {{- end }}
+              {{- with .Values.api.securityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              {{- with .Values.api.reports.backupResources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

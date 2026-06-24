@@ -734,6 +734,23 @@ class TestExportImportFunctions(unittest.TestCase):
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]['score'], 1.0)
 
+    def test_export_scoreboard_to_directory(self):
+        mock_storage = MagicMock()
+        ts = datetime.now(timezone.utc)
+        mock_storage.get_scorecards.return_value = [
+            {'score': 0.8, 'ts': ts, 'url': 'https://example.com'}
+        ]
+        out_dir = os.path.join(self.test_dir, 'scoreboard_dir')
+        os.makedirs(out_dir)
+        self.export_scoreboard(mock_storage, file=out_dir)
+        files = os.listdir(out_dir)
+        self.assertEqual(len(files), 1)
+        self.assertRegex(files[0], r'^scoreboard-\d{4}-\d{2}-\d{2}-\d{6}Z-.+\.json$')
+        with open(os.path.join(out_dir, files[0]), 'r') as f:
+            data = json.load(f)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]['score'], 0.8)
+
     def test_export_scoreboard_to_stdout(self):
         mock_storage = MagicMock()
         mock_storage.get_scorecards.return_value = [
@@ -821,6 +838,116 @@ class TestExportImportFunctions(unittest.TestCase):
         result = self.import_archived(dst_storage, src_dir, 86400)
         self.assertTrue(result)
         self.assertIn('report-002', dst_storage.list_archived_reports())
+
+    def test_export_scoreboard_to_stdout_none(self):
+        mock_storage = MagicMock()
+        ts = datetime.now(timezone.utc)
+        mock_storage.get_scorecards.return_value = [
+            {'score': 0.75, 'ts': ts, 'url': 'https://example.com'}
+        ]
+        import io
+        buf = io.StringIO()
+        written = []
+        buf.write = lambda s: written.append(s)
+        with patch('webres6_storage.sys.stdout', buf):
+            self.export_scoreboard(mock_storage, file=None)
+        data = json.loads(''.join(written))
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]['score'], 0.75)
+
+    def test_export_scoreboard_multiple_entries(self):
+        mock_storage = MagicMock()
+        ts = datetime.now(timezone.utc)
+        mock_storage.get_scorecards.return_value = [
+            {'score': 1.0, 'ts': ts, 'url': 'https://a.example.com'},
+            {'score': 0.5, 'ts': ts, 'url': 'https://b.example.com'},
+            {'score': 0.0, 'ts': ts, 'url': 'https://c.example.com'},
+        ]
+        out_file = os.path.join(self.test_dir, 'scoreboard_multi.json')
+        self.export_scoreboard(mock_storage, file=out_file)
+        with open(out_file, 'r') as f:
+            data = json.load(f)
+        self.assertEqual(len(data), 3)
+        self.assertEqual({e['url'] for e in data}, {'https://a.example.com', 'https://b.example.com', 'https://c.example.com'})
+
+    def test_scoreboard_roundtrip(self):
+        mock_storage = MagicMock()
+        ts = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_storage.get_scorecards.return_value = [
+            {'score': 0.9, 'ts': ts, 'url': 'https://example.com', 'extra': 'data'},
+        ]
+        out_file = os.path.join(self.test_dir, 'roundtrip.json')
+        self.export_scoreboard(mock_storage, file=out_file)
+        import_storage = MagicMock()
+        self.import_scoreboard(import_storage, file=out_file)
+        import_storage.put_scorecard.assert_called_once()
+        entry = import_storage.put_scorecard.call_args[0][0]
+        self.assertIsInstance(entry['ts'], datetime)
+        self.assertEqual(entry['ts'], ts)
+        self.assertEqual(entry['score'], 0.9)
+        self.assertEqual(entry['url'], 'https://example.com')
+        self.assertEqual(entry['extra'], 'data')
+
+    def test_export_archived_reports_multiple_reports(self):
+        src_dir = os.path.join(self.test_dir, 'src_multi')
+        dst_dir = os.path.join(self.test_dir, 'dst_multi')
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        src_storage = LocalStorageManager(result_archive_ttl=86400, archive_dir=src_dir)
+        ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        for i in range(3):
+            src_storage.archive_result(f'report-{i:03d}', {'ID': f'report-{i:03d}', 'ts': ts, 'url': f'https://example.com/{i}'})
+        result = self.export_archived(src_storage, dst_dir, 86400)
+        self.assertTrue(result)
+        dst_storage = LocalStorageManager(result_archive_ttl=86400, archive_dir=dst_dir)
+        archived = dst_storage.list_archived_reports()
+        self.assertEqual(set(archived), {'report-000', 'report-001', 'report-002'})
+
+    def test_export_archived_reports_skips_unretrievable(self):
+        mock_storage = MagicMock()
+        mock_storage.can_archive.return_value = True
+        mock_storage.list_archived_reports.return_value = ['report-ok', 'report-missing']
+        mock_storage.retrieve_result.side_effect = lambda rid: \
+            {'ID': rid, 'ts': datetime(2024, 1, 1, tzinfo=timezone.utc)} if rid == 'report-ok' else None
+        dst_dir = os.path.join(self.test_dir, 'dst_skip')
+        os.makedirs(dst_dir)
+        result = self.export_archived(mock_storage, dst_dir, 86400)
+        self.assertTrue(result)
+        dst_storage = LocalStorageManager(result_archive_ttl=86400, archive_dir=dst_dir)
+        self.assertIn('report-ok', dst_storage.list_archived_reports())
+        self.assertNotIn('report-missing', dst_storage.list_archived_reports())
+
+    def test_import_archived_reports_skips_unretrievable(self):
+        src_dir = os.path.join(self.test_dir, 'src_skip')
+        os.makedirs(src_dir)
+        src_storage = LocalStorageManager(result_archive_ttl=86400, archive_dir=src_dir)
+        ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        src_storage.archive_result('report-good', {'ID': 'report-good', 'ts': ts, 'url': 'https://example.com'})
+        dst_storage = MagicMock()
+        dst_storage.can_archive.return_value = True
+        dst_storage.archive_result.return_value = True
+        result = self.import_archived(dst_storage, src_dir, 86400)
+        self.assertTrue(result)
+        dst_storage.archive_result.assert_called_once()
+        call_report_id = dst_storage.archive_result.call_args[0][0]
+        self.assertEqual(call_report_id, 'report-good')
+
+    def test_archive_roundtrip(self):
+        src_dir = os.path.join(self.test_dir, 'rt_src')
+        dst_dir = os.path.join(self.test_dir, 'rt_dst')
+        os.makedirs(src_dir)
+        os.makedirs(dst_dir)
+        src_storage = LocalStorageManager(result_archive_ttl=86400, archive_dir=src_dir)
+        ts = datetime(2024, 3, 15, 9, 30, 0, tzinfo=timezone.utc)
+        original = {'ID': 'report-rt', 'ts': ts, 'url': 'https://example.com', 'score': 0.8}
+        src_storage.archive_result('report-rt', original)
+        dst_storage = LocalStorageManager(result_archive_ttl=86400, archive_dir=dst_dir)
+        self.export_archived(src_storage, dst_dir, 86400)
+        restored = dst_storage.retrieve_result('report-rt')
+        self.assertIsNotNone(restored)
+        self.assertEqual(restored['url'], 'https://example.com')
+        self.assertEqual(restored['score'], 0.8)
+        self.assertEqual(restored['ts'], ts)
 
 
 if __name__ == '__main__':

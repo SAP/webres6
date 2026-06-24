@@ -84,6 +84,18 @@ api:
     enabled: true
     S3backup: true
     S3backupSchedule: "@daily"
+    PVCbackup: false
+    PVCbackupSchedule: "@daily"
+    PVCbackupClaimName: ""       # required when PVCbackup: true
+    PVCbackupPathPrefix: ""      # subdirectory within the PVC to write into
+    backupHistoryLimit: 3
+    backupResources: {}
+  # reports archive backup to PVC
+  reports:
+    PVCbackup: false
+    PVCbackupSchedule: "@daily"
+    PVCbackupClaimName: ""       # required when PVCbackup: true
+    PVCbackupPathPrefix: ""      # subdirectory within the PVC to write into
     backupHistoryLimit: 3
     backupResources: {}
   # scaling

@@ -878,6 +878,8 @@ def export_scoreboard_entries(storage_manager, file=None):
                              ContentType='application/json; charset=utf-8', ContentEncoding='gzip')
         print("Export completed.", file=sys.stderr)
     else:
+        if file and os.path.isdir(file):
+            file = os.path.join(file, f"scoreboard-{datetime.now(timezone.utc).strftime('%Y-%m-%d-%H%M%SZ')}-{platform.node().split('.')[0]}.json")
         with (sys.stdout if file is None else open(file, 'w', encoding='utf-8')) as f:
             f.write(json.dumps(entries, indent=2, cls=DateTimeEncoder, ensure_ascii=False))
 
