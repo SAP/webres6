@@ -367,7 +367,7 @@ def add_whois_info(hosts, log_prefix=''):
     return
 
 
-def get_ipv6_only_score(hosts):
+def get_ipv6_only_score(hosts, main_hostname):
     """ Checks if any host in the dictionary has an IPv4 address.
     """
 
@@ -375,6 +375,7 @@ def get_ipv6_only_score(hosts):
         return None, None, None, False
 
     ipv6_only_ready = True
+    main_host_ipv6_only_ready = True
     resources_total = 0
     resources_ipv6_http = 0
     resources_ipv6_dns = 0
@@ -392,6 +393,8 @@ def get_ipv6_only_score(hosts):
                 has_ipv6 = True
         if not has_ipv6:
             ipv6_only_ready = False
+            if hostname == main_hostname:
+                main_host_ipv6_only_ready = False
         else:
             resources_ipv6_http += resources
         # calculate dns score
@@ -403,11 +406,19 @@ def get_ipv6_only_score(hosts):
             else:
                 ipv6_only_ready = False
                 has_ipv6 = False
+                if hostname == main_hostname:
+                    main_host_ipv6_only_ready = False
         # calculate overall score
         if has_ipv6:
             resources_ipv6_overall += resources
 
-    overall_score = resources_ipv6_overall / resources_total if resources_total > 0 else None
+    # calculate scores
+    if resources_total <= 0:
+        overall_score = None
+    elif main_host_ipv6_only_ready:
+        overall_score = resources_ipv6_overall / resources_total
+    else:
+        overall_score = 0.0
     http_score = resources_ipv6_http / resources_total if resources_total > 0 else None
     dns_score = resources_ipv6_dns / resources_total if resources_total > 0 and has_dnsinfo else None
 
@@ -580,7 +591,7 @@ def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
         push_timing('whois')
 
     # report statistics
-    score, http_score, dns_score, ipv6_only_ready = get_ipv6_only_score(hosts)
+    score, http_score, dns_score, ipv6_only_ready = get_ipv6_only_score(hosts, url.hostname)
     print(f"{lp}website is {'' if ipv6_only_ready else 'NOT '}ipv6-only ready (overall={f"{score*100:.1f}%" if score is not None else 'N/A'}, http={f"{http_score*100:.1f}%" if http_score is not None else 'N/A'}, dns={f"{dns_score*100:.1f}%" if dns_score is not None else 'N/A'})", file=sys.stderr)
     if ipv6_only_ready is True:
         webres6_tested_results.labels(result='ipv6_only_ready').inc()
