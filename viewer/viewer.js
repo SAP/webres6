@@ -511,6 +511,10 @@ async function loadScoreboard(resultsLimit=scoreboardDefaultLimit) {
           });
           renderScoreboard(data, resultsLimit);
         });
+        // Dedup checkbox
+        $('#scoreboard-dedup').off('change').on('change', function() {
+          renderScoreboard(data, resultsLimit);
+        });
       } else {
         console.log('No scoreboard entries available');
       }
@@ -547,8 +551,18 @@ function renderScoreboard(data, resultsLimit) {
   const scoreboardContainer = $('#scoreboard');
   const scoreboardTableBody = scoreboardContainer.find('.scoreboard-table tbody');
   scoreboardTableBody.children('tr:not(.template)').remove();
+  // optionally filter to newest entry per URL
+  let displayData = data;
+  if ($('#scoreboard-dedup').is(':checked')) {
+    const seen = new Set();
+    displayData = data.filter(function(entry) {
+      if (seen.has(entry.url)) return false;
+      seen.add(entry.url);
+      return true;
+    });
+  }
   //render scoreboard entries
-  $.each(data, function(idx, entry) {
+  $.each(displayData, function(idx, entry) {
     const row = scoreboardTableBody.find('tr.template').clone();
     row.removeClass('template');
     // Use ipv6_only_score instead of score
