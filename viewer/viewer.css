@@ -64,6 +64,10 @@ body {
 .contents-container-header h2 {
   float: left;
 }
+.scoreboard-filter-label {
+  float: left;
+  cursor: pointer;
+}
 .contents-container-footer {
   margin-top: 20px;
 }
