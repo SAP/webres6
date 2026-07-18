@@ -326,7 +326,7 @@ class TestIPv6Scoring(unittest.TestCase):
 
     def test_get_ipv6_only_score_empty_hosts(self):
         """Test scoring with no hosts"""
-        score, http_score, dns_score, ready = get_ipv6_only_score({})
+        score, http_score, dns_score, ready = get_ipv6_only_score({}, 'example.com')
 
         self.assertIsNone(score)
         self.assertIsNone(http_score)
@@ -343,7 +343,7 @@ class TestIPv6Scoring(unittest.TestCase):
             }
         }
 
-        score, http_score, dns_score, ready = get_ipv6_only_score(hosts)
+        score, http_score, dns_score, ready = get_ipv6_only_score(hosts, 'example.com')
 
         self.assertEqual(score, 1.0)
         self.assertEqual(http_score, 1.0)
@@ -365,7 +365,7 @@ class TestIPv6Scoring(unittest.TestCase):
             }
         }
 
-        score, http_score, dns_score, ready = get_ipv6_only_score(hosts)
+        score, http_score, dns_score, ready = get_ipv6_only_score(hosts, 'ipv6.example.com')
 
         self.assertEqual(http_score, 0.5)  # 1 IPv6 resource out of 2
         self.assertEqual(dns_score, 0.5)   # 1 IPv6 DNS out of 2
@@ -382,7 +382,7 @@ class TestIPv6Scoring(unittest.TestCase):
             }
         }
 
-        score, http_score, dns_score, ready = get_ipv6_only_score(hosts)
+        score, http_score, dns_score, ready = get_ipv6_only_score(hosts, 'nat64.example.com')
 
         self.assertEqual(http_score, 0.0)  # NAT64 doesn't count as native IPv6
         self.assertFalse(ready)
