@@ -229,17 +229,23 @@ function renderHostsTable(data, hostsContainer) {
         hasDNSInfo = true;
         if (info.dns.ipv6_only_ready) {
           dnsCell.addClass('dns-status-ipv6-only-ready');
-          dnsCell.text('✓');
+          if(info.dns.rcode == 'no error' && info.dns.success === true) {
+            dnsCell.addClass('dns-status-ipv6-only-ready-aaaa');
+          } else if(info.dns.rcode == 'no error' && info.dns.success === false) {
+            dnsCell.addClass('dns-status-ipv6-only-ready-no-aaaa');
+          }
+          // dnsCell.text('✓');
           dnsCell.attr('title', 'Hostname can be resolved from an IPv6-only resolver');
         } else {
           if (info.dns.ipv6_only_ready === undefined) {
             dnsCell.addClass('dns-status-ipv6-only-unknown');
-            dnsCell.text('?');
+            // dnsCell.text('?');
+            dnsCell.attr('title', (info.dns.rcode ? info.dns.rcode : '') + ' - Hostname resolution test from an IPv6-only resolver inconclusive');
           } else {
             dnsCell.addClass('dns-status-not-ipv6-only-ready');
-            dnsCell.text('✘');
+            // dnsCell.text('✘');
+            dnsCell.attr('title', (info.dns.rcode ? info.dns.rcode : '') + ' - Hostname cannot be resolved from an IPv6-only resolver');
           }
-          dnsCell.attr('title', (info.dns.rcode ? info.dns.rcode : '') + ' - Hostname cannot be resolved from an IPv6-only resolver:');
           if (info.dns.unbound_trace) {
             dnsCell.addClass('clickable')
             dnsCell.on('click', function() {
