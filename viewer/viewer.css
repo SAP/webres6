@@ -302,8 +302,35 @@ td.dns-status, th.dns-status {
 .dns-status-not-ipv6-only-ready {
   color: Red;
 }
+.dns-status-not-ipv6-only-ready::after {
+  content: "✘";
+}
 .dns-status-ipv6-only-ready {
   color: Darkgreen;
+}
+.dns-status-ipv6-only-ready::after {
+  content: "✓";
+}
+.dns-status-ipv6-only-ready-aaaa::after {
+  content: "AAAA";
+  font-size: x-small;
+  border: 1px solid Darkgreen;
+  border-radius: 4px;
+  padding: 1px 2px;
+  margin-left: 2px;
+  text-wrap: nowrap;
+}
+.dns-status-ipv6-only-ready-no-aaaa::after {
+  content: "A only";
+  font-size: x-small;
+  border: 1px solid Darkgreen;
+  border-radius: 4px;
+  padding: 1px 2px;
+  margin-left: 2px;
+  text-wrap: nowrap;
+}
+.dns-status-ipv6-only-unknown::after {
+  content: "?";
 }
 td.as-number {
   color: gray;
@@ -464,13 +491,19 @@ td.ip-netname {
   .dns-status-ipv6-only-ready {
     color: lightseagreen
   }
-  meter ::-webkit-meter-optimum-value, meter:-moz-meter-optimum::-moz-meter-bar {
+  .dns-status-ipv6-only-ready-aaaa::after {
+    border: 1px solid lightseagreen;
+  }
+  .dns-status-ipv6-only-ready-no-aaaa::after {
+    border: 1px solid lightseagreen;
+  }
+  meter::-webkit-meter-optimum-value, meter:-moz-meter-optimum::-moz-meter-bar {
     background: lightseagreen
   }
-  meter ::-webkit-meter-sub-optimum-value, meter:-moz-meter-sub-optimum::-moz-meter-bar {
+  meter::-webkit-meter-sub-optimum-value, meter:-moz-meter-sub-optimum::-moz-meter-bar {
     background: #e3b010
   }
-  meter ::-webkit-meter-even-less-good-value, meter:-moz-meter-sub-sub-optimum::-moz-meter-bar {
+  meter::-webkit-meter-even-less-good-value, meter:-moz-meter-sub-sub-optimum::-moz-meter-bar {
     background: red;
   }
   .ipv4 {
