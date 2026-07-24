@@ -31,7 +31,7 @@ jobs:
           echo "value=sha-$(echo '${{ github.event.workflow_run.head_sha }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
 
       - name: Authenticate to Shoot cluster
-        uses: gardener/cc-utils/.github/actions/kubernetes-auth@9aaab6ff1f08a420d844520c502336268ba191b3
+        uses: gardener/cc-utils/.github/actions/kubernetes-auth@69593d2a258e721a1f8ae1921906dcb49e4294a1
         with:
           server: ${{ vars.SHOOT_API_URL }}
           server-ca-discovery-url: ${{ vars.SHOOT_CA_DISCOVERY_URL }}
