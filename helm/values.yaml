@@ -311,7 +311,7 @@ affinity: {}
 curl:
   image:
     repository: curlimages/curl
-    tag: "8.20.0"
+    tag: "8.21.0"
   securityContext: {}
   resources:
     requests:
