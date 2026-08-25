@@ -26,6 +26,11 @@ def main():
     transport = args.transport or os.environ.get("WEBRES6_MCP_TRANSPORT", "stdio")
 
     if transport == "http":
-        mcp.run(transport="streamable-http")
+        mcp.run(
+            transport="streamable-http",
+            host=os.environ.get("FASTMCP_HOST", "::1"),
+            port=int(os.environ.get("FASTMCP_PORT", "6470")),
+            stateless_http=True,
+        )
     else:
         mcp.run(transport="stdio")

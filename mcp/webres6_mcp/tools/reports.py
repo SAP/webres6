@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 from urllib.parse import quote
 
 from mcp.types import ContentBlock, ResourceLink, TextContent
+from mcp.server.mcpserver.context import Context
 
 from webres6_mcp.server import mcp, http_client
 from webres6_mcp.config import WEBRES6_API_URL, WEBRES6_VIEWER_URL
@@ -194,6 +195,7 @@ async def check_website_ipv6only_readiness(
     url: Annotated[str, "The URL of the website to check. Include the scheme (http:// or https://)."],
     scoreboard: Annotated[bool, "Whether to add this result to the public scoreboard. Ask the user before setting this to true."] = False,
     screenshot: Annotated[Literal["none", "small", "medium", "full"], "Take a PNG screenshot of the page. 'small' = 1024x768 viewport, 'medium' = 2048x1152, 'full' = full scrollable page. Retrieve via the screenshot resource."] = "none",
+    ctx: Context = None,
 ):
     """Check the IPv6-only readiness of a web page.
 
@@ -211,10 +213,12 @@ async def check_website_ipv6only_readiness(
     params = {"screenshot": screenshot, "whois": "true", "scoreboard": str(scoreboard).lower()}
 
     report: dict | None = None
-    for _ in range(10):
+    for attempt in range(10):
         r = await http_client.get(endpoint, params=params)
         if r.status_code == 202:
             delay = int(r.headers.get("Refresh", "15"))
+            if ctx is not None:
+                await ctx.report_progress(attempt + 1, None, f"Crawl in progress — checking again in {delay}s")
             await asyncio.sleep(delay)
             continue
         r.raise_for_status()
