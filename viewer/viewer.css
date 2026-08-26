@@ -364,6 +364,11 @@ td.ip-netname {
 .hide {
   display: none;
 }
+.hide-button {
+  float: right;
+  color: lightgray;
+  margin-left: 1em;
+}
 .host-info-block td div {
   max-width: initial;
   font-size: small;
@@ -601,5 +606,8 @@ td.ip-netname {
   }
   td.host-localpart {
     overflow-wrap: anywhere;
+  }
+  .hide-button {
+    display: none;
   }
 }

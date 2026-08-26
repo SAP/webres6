@@ -32,10 +32,12 @@ SPDX-License-Identifier: Apache-2.0
   <div class="container">
   <h1>IPv6 Web Resource Checker</h1>
     <div class="contents-container template" id="srvmessage">
+        <div class="hide-button clickable" onclick="$(this).closest('.contents-container').hide()">&#x2715;</div>
     </div>
     <div class="contents-container template" id="input">
       <div class="contents-container-header">
         <h2>Enter URL to analyze</h2>
+        <div class="hide-button clickable" onclick="$(this).closest('.contents-container').hide()">&#x2715;</div>
       </div>
       <form id="urlForm">
         <input type="text" id="urlInput" placeholder="https://sap.com" required>
@@ -70,6 +72,7 @@ SPDX-License-Identifier: Apache-2.0
     <div class="contents-container scoreboard template" id="scoreboard">
       <div class="contents-container-header">
         <h2>Latest test results</h2>
+        <div class="hide-button clickable" onclick="$(this).closest('.contents-container').hide()">&#x2715;</div>
       </div>
       <table class="scoreboard-table">
         <colgroup>
@@ -100,6 +103,7 @@ SPDX-License-Identifier: Apache-2.0
     <div class="contents-container results template" id="results-template">
       <div class="contents-container-header">
         <h2 class="url"></h2>
+        <div class="hide-button clickable" onclick="$(this).closest('.contents-container').hide()">&#x2715;</div>
         <div class="timestamp"></div>
       </div>
       <div class="overview">
@@ -183,7 +187,7 @@ SPDX-License-Identifier: Apache-2.0
     <div class="contents-container">
       <div class="contents-container-header">
         <h2>Introduction / Help</h2>
-        <div class="help-hide-button clickable" style="float: right; color: lightgray;" onclick="$(this).closest('.contents-container').hide()">&#x2715;</div>
+        <div class="hide-button clickable" onclick="$(this).closest('.contents-container').hide()">&#x2715;</div>
       </div>
       <p>This is the <i>IPv6 Web Resource Checker (webres6)</i>. It checks IPv6-only readiness of a Web page or app 
         by crawling a given URL using Selenium and analyzes whether all page resources (could) have been loaded via IPv6.</p>
