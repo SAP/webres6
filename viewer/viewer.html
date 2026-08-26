@@ -186,22 +186,15 @@ SPDX-License-Identifier: Apache-2.0
         <div class="help-hide-button clickable" style="float: right; color: lightgray;" onclick="$(this).closest('.contents-container').hide()">&#x2715;</div>
       </div>
       <p>This is the <i>IPv6 Web Resource Checker (webres6)</i>. It checks IPv6-only readiness of a Web page or app 
-        by crawling a given URL using Selenium and analyzes whether all page resources have been loaded via IPv6.</p>
+        by crawling a given URL using Selenium and analyzes whether all page resources (could) have been loaded via IPv6.</p>
       <p>The IPv6-only Scores show the proportion of resources that could successfully be loaded IPv6-only based on HTTP and DNS transactions.
         The overall score is reduced to 0% if the main hostname of the URL is not IPv6-only ready.</p>
       <p><i>Webres6</i> was inspired by Paul Marks' <i><a href="https://github.com/pmarks-net/ipvfoo">IPvFoo</a></i> browser extension.
         While <i>IPvFoo</i> is more flexible and interactive, <i>Webres6</i> can be run as a service and allows IPv6-only testing without installation or IPv6 on the users' client as well as automated analysis.</p>
-      <p>Several elements in the result are clickable to see further details or toggle information displayed. Further documentation can be found on the <a href="https://github.com/sap/webres6">IPv6 Web Resource Checker</a> project page on GitHub.</p>
-      <h3>Limitations</h3>
-      <p>The Selenium automation just loads the URL in a "fresh" browser.
-        No efforts are taken to hide this being a robot.
-        No cookie consent interactions and delayed on-scroll content loading takes place.
-        Because we don't have long-term cookie state and modern Web pages tend to react to browser state, this will most likely result in some resources, especially sophisticated advertisements and analytic scripts, not getting loaded like in a normal browsing session.
-      <p>No authentication/login takes place - this is only possible in a dedicated setup through custom extensions.</p>
-      <p>The DNS checks only verify whether the hostname can be resolved from a recursive IPv6-only resolver.
-        To get a complete picture, it is necessary to take a closer look at whole DNS delegation chain of all hosts involved for IPv6-only realness. 
-        You may want to try <a href="https://ready.chair6.net/">ready.chair6.net</a> or running <i>dig +trace</i> from an IPv6-only host for that.</p>
-      </p>
+      <p>Several elements in the result are clickable to see further details or toggle information displayed.</p>
+      <p>More details on the <a href="https://github.com/sap/webres6#testing-strategy">testing strategy</a> used,
+        <a href="https://github.com/sap/webres6#known-limitations">known limitations</a>,
+          and further documentation can be found on the <a href="https://github.com/sap/webres6">IPv6 Web Resource Checker</a> project page on GitHub.</p>
     </div>
     <div class="footer">
       <div id="privacy-policy"></div>
