@@ -25,7 +25,7 @@
 
 ## About this project
 
-The *IPv6 Web Resource Checker (webres6)* is a small tool to check IPv6-only readiness of a Web page or app.
+The *IPv6 Web Resource Checker (Webres6)* is a small tool to check IPv6-only readiness of a Web page or app.
 It loads a given URL using Selenium and displays the IP addresses of all hosts it fetches resources from.
 It comes with a CLI and Web app.
 
@@ -48,21 +48,34 @@ The tool is inspired by Paul Marks' [IPvFoo](https://github.com/pmarks-net/ipvfo
 
 The tool can be accessed using a [CLI Client](#cli) and a built-in [Web app](#web-app-usage) and an experimental [MCP server](#mcp).
 
+### Testing Strategy
+
+The testing strategy of *Webres6* is consists of five phases: 
+
+1. *Crawling the web page with Selenium.* We use Chromium with dual-stack connectivity to crawl all resources used by the Web page including resources loaded by Java Scripts and as dependencies. As we have dual stack connectivity, we also consider resources unavailable in an IPv6-only-strict scenario.
+2. *Extracting the resources loaded and the IP addresses* from the Chromium performance log. We determine which resources were loaded from a host that we successfully fetched resources via IPv6 from and count all these resources as "IPv6-only HTTP ready" (even if some were actually loaded over IPv4). 
+3. *Testing IPv6-only-strict DNS resolution (dnsprobe).* We try to resolve all host names encountered during the crawl using an [Unbound](https://www.nlnetlabs.nl/projects/unbound/) base IPv6-only-strict DNS resolver and count all resources "IPv6-only DNS ready" if the whole DNS delegation chain was resolvable via IPv6 (even the the HTTP connection was IPv4-only). 
+4. *Look up Whois information for the IP addresses encountered* to aid further manual / AI analysis.
+5. *Compile and store the report* and calculate IPv6-only ready scores bases resources being "IPv6-only HTTP ready", "IPv6-only DNS ready", or both.
+
 ### Known limitations
 
-Only works if Selenium is running on a dual-stack hosts (or on an IPv6-only host with NAT64).
-  - If the host is IPv4-only, everything will be reported in red even if the Web pages are IPv6 ready – This limitation is going to stay.
-  - If the host is IPv6-only without NAT64, all IPv4-only resources are missed out. 
+Only works if Selenium is running on a dual-stack hosts (or on an IPv6-only host with NAT64) and dual-stack DNS.
+  - If the host is IPv4-only, everything will be reported in red even if the Web pages are IPv6 ready.
+  - If the host is IPv6-only without NAT64, all IPv4-only resources are missed out. This will result in missing to detect resources only available over IPv4 and make the result useless.
+  - If DNS recursor used by Selenium is not dual-stack, resources with IPv6 gaps on the DNS delegation chain will be missing and make the result useless too.
+  
+As we use the normal Happy Eyeballs implementation of Chromium, resources that are slow to respond over IPv6 may be loaded over IPv4 and reported as IPv4 only.
 
 No auto-detection of NAT64 prefixes - prefixes other than the well-known prefix `64:ff9b::/96` need to be statically configured.
 
 The Selenium automation is quite simple and just loads the URL. 
 As modern Web pages tend to be complex, this will most likely result in many resources not getting loaded/analyzed a normal browser would load.
- - No efforts are taken to hide this being a robot
+ - No authentication/login takes place (could be added through custom Selenium/Python code)
  - No delayed on-scroll content loading takes place
  - No Cookie consent interactions are supported (can be added through custom Selenium/Python code – this does not work well in practice though)
  - Because we don't have long-term cookie state, we [expect that some advertisements and analytics may not be loaded](https://doi.org/10.48550/arXiv.2506.11947).
- - No authentication/login takes place (could be added through custom Selenium/Python code)
+ - No efforts are taken to hide this being a robot
 
 Without *dnsprobe*, it ignores DNS aspects: Even if this tool reports green, it is still necessary to check the whole DNS delegation chain of all hosts involved for IPv6-only realness.
 With the *dnsprobe* microservice included in the project, DNS testing is fully supported.
