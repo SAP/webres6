@@ -1,0 +1,122 @@
+/* CDE/Motif theme overlay for webres6 viewer
+ * Drop this file on the viewer window to apply.
+ *
+ * SPDX-FileCopyrightText: 2026 SAP SE and IPv6 Web Resource Checker contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+:root {
+  --cde-bg:    #B2B6C2;   /* Motif panel gray */
+  --cde-hi:    #D4D8E4;   /* bevel highlight  – top/left  */
+  --cde-sh:    #767A86;   /* bevel shadow     – bottom/right */
+  --cde-title: #623570;   /* CDE title-bar purple */
+  --cde-subtitle: #626280;   /* CDE subtitle-bar blue */
+  --cde-fg:    #FFFFFF;
+  color-scheme: light;
+}
+
+/* ── Base ─────────────────────────────────────────────── */
+body {
+  font-family: Helvetica, Arial, sans-serif;
+  background: var(--cde-bg);
+  color: #000;
+}
+
+.container { padding: 6px; }
+
+/* ── Raised panel ─────────────────────────────────────── */
+.contents-container {
+  background: var(--cde-bg);
+  border-radius: 0;
+  box-shadow: none;
+  border: 2px solid;
+  border-color: var(--cde-hi) var(--cde-sh) var(--cde-sh) var(--cde-hi);
+  margin-bottom: 6px;
+}
+
+/* Title bar: bleed header to container edges */
+.contents-container > .contents-container-header {
+  background: var(--cde-title);
+  margin: -24px -24px 16px -24px;
+  padding: 4px 4px 4px 24px ;
+}
+.contents-container > .contents-container-header h2,
+.contents-container > .contents-container-header .scoreboard-filter-label {
+  color: var(--cde-fg);
+  font-size: 0.9em;
+  margin: 2px 0;
+}
+.contents-container > .hide-button {
+  display: none;
+}
+
+h1 { color: #000; font-size: 1.1em; }
+h2, h3 { color: #000; }
+
+/* ── Buttons ──────────────────────────────────────────── */
+button {
+  background: var(--cde-bg);
+  color: #000;
+  border-radius: 0;
+  border: 2px solid;
+  border-color: var(--cde-hi) var(--cde-sh) var(--cde-sh) var(--cde-hi);
+  padding: 4px 16px;
+  font-family: inherit;
+}
+button:active {
+  border-color: var(--cde-sh) var(--cde-hi) var(--cde-hi) var(--cde-sh);
+}
+
+/* ── Inputs ───────────────────────────────────────────── */
+input[type="text"], input[type="number"], select {
+  background: #fff;
+  color: #000;
+  border-radius: 0;
+  border: 2px solid;
+  border-color: var(--cde-sh) var(--cde-hi) var(--cde-hi) var(--cde-sh);
+  padding: 3px 6px;
+  font-family: 'Courier New', monospace;
+}
+
+/* ── Tables ───────────────────────────────────────────── */
+table {
+  background: var(--cde-bg);
+  border-radius: 0;
+  box-shadow: none;
+  border: 2px solid;
+  border-color: var(--cde-hi) var(--cde-sh) var(--cde-sh) var(--cde-hi);
+}
+thead { background: var(--cde-subtitle); color: var(--cde-fg); }
+tbody { border-top: 1px solid var(--cde-sh); }
+.scoreboard-table tr { border-top: 1px solid var(--cde-sh); }
+th, td { border: none; }
+
+/* ── Overview / score items ───────────────────────────── */
+.overview-item {
+  background: var(--cde-bg);
+  color: #000;
+  border-radius: 0;
+  box-shadow: none;
+  border: 2px solid;
+  border-color: var(--cde-hi) var(--cde-sh) var(--cde-sh) var(--cde-hi);
+}
+
+/* ── Status colours ───────────────────────────────────── */
+.status.ipv6only-ready     { background: #3A7A3A; color: #fff; }
+.status.ipv6only-not-ready { background: #7A2A2A; color: #fff; }
+.status.ipv6only-unknown   { background: var(--cde-bg); color: #000; }
+.status.error              { background: #7A2A2A; color: #fff;
+                             border: 2px dashed var(--cde-sh); }
+#srvmessage                { background: #7A2A2A; color: #fff; }
+
+/* ── Screenshot ───────────────────────────────────────── */
+.screenshot-wrapper img {
+  border-radius: 0;
+  box-shadow: none;
+  border: 2px solid;
+  border-color: var(--cde-sh) var(--cde-hi) var(--cde-hi) var(--cde-sh);
+}
+
+/* ── Misc ─────────────────────────────────────────────── */
+a      { color: #000080; }
+.footer { color: var(--cde-sh); }

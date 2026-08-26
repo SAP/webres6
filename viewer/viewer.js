@@ -26,7 +26,7 @@ async function loadSrvConfig() {
       const srvconfig = await resp.json();
       // render server message (if available)
       if (srvconfig && srvconfig.message) {
-        $('#srvmessage').html(srvconfig.message);
+        $('#srvmessage').append(srvconfig.message);
         $('#srvmessage').removeClass('template');
       }
       // render privacy policy (if available)
@@ -360,6 +360,7 @@ async function analyzeURL(url, wait = 2, scoreboard_entry = false, screenshot = 
   const [domContainer, overview, domContainerId] = createResultsDomContainer(url);
   const loadingStatus = $('#results-template .overview .status.status-loading').clone();
   loadingStatus.appendTo(overview);
+  domContainer[0].scrollIntoView({ behavior: 'smooth' });
   // Build API URL
   let apiUrl = getAPIBase() + `/url(${encodeURIComponent(url)})?wait=${wait}&scoreboard=${scoreboard_entry}&screenshot=${screenshot}&whois=${whois}`;
   if (ext && ext !== "(none)") apiUrl += `&ext=${encodeURIComponent(ext)}`;
@@ -435,6 +436,7 @@ async function analyzeReport(report) {
   const [domContainer, overview, domContainerId] = createResultsDomContainer(report.substring(0, 25));
   const loadingStatus = $('#results-template .overview .status.status-loading').clone();
   loadingStatus.appendTo(overview);
+  domContainer[0].scrollIntoView({ behavior: 'smooth' });
   // Fetch report data
   reportUrl = srvArchiveLinkTemplate(report);
   try {
@@ -651,7 +653,7 @@ function handleFormSubmit(e) {
 
   analyzeURL(url, parseFloat($('#waitTime').val()), $('#scoreboardSwitch').is(':checked'), $('#screenshotSelect').val(), $('#extensionSelect').val(), $('#whoisLookup').is(':checked'));
   $('#urlInput').val('');
-  $('#scoreboard').addClass('hide');
+  // $('#scoreboard').addClass('hide');
 }
 
 /* Handle URL anchors for direct loading of reports, URLs or the scoreboard */
