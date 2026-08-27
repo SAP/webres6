@@ -9,7 +9,6 @@ build-backend = "hatchling.build"
 name = "webres6-cli"
 version = "1.6.2"
 description = "IPv6 Web Resource Checker CLI"
-readme = "../README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
 dependencies = [
