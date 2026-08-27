@@ -228,12 +228,16 @@ def gen_fancy_hostlist(hosts, original_host=None, show_proto=False,
         max_local_length = max(max_local_length, len(local_part))
         dns = info.get('dns', {})
         dns_status = dns.get('ipv6_only_ready', None) if dns else None
+        dns_success = dns.get('success', False) if dns else False
         dns_part = ''
         dns_color = ''
         if dns_status is not None:
             max_dns_length = 4
-            if dns_status:
+            if dns_status and dns_success:
                 dns_part = '✓'
+                dns_color = color['dns_ok']
+            elif dns_status and not dns_success:
+                dns_part = '🅰'
                 dns_color = color['dns_ok']
             else:
                 dns_part = 'x'
