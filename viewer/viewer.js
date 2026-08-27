@@ -249,11 +249,7 @@ function renderHostsTable(data, hostsContainer) {
           if (info.dns.unbound_trace) {
             dnsCell.addClass('clickable')
             dnsCell.on('click', function() {
-              const traceWindow = window.open('', '_blank');
-              traceWindow.document.title = `Unbound debug trace for ${hostname}`;
-              const body = $(traceWindow.document.body);
-              body.append($('<h1>').text('Unbound debug trace for ' + hostname));
-              body.append($('<pre>').text(atob(info.dns.unbound_trace)));
+              showUnboundTrace(hostname, info.dns.unbound_trace);
             });
           }
         }
@@ -460,6 +456,115 @@ async function analyzeReport(report) {
       errStatus.find('.placeholder').text(`${response.status} ${response.statusText}`);
       errStatus.removeClass('template');
       overview.append(errStatus);
+  }
+}
+
+/* Open a folded unbound trace viewer in a new window */
+function showUnboundTrace(hostname, traceB64) {
+  const text = atob(traceB64);
+  const lines = text.split('\n');
+  const ITER_RE   = /^\[(\d+)\] iter_handle processing q with state (.+)$/;
+  const SEND_RE   = /^\[(\d+)\] sending query: (.+)$/;
+  const ANSWER_RE = /^\[(\d+)\] answer cb$/;
+  const RESP_RE   = /^\[(\d+)\] response for (.+)$/;
+
+  // Split trace into sections, starting a new one at each iter_handle, sending query, or answer cb line
+  const sections = [];
+  let cur = { label: 'Initialization', state: 'init', open: false, lines: [] };
+  for (let i = 0; i < lines.length; i++) {
+    const mIter   = lines[i].match(ITER_RE);
+    const mSend   = !mIter && lines[i].match(SEND_RE);
+    const mAnswer = !mIter && !mSend && lines[i].match(ANSWER_RE);
+    if (mIter) {
+      sections.push(cur);
+      const ts = mIter[1], state = mIter[2].trim();
+      const nextLine = (lines[i + 1] || '').replace(/^\s*\[\d+\]\s*/, '').trim();
+      cur = { label: `[${ts}] ${state} — ${nextLine}`, state, open: state === 'QUERY TARGETS STATE', lines: [lines[i]] };
+    } else if (mSend) {
+      sections.push(cur);
+      const ts = mSend[1], query = mSend[2].trim();
+      cur = { label: `[${ts}] sending query: ${query}`, state: 'send', open: false, lines: [lines[i]] };
+    } else if (mAnswer) {
+      sections.push(cur);
+      const ts = mAnswer[1];
+      // scan forward for the "response for" line (arrives ~15 lines later, before the next section boundary)
+      let respFor = '';
+      for (let j = i + 1; j < Math.min(i + 50, lines.length); j++) {
+        if (lines[j].match(ITER_RE) || lines[j].match(SEND_RE) || lines[j].match(ANSWER_RE)) break;
+        const mResp = lines[j].match(RESP_RE);
+        if (mResp) { respFor = mResp[2].trim(); break; }
+      }
+      const label = respFor ? `[${ts}] answer cb — response for ${respFor}` : `[${ts}] answer cb`;
+      cur = { label, state: 'answer-cb', open: false, lines: [lines[i]] };
+    } else {
+      cur.lines.push(lines[i]);
+    }
+  }
+  sections.push(cur);
+
+  function sectionClass(state, label) {
+    if (state === 'init')                  return 'tr-init-header';
+    if (state.startsWith('INIT REQUEST'))  return 'tr-init';
+    if (state.startsWith('QUERY TARGETS')) return 'tr-targets';
+    if (state.startsWith('QUERY RESPONSE')) {
+      if (label.includes('ANSWER'))        return 'tr-answer';
+      if (label.includes('REFERRAL'))      return 'tr-referral';
+      return 'tr-other';
+    }
+    if (state.startsWith('FINISHED'))      return 'tr-finished';
+    if (state.startsWith('PRIME'))         return 'tr-prime';
+    if (state === 'send')                  return 'tr-send';
+    if (state === 'answer-cb')             return 'tr-answer-cb';
+    return 'tr-other';
+  }
+
+  const win = window.open('', '_blank');
+  const doc = win.document;
+  doc.title = `Unbound trace: ${hostname}`;
+
+  const style = doc.createElement('style');
+  style.textContent = `
+    body { font-family: monospace; line-height: 1.4; background: #1a1a1a; color: #ccc; margin: 8px; }
+    h1 { margin: 0 0 6px; }
+    details { margin: 1px 0; border-left: 3px solid #333; }
+    summary { cursor: pointer; padding: 2px 6px; list-style: none;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; }
+    summary::-webkit-details-marker { display: none; }
+    summary::before { content: '▶ '; font-size: 9px; opacity: 0.6; }
+    details[open] > summary::before { content: '▼ '; }
+    pre { margin: 0; padding: 2px 6px 4px 18px; white-space: pre-wrap; word-break: break-all;
+          font-size: small; border-top: 1px solid #2a2a2a; }
+    .tr-init-header summary { color: #880; font-style: italic; }
+    .tr-init        summary { color: #6ab0f5; }
+    .tr-targets     summary { color: #eea; font-weight: bold; }
+    .tr-answer      summary { color: #6ec87e; }
+    .tr-referral    summary { color: #c8a030; }
+    .tr-finished    summary { color: #6ec87e; }
+    .tr-prime       summary { color: #888; }
+    .tr-send        summary { color: #d4a030; }
+    .tr-answer-cb   summary { color: #9ab8e0; }
+    .tr-other       summary { color: #aaa; }
+  `;
+  doc.head.appendChild(style);
+
+  const h1 = doc.createElement('h1');
+  h1.textContent = `Unbound trace: ${hostname}`;
+  doc.body.appendChild(h1);
+
+  for (const sec of sections) {
+    const details = doc.createElement('details');
+    if (sec.open) details.setAttribute('open', '');
+    details.className = sectionClass(sec.state, sec.label);
+
+    const summary = doc.createElement('summary');
+    summary.textContent = sec.label;
+    details.appendChild(summary);
+
+    const pre = doc.createElement('pre');
+    pre.textContent = sec.lines.join('\n');
+    details.appendChild(pre);
+
+    doc.body.appendChild(details);
   }
 }
 
