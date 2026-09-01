@@ -16,4 +16,5 @@ WORKDIR /usr/share/nginx/html
 COPY viewer/viewer.* viewer/favicon.* viewer/404.html viewer/50x.html viewer/disabled.html ./
 COPY viewer/fonts/ ./fonts/
 COPY viewer/nginx.conf.template /etc/nginx/templates/default.conf.template
-RUN mkdir -p .well-known/acme-challenge res6/report
+RUN mkdir -p .well-known/acme-challenge res6/report && \
+    ln -s ./.well-known/site.css ./site.css

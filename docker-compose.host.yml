@@ -53,6 +53,7 @@ services:
     network_mode: host
     volumes:
       - ./data/reports:/usr/share/nginx/html/res6/report:ro
+      - ./viewer/site.css:/usr/share/nginx/html/.well-known/site.css:ro
     depends_on:
       - webres6-api
 
