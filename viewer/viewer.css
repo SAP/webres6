@@ -49,7 +49,10 @@ body {
   padding: 0px 20px 20px 20px;
 }
 .contents-container {
-  background: #fff;
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
   padding: 24px 24px 20px 24px;
@@ -96,24 +99,24 @@ h1 {
   padding: 8px 12px;
   border-radius: 8px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-  background: #eaf1fb;
+  background: #e0f0ffd0;
   color: #2a4d7a;
 }
 .status.error {
-  background: #b30000;
+  background: #b30000f0;
   color: #fddede;
   border: 2px dashed #300010;
 }
 .status.ipv6only-ready {
-  background: #e6fbe6;
+  background: #e6fbe6c0;
   color: #1a7a1a;
 }
 .status.ipv6only-not-ready {
-  background: #ffeaea;
+  background: #efc1c1c0;
   color: #b32020;
 }
 .status.ipv6only-unknown {
-  background: lightgray;
+  background: #d3d3d3c0;
   color: #501030;
 }
 meter {
@@ -186,7 +189,7 @@ input[type="text"] {
   white-space: nowrap;
 }
 #srvmessage {
-  background: #ffa0cd;
+  background: #ffa0cd80;
 }
 #input form {
   display: inline-block;
@@ -220,7 +223,7 @@ table {
   padding: 2px 4px;
   border-radius: 8px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-  background: #fafcff;
+  background: rgba(250, 252, 255, 0.6);
 }
 th, td {
   /* border: 1px solid #e0e6ef; */
@@ -229,8 +232,11 @@ th, td {
   vertical-align: top;
 }
 thead {
-  background: #eaf1fb;
+  background: #e0f0ffd0;
   color: #2a4d7a;
+}
+tr:hover {
+  background: #ffe0f0e0;
 }
 tbody {
   border-top: 1px solid #eaf1fb;
@@ -425,34 +431,34 @@ td.ip-netname {
     color: #ababba
   }
   .contents-container {
-    background: #1e1e1e;
+    background: #1e1e1ea0;
     box-shadow: 0 2px 8px rgba(0,0,0,0.5);
   }
   .overview-item {
-    background: #2a3b4e;
+    background: #2a3b4ec0;
     color: #aad4ff;
     box-shadow: 0 1px 4px rgba(0,0,0,0.5);
   }
   .status.error {
-    background: #aa6680;
+    background: #aa6680e0;
     color: aliceblue;
     border: 2px dashed #ff8080;
   }
   #srvmessage {
-    background: #aa6680;
+    background: #aa6680e0;
     color: aliceblue
   }
   h1 {
    color: lightslategray;
   }
   button {
-    background-color: #2a3b4e;
+    background-color: #2a3b4ec0;
   }
   table {
-    background: #333;
+    background: #333333a0;
   }
   thead {
-    background: #2a3b4e;
+    background: #2a3b4ea0;
     color: #aad4ff;
   }
   tbody {
@@ -467,15 +473,15 @@ td.ip-netname {
     border: 1px solid gray;
   }
   .status.ipv6only-ready {
-    background: lightseagreen;
+    background: rgba(32, 178, 171, 0.7);
     color: #003300;
   }
   .status.ipv6only-not-ready {
-    background: darkred;
+    background: rgba(139, 0, 0, 0.7);
     color: #ffb2b2;
   }
   .status.ipv6only-unknown {
-    background: darkgray;
+    background: rgba(169, 169, 169, 0.7);
     color: #501030;
   }
   progress {
