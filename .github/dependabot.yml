@@ -27,6 +27,11 @@ updates:
     groups:
       opentelemetry:
         patterns: ["opentelemetry-*"]
+      selenium:
+        patterns: ["selenium"]
+      non-opentelemetry:
+        patterns: ["*"]
+        exclude-patterns: ["opentelemetry-*", "selenium"]
 
   - package-ecosystem: docker
     directory: /api
