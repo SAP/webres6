@@ -22,6 +22,6 @@ dependencies:
     repository: "https://www.selenium.dev/docker-selenium"
     condition: selenium.deploy
   - name: valkey
-    version: 0.11.0
+    version: 0.12.0
     repository: "https://valkey.io/valkey-helm/"
     condition: valkey.deploy
