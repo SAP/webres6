@@ -239,6 +239,9 @@ thead {
   background: #e0f0ffd0;
   color: #2a4d7a;
 }
+tr:hover {
+  background: #ffe0f0e0;
+}
 tbody {
   border-top: 1px solid #eaf1fb;
 }
