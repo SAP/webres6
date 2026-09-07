@@ -239,6 +239,9 @@ def take_screenshot(driver, mode='full', log_prefix=''):
             return driver.get_screenshot_as_base64()
 
     except WebDriverException as e:
+        span = trace.get_current_span()
+        span.record_exception(e)
+        span.set_status(Status(StatusCode.ERROR, e.msg or str(e)))
         print(f"{log_prefix}ERROR: failed acquiring screenshot: {e.msg}", file=sys.stderr)
         return None
 
@@ -320,6 +323,7 @@ def get_hostinfo(driver, log_prefix=''):
             print(f"{log_prefix}WARNING: Error parsing IP address: {remote_ip} - {e}", file=sys.stderr)
             span.add_event("log.invalid_ip", {"ip_address": remote_ip, "error": str(e)})
             ip = None
+            continue # skip the entry
         # add resource statistics
         match ip.version:
             case 4:
@@ -396,6 +400,9 @@ def cleanup_crawl(driver, extension=None, extension_data=None, log_prefix=''):
         cleanup_selenium_crawl(driver, extension=extension, extension_data=extension_data, log_prefix=log_prefix)
         driver.quit()
     except WebDriverException as e:
+        span = trace.get_current_span()
+        span.record_exception(e)
+        span.set_status(Status(StatusCode.ERROR, e.msg or str(e)))
         print(f"{log_prefix}ERROR: failed quitting WebDriver: {e.msg}", file=sys.stderr)
     return
 

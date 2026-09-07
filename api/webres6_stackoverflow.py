@@ -19,8 +19,11 @@ class TracedThreadPoolExecutor(ThreadPoolExecutor):
         super().__init__(*args, **kwargs)
 
     def with_otel_context(self, context: otel_context.Context, fn: Callable):
-        otel_context.attach(context)
-        return fn()
+        token = otel_context.attach(context)
+        try:
+            return fn()
+        finally:
+            otel_context.detach(token)
 
     def submit(self, fn, *args, **kwargs):
         """Submit a new task to the thread pool."""

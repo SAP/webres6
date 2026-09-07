@@ -29,7 +29,8 @@ from flask import Flask, redirect, request, jsonify, send_from_directory
 from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry, multiprocess, disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 
 # OpenTelemetry imports
-from opentelemetry import trace
+from opentelemetry import trace, context as otel_context
+from opentelemetry.trace import Status, StatusCode
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -90,22 +91,27 @@ check_storage_health  = True
 # OpenTelemetry configuration
 debug_trace        = 'trace' in getenv("DEBUG", '').lower().split(',')
 otel_endpoint      = getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", getenv("OTEL_EXPORTER_OTLP_ENDPOINT", None))
-otel_enabled       = getenv("OTEL_TRACING_ENABLED", "true" if otel_endpoint else "false").lower() in ['true', '1', 'yes']
 otel_console       = getenv("OTEL_CONSOLE_EXPORTER_ENABLED", "true" if debug_trace else "false").lower() in ['true', '1', 'yes']
+otel_enabled       = getenv("OTEL_TRACING_ENABLED", "true" if otel_endpoint or otel_console else "false").lower() in ['true', '1', 'yes']
 otel_service_name  = getenv("OTEL_SERVICE_NAME", "webres6-api")
 
 # get nodename for report
 report_node = platform.node().split('.')[0]
 if len(report_node) >12 or '-' in report_node:
     report_node = sha256(report_node.encode()).hexdigest()[:12]
-print(f"report node is set to '{report_node}'.", file=sys.stderr)
 
 # Initialize OpenTelemetry tracing
+tracer = None
 def init_tracing():
     """Initialize OpenTelemetry tracing."""
+    global tracer
+
+    if tracer != None:
+        return tracer
+
     if not otel_enabled:
-        print("OpenTelemetry tracing is disabled.", file=sys.stderr)
-        return trace.get_tracer(__name__)  # Return a no-op tracer to avoid errors in tracing calls
+        tracer = trace.get_tracer(__name__)  # Return a no-op tracer to avoid errors in tracing calls
+        return tracer
 
     try:
         # Create resource with service information
@@ -126,26 +132,23 @@ def init_tracing():
             # It will automatically use OTEL_EXPORTER_OTLP_TRACES_ENDPOINT or OTEL_EXPORTER_OTLP_ENDPOINT
             otlp_exporter = OTLPSpanExporter()
             provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
-            print(f"OpenTelemetry OTLP exporter configured: {otel_endpoint}", file=sys.stderr)
 
         # Add console exporter if debugging
         if otel_console:
             console_exporter = ConsoleSpanExporter()
             provider.add_span_processor(BatchSpanProcessor(console_exporter))
-            print("OpenTelemetry console exporter enabled", file=sys.stderr)
 
         # Set global tracer provider
         trace.set_tracer_provider(provider)
-
-        print("OpenTelemetry tracing initialized successfully", file=sys.stderr)
+        tracer = trace.get_tracer(__name__)
 
     except Exception as e:
         print(f"WARNING: Failed to initialize OpenTelemetry: {e}", file=sys.stderr)
 
-    return trace.get_tracer(__name__)  # Returns a no-op tracer if initialization failed
+    return tracer
 
 # Initialize tracing
-tracer = init_tracing()
+init_tracing()
 
 # Background worker pools — shared across all requests
 crawl_executor = TracedThreadPoolExecutor(tracer, max_workers=crawl_jobs, thread_name_prefix="crawl-")
@@ -164,6 +167,8 @@ webres6_response_time = Histogram('webres6_response_time_seconds_total', 'Respon
 webres6_whois_cache_size = Gauge('webres6_whois_cache_size_total', 'Number of entries in whois cache')
 webres6_whois_cache_size.set_function(lambda: storage_manager.whois_cache_size() if storage_manager else 0)
 webres6_dnsprobe_results_total = Counter('webres6_dnsprobe_results_total', 'Total number of DNSProbe results', ['rcode', 'aaaa_ok'])
+webres6_crawl_jobs = Gauge('webres6_crawl_jobs_total', 'Crawl worker jobs pending/running', ['state'])
+webres6_whois_jobs = Gauge('webres6_whois_jobs_total', 'WHOIS worker jobs pending/running', ['state'])
 
 # allow overrides in serverconfig directory)
 sys.path.insert(0, srvconfig_dir)
@@ -225,7 +230,9 @@ dnsprobe_executor = None
 def init_dnsprobe():
     global dnsprobe
     global dnsprobe_executor
-    if not enable_dnsprobe:
+    if dnsprobe is not None:
+        return
+    elif not enable_dnsprobe:
         dnsprobe = None
     elif dnsprobe_api_url and dnsprobe_api_url.strip() != '':
         dnsprobe = DNSprobe(remote=dnsprobe_api_url)
@@ -353,7 +360,12 @@ def add_whois_info(hosts, log_prefix=''):
 
     # execute jobs in parallel and update host info with results
     span.add_event("whois_lookups_started", {"total_lookups": len(tasks), "whois_jobs": whois_jobs})
-    future_to_ip = {whois_executor.submit(get_whois_info, ip, local_cache, local_cache_lock, storage_manager, debug=debug_whois): (whois_data, ip_in, ip) for whois_data, ip_in, ip in tasks}
+    future_to_ip = {}
+    for whois_data, ip_in, ip in tasks:
+        webres6_whois_jobs.labels('queued').inc()
+        future = whois_executor.submit(get_whois_info, ip, local_cache, local_cache_lock, storage_manager, debug=debug_whois)
+        future.add_done_callback(lambda _: webres6_whois_jobs.labels('queued').dec())
+        future_to_ip[future] = (whois_data, ip_in, ip)
     for future in as_completed(future_to_ip):
         whois_data, ip_in, ip = future_to_ip[future]
         whois_info, source = future.result()
@@ -736,44 +748,58 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
     storage_manager.put_result_cacheline(cache_key, sentinel, crawl_timeout, False)
 
     # run crawl and analysis in background thread to avoid blocking the main server thread
+    # capture the request span context now (on the request thread, while the span is still active)
+    # so the background span can link back to the originating HTTP request
+    _request_ctx = trace.get_current_span().get_span_context()
+    _bg_links = [trace.Link(_request_ctx)] if _request_ctx.is_valid else []
+
     def _background_crawl():
-        # restore span context in background thread
-        bg_span = trace.get_current_span()
+        # start a new root span — the Flask request span is already ended by the time
+        # the background thread runs; adding events to it would be silently discarded
+        with tracer.start_as_current_span(
+            "webres6.background_crawl",
+            context=otel_context.Context(),
+            kind=trace.SpanKind.INTERNAL,
+            links=_bg_links,
+            attributes={"webres6.url": url, "webres6.report_id": report_id},
+        ) as bg_span:
+            # run crawl and analysis
+            json_result, error_code = crawl_and_analyze_url(
+                url, wait=wait, timeout=timeout, ext=ext,
+                scoreboard_entry=scoreboard_entry,
+                screenshot_mode=screenshot_mode,
+                lookup_whois=lookup_whois,
+                report_id=report_id, report_node=report_node)
 
-        # run crawl and analysis
-        json_result, error_code = crawl_and_analyze_url(
-            url, wait=wait, timeout=timeout, ext=ext,
-            scoreboard_entry=scoreboard_entry,
-            screenshot_mode=screenshot_mode,
-            lookup_whois=lookup_whois,
-            report_id=report_id, report_node=report_node)
+            if error_code != 200:
+                error_cache_line = { 'type': 'error', 'ts': ts, 'report_id': report_id,
+                                      'data': json_result, 'error_code': error_code }
+                storage_manager.put_result_cacheline(cache_key, error_cache_line, error_cache_ttl, True)
+                bg_span.set_status(Status(StatusCode.ERROR, f"HTTP {error_code}"))
+                bg_span.add_event("webres6.crawl_error", {"error_code": error_code})
+                return
 
-        if error_code != 200:
-            error_cache_line = { 'type': 'error', 'ts': ts, 'report_id': report_id,
-                                  'data': json_result, 'error_code': error_code }
-            storage_manager.put_result_cacheline(cache_key, error_cache_line, error_cache_ttl, True)
-            bg_span.add_event("webres6.crawl_error", {"error_code": error_code})
-            return
+            # sucess – try to archive result and put report link into cache
+            archived = storage_manager.archive_result(report_id, json_result)
+            bg_span.add_event("webres6.crawl_success", attributes={"archived": archived})
+            if archived:
+                cache_line = { 'type': 'report', 'ts': ts, 'report_id': report_id,
+                                'data': storage_manager.url_template.replace('{report_id}', report_id) }
+                storage_manager.put_result_cacheline(cache_key, cache_line, result_cache_ttl, True)
+                print(f"{lp}report archived successfully as {report_id}", file=sys.stderr)
 
-        # sucess – try to archive result and put report link into cache
-        archived = storage_manager.archive_result(report_id, json_result)
-        bg_span.add_event("webres6.crawl_success", attributes={"archived": archived})
-        if archived:
-            cache_line = { 'type': 'report', 'ts': ts, 'report_id': report_id,
-                            'data': storage_manager.url_template.replace('{report_id}', report_id) }
-            storage_manager.put_result_cacheline(cache_key, cache_line, result_cache_ttl, True)
-            print(f"{lp}report archived successfully as {report_id}", file=sys.stderr)
+                if scoreboard and scoreboard_entry and json_result.get('error') is None:
+                    scoreboard.enter(json_result)
+            else:
+                # if archiving failed, send report data directly in cache (with shorter TTL to avoid long-term storage
+                print(f"{lp}WARNING: archiving report failed, caching report data directly", file=sys.stderr)
+                cache_line = { 'type': 'error', 'ts': ts, 'report_id': report_id,
+                                      'data': json_result, 'error_code': error_code }
+                storage_manager.put_result_cacheline(cache_key, cache_line, result_cache_ttl, True)
 
-            if scoreboard and scoreboard_entry and json_result.get('error') is None:
-                scoreboard.enter(json_result)
-        else:
-            # if archiving failed, send report data directly in cache (with shorter TTL to avoid long-term storage
-            print(f"{lp}WARNING: archiving report failed, caching report data directly", file=sys.stderr)
-            cache_line = { 'type': 'error', 'ts': ts, 'report_id': report_id,
-                                  'data': json_result, 'error_code': error_code }
-            storage_manager.put_result_cacheline(cache_key, cache_line, result_cache_ttl, True)
-
-    crawl_executor.submit(_background_crawl)
+    webres6_crawl_jobs.labels('queued').inc()
+    future = crawl_executor.submit(_background_crawl)
+    future.add_done_callback(lambda _: webres6_crawl_jobs.labels('queued').dec())
     span.add_event("webres6.crawl_queued", {"report_id": report_id})
     return send_in_progress_response(report_id, refresh=client_retry_base*2)
 
@@ -856,6 +882,7 @@ def check_auth(request):
     return False
 
 
+@tracer.start_as_current_span("webres6.check_component_health")
 def check_component_health():
     """ Check health of all backend services (storage, DNS, selenium) and extensions.
 
@@ -871,11 +898,14 @@ def check_component_health():
     if check_storage_health:
         try:
             if storage_manager:
-                storage_manager.check_health()
+                with tracer.start_as_current_span("storage.check_health") as storage_span:
+                    storage_span.set_attribute("storage.backend", storage_manager.__class__.__name__)
+                    storage_manager.check_health()
                 status['storage'] = 'ok'
             else:
                 status['storage'] = 'not configured'
         except Exception as e:
+            trace.get_current_span().record_exception(e)
             status['storage'] = f'error: {str(e)}'
             all_healthy = False
 
@@ -1130,11 +1160,17 @@ def create_webres6_app():
         Flask app instance
     """
 
+    # Report whois configuration
+    print(f"Report node is set to '{report_node}'.", file=sys.stderr)
+    print(f"Whois lookups are {'enabled with TTL ' + str(whois_cache_ttl) + 's' if enable_whois else 'disabled'}.", file=sys.stderr)
+    if otel_endpoint:
+        print(f"OpenTelemetry OTLP exporter configured: {otel_endpoint}", file=sys.stderr)
+    if otel_console:
+        print("OpenTelemetry console exporter enabled", file=sys.stderr)
+
+    init_tracing()
     init_storage()
     init_dnsprobe()
-
-    # Report whois configuration
-    print(f"Whois lookups are {'enabled with TTL ' + str(whois_cache_ttl) + 's' if enable_whois else 'disabled'}.", file=sys.stderr)
 
     # Load URL blocklist if available
     _url_blocklist_file = os.path.join(srvconfig_dir, 'url-blocklist')
@@ -1192,6 +1228,7 @@ def create_dnsprobe_app():
         Flask app instance
     """
 
+    init_tracing()
     init_dnsprobe()
 
     # Only start DNSProbe API if dnsprobe is configured and local
