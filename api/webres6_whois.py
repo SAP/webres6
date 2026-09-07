@@ -12,6 +12,7 @@ from prometheus_client import Counter
 
 # OpenTelemetry imports
 from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 from opentelemetry.instrumentation.urllib import URLLibInstrumentor
 
 # Get tracer instance
@@ -62,7 +63,9 @@ def get_whois_info(ip, local_cache, local_cache_lock, storage_manager, debug=Fal
         # Perform WHOIS lookup using ipwhois library last
         try:
             obj = IPWhois(str(ip))
-            result = obj.lookup_rdap(depth=1)
+            with tracer.start_as_current_span("whois.lookup_rdap") as rdap_span:
+                rdap_span.set_attribute("whois.ip", str(ip))
+                result = obj.lookup_rdap(depth=1)
 
             # Extract network CIDR
             network_cidr = result.get("network", {}).get("cidr")
@@ -91,6 +94,7 @@ def get_whois_info(ip, local_cache, local_cache_lock, storage_manager, debug=Fal
 
         except Exception as e:
             print(f"\tWARNING: whois lookup failed for {ip}: {e}", file=sys.stderr)
+            span.set_status(Status(StatusCode.ERROR, str(e)))
             span.add_event("whois_lookup_failed", {"error": str(e)})
             return None
 

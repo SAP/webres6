@@ -241,7 +241,19 @@ class DNSprobe:
             hostname, unbound_v6_conf, unbound_debug_level, debug_unbound
         )
         future.add_done_callback(lambda _: self._job_metrics.on_done())
-        jsres = future.result(timeout=dnsprobe_timeout)
+        try:
+            jsres = future.result(timeout=dnsprobe_timeout)
+        except Exception as exc:
+            rcode = "TIMEOUT" if isinstance(exc, TimeoutError) else "ERROR"
+            span.record_exception(exc)
+            span.set_status(Status(StatusCode.ERROR, str(exc)))
+            span.set_attributes({
+                "dnsprobe.success": False,
+                "dnsprobe.rcode": rcode,
+                "dnsprobe.aaaa_count": 0,
+                "dnsprobe.elapsed": -1,
+            })
+            return {"success": False, "rcode": rcode, "aaaa_records": [], "time_elapsed": -1}
         span.set_attributes({
             "dnsprobe.success": jsres.get('success', False),
             "dnsprobe.rcode": jsres.get('rcode', 'unknown'),
