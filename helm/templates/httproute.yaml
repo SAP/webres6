@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+# SPDX-License-Identifier: Apache-2.0
+{{- include "webres6.routing.guard" . -}}
+{{- if .Values.gateway.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "webres6.fullname" . }}
+  labels:
+    {{- include "webres6.labels" . | nindent 4 }}
+  {{- with .Values.gateway.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    - name: {{ include "webres6.gateway.parentName" . }}
+      {{- with .Values.gateway.gatewayRef.namespace }}
+      namespace: {{ . }}
+      {{- end }}
+      {{- with .Values.gateway.gatewayRef.sectionName }}
+      sectionName: {{ . }}
+      {{- end }}
+  hostnames:
+    {{- range .Values.gateway.hosts }}
+    - {{ . | quote }}
+    {{- end }}
+  rules:
+    # Gateway API sorts rules by match specificity (longest prefix wins), so the
+    # "/" catch-all below never shadows the more specific service paths above it.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /res6
+      backendRefs:
+        - name: {{ include "webres6.fullname" . }}-api
+          port: {{ .Values.api.service.port }}
+    {{- if and .Values.dnsprobe.exposeIngress (eq .Values.dnsprobe.mode "service") }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /dnsprobe
+      backendRefs:
+        - name: {{ include "webres6.fullname" . }}-dnsprobe
+          port: {{ .Values.dnsprobe.service.port }}
+    {{- else if and .Values.dnsprobe.exposeIngress (eq .Values.dnsprobe.mode "internal") }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /dnsprobe
+      backendRefs:
+        - name: {{ include "webres6.fullname" . }}-api
+          port: {{ .Values.api.service.port }}
+    {{- end }}
+    {{- if .Values.mcp.enabled }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /mcp
+      backendRefs:
+        - name: {{ include "webres6.fullname" . }}-mcp
+          port: {{ .Values.mcp.service.port }}
+    {{- end }}
+    {{- with .Values.gateway.additionalRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ include "webres6.fullname" . }}-viewer
+          port: {{ .Values.viewer.service.port }}
+{{- end }}

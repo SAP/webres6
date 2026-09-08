@@ -290,6 +290,30 @@ ingress:
         - webres6.example.com
   additionalPaths: {}
 
+# Gateway API configuration (alternative to ingress; mutually exclusive with it).
+# When gateway.enabled is true, the chart always renders an HTTPRoute. Set
+# createGateway: true to also render a Gateway resource; otherwise the HTTPRoute
+# attaches to an existing (cluster-managed / shared) Gateway via gatewayRef.
+gateway:
+  enabled: false
+  createGateway: false        # also render a Gateway resource (self-contained install)
+  className: "traefik"        # gatewayClassName; only used when createGateway is true
+  # parentRef target when attaching to an existing Gateway (createGateway: false):
+  gatewayRef:
+    name: ""                  # existing Gateway name; defaults to the chart's own name if empty
+    namespace: ""             # Gateway namespace; set for cross-namespace attach (needs a ReferenceGrant)
+    sectionName: ""           # optional listener section name to bind to
+  annotations: {}
+  hosts:
+    - webres6.example.com
+  # TLS listeners; only used when createGateway is true (with a shared Gateway,
+  # TLS is configured on that Gateway's listeners, not here).
+  tls:
+    - secretName: prod-tls
+      hosts:
+        - webres6.example.com
+  additionalRules: []         # verbatim HTTPRoute rules (Gateway API analogue of ingress.additionalPaths)
+
 # .well-known file contents
 well_known:
   security.txt: |-

@@ -84,6 +84,24 @@ Selenium basic-auth secret name — auto-derived when selenium.deploy is true, o
 {{- end }}
 
 {{/*
+Guard: ingress and Gateway API routing are mutually exclusive — enabling both
+would double-expose every path. Fail rendering early with a clear message.
+*/}}
+{{- define "webres6.routing.guard" -}}
+{{- if and .Values.ingress.enabled .Values.gateway.enabled -}}
+{{- fail "ingress.enabled and gateway.enabled are mutually exclusive — pick one router" -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Gateway parentRef name — the existing (shared) Gateway to attach the HTTPRoute
+to, defaulting to the chart's own Gateway name when not overridden.
+*/}}
+{{- define "webres6.gateway.parentName" -}}
+{{- .Values.gateway.gatewayRef.name | default (include "webres6.fullname" .) -}}
+{{- end }}
+
+{{/*
 Valkey connection URL — auto-derived when valkey.deploy is true, otherwise uses valkey.url.
 */}}
 {{- define "webres6.valkey.url" -}}
