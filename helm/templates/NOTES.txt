@@ -10,3 +10,14 @@ Ingress for the following host names was deployed:
   - {{ . | quote }}
   {{- end }}
 {{- end }}
+{{ if .Values.gateway.enabled -}}
+Gateway API HTTPRoute for the following host names was deployed:
+  {{- range .Values.gateway.hosts }}
+  - {{ . | quote }}
+  {{- end }}
+  {{- if .Values.gateway.createGateway }}
+  (attached to Gateway {{ include "webres6.fullname" . }}, class {{ .Values.gateway.className }})
+  {{- else }}
+  (attached to existing Gateway {{ include "webres6.gateway.parentName" . }})
+  {{- end }}
+{{- end }}

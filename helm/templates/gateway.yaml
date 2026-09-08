@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: 2025 SAP SE and IPv6 Web Resource Checker contributors
+# SPDX-License-Identifier: Apache-2.0
+{{- include "webres6.routing.guard" . -}}
+{{- if and .Values.gateway.enabled .Values.gateway.createGateway }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ include "webres6.fullname" . }}
+  labels:
+    {{- include "webres6.labels" . | nindent 4 }}
+  {{- with .Values.gateway.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  gatewayClassName: {{ .Values.gateway.className }}
+  listeners:
+    {{- range .Values.gateway.hosts }}
+    - name: http-{{ . | replace "." "-" }}
+      protocol: HTTP
+      port: 80
+      hostname: {{ . | quote }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- end }}
+    {{- range .Values.gateway.tls }}
+    {{- $secret := .secretName }}
+    {{- range .hosts }}
+    - name: https-{{ . | replace "." "-" }}
+      protocol: HTTPS
+      port: 443
+      hostname: {{ . | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ $secret }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- end }}
+    {{- end }}
+{{- end }}

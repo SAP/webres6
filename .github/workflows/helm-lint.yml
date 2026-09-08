@@ -43,3 +43,20 @@ jobs:
 
       - name: Render with valkey and selenium subcharts
         run: helm template webres6 helm/ --set selenium.deploy=true --set valkey.deploy=true
+
+      - name: Render with ingress
+        run: helm template webres6 helm/ --set ingress.enabled=true --set mcp.enabled=true --set dnsprobe.exposeIngress=true
+
+      - name: Render with Gateway API (attach to shared gateway)
+        run: helm template webres6 helm/ --set gateway.enabled=true --set mcp.enabled=true --set dnsprobe.exposeIngress=true
+
+      - name: Render with Gateway API (self-contained gateway)
+        run: helm template webres6 helm/ --set gateway.enabled=true --set gateway.createGateway=true
+
+      - name: Assert ingress and gateway are mutually exclusive
+        run: |
+          if helm template webres6 helm/ --set ingress.enabled=true --set gateway.enabled=true > /dev/null 2>&1; then
+            echo "::error::Expected render to fail when both ingress and gateway are enabled"
+            exit 1
+          fi
+          echo "Guard correctly rejected enabling both ingress and gateway"
