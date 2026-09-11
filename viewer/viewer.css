@@ -210,7 +210,14 @@ input[type="text"] {
   width: 100%;
 }
 #waitTime{
-  width: 3em; 
+  width: 3em;
+  text-align: right;
+}
+/* moved from inline style= attributes so the CSP can restrict inline styles */
+#extensionSelect {
+  max-width: 10em;
+}
+#screenshotSelect {
   text-align: right;
 }
 #privacy-policy {
