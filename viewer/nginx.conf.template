@@ -8,17 +8,39 @@ server {
     merge_slashes off;
     rewrite ^/+(.*)$ /$1;
     root /usr/share/nginx/html;
+    server_tokens off;
+    # Security headers. Set at server level with `always` so they also apply to
+    # error pages. NOTE: `add_header` inside a `location` cancels all inherited
+    # `add_header`s, so cache lifetimes below use `expires` (a separate directive)
+    # instead of `add_header Cache-Control` to avoid stripping these headers from
+    # CSS/JS/HTML/report responses.
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "same-origin" always;
+    add_header Permissions-Policy "geolocation=(), camera=(), microphone=()" always;
+    # connect-src must include the archive location for direct report loading when
+    # reports are delivered from S3 (public/presigned) or a CDN; fetch() enforces
+    # connect-src across redirect hops, so the presigned 302 target needs it too.
+    # WEBRES6_ARCHIVE_SRC is a CSP source scoped to the bucket path (trailing "/"
+    # = prefix match) so only our bucket is allowed, not the whole S3 endpoint.
+    # It is empty for same-origin (local/valkey/private) setups.
+    # script-src / style-src carry no 'unsafe-inline': no inline handlers or scripts
+    # remain, inline style= attributes were moved to viewer.css, and the two runtime
+    # <style> injections (drag-drop CSS loader, unbound-trace popup) now load CSS as
+    # Blob-backed same-origin stylesheets (style-src 'self' blob:). The sha256 covers
+    # the fallback <style> block in viewer.html (recompute if that block changes).
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://ajax.googleapis.com; style-src 'self' blob: 'sha256-O6aM3X/U2p6pJp6Hams6SiFJJDeZnCntBqxBkg6dVF0='; img-src 'self' data:; font-src 'self'; connect-src 'self' ${WEBRES6_ARCHIVE_SRC}; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'" always;
     location / {
         index viewer.html;
     }
     location ~* \.(png|ico|woff|woff2)$ {
-      add_header Cache-Control "max-age=604800";
+      expires 604800s;
     }
     location ~* \.(css|js|html)$ {
-      add_header Cache-Control "max-age=30";
+      expires 30s;
     }
     location ~ ^/res6/report/(?<id>[a-z0-9-]+)$ {
-      add_header Cache-Control "max-age=604800";
+      expires 604800s;
       try_files /res6/report/report-$id.json @api;
     }
     location /res6/ {

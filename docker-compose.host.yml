@@ -49,6 +49,11 @@ services:
       - WEBRES6_API_URL=http://localhost:6400
       - DNSPROBE_API_URL=http://localhost:6400
       - WEBRES6_MCP_URL=http://localhost:6470
+      # Reports are served same-origin here, so no extra CSP connect-src source is
+      # needed. For public/presigned S3 or CDN delivery, set this to the archive
+      # source scoped to the bucket path (trailing "/"), e.g.
+      # WEBRES6_ARCHIVE_SRC=https://s3.eu-central-1.amazonaws.com/mybucket/
+      # - WEBRES6_ARCHIVE_SRC=
     restart: unless-stopped
     network_mode: host
     volumes:

@@ -522,8 +522,7 @@ function showUnboundTrace(hostname, traceB64) {
   const doc = win.document;
   doc.title = `Unbound trace: ${hostname}`;
 
-  const style = doc.createElement('style');
-  style.textContent = `
+  const css = `
     body { font-family: monospace; line-height: 1.4; background: #1a1a1a; color: #ccc; margin: 8px; }
     h1 { margin: 0 0 6px; }
     details { margin: 1px 0; border-left: 3px solid #333; }
@@ -545,6 +544,12 @@ function showUnboundTrace(hostname, traceB64) {
     .tr-answer-cb   summary { color: #9ab8e0; }
     .tr-other       summary { color: #aaa; }
   `;
+  // Load as a Blob-backed <link> rather than an inline <style> so the CSP can
+  // drop style-src 'unsafe-inline'. The popup is same-origin (about:blank),
+  // so it can read this origin's blob: URL, which style-src 'self' blob: allows.
+  const style = doc.createElement('link');
+  style.rel = 'stylesheet';
+  style.href = URL.createObjectURL(new Blob([css], { type: 'text/css' }));
   doc.head.appendChild(style);
 
   const h1 = doc.createElement('h1');
@@ -723,7 +728,12 @@ function handleDrop(event) {
     } else if (file.type === 'text/css' || file.name.endsWith('.css')) {
       const reader = new FileReader();
       reader.onload = function(e) {
-        $('<style>').text(e.target.result).appendTo('head');
+        // Apply dropped CSS as a Blob-backed same-origin stylesheet instead of an
+        // inline <style>, so the CSP needs style-src 'self' blob: (not 'unsafe-inline').
+        // This also blocks CSS-based exfiltration: external @import (style-src) and
+        // background url() (img-src) in the dropped file are no longer allowed.
+        const blob = new Blob([e.target.result], { type: 'text/css' });
+        $('<link rel="stylesheet">').attr('href', URL.createObjectURL(blob)).appendTo('head');
       };
       reader.readAsText(file);
     } else {
@@ -788,6 +798,11 @@ $(document).ready( async function() {
   // Drag and drop support
   document.body.ondragover = function(e) { e.preventDefault(); }
   document.body.ondrop = function(e) { e.preventDefault(); handleDrop(e); };
+  // Hide-button handler (delegated so it covers cloned template instances;
+  // replaces inline onclick= so the CSP can drop script-src 'unsafe-inline')
+  $(document).on('click', '.hide-button', function() {
+    $(this).closest('.contents-container').hide();
+  });
   // URL submission handler
   $('#urlForm').on('submit', function(e) { e.preventDefault(); handleFormSubmit(e); });
   // Load server config and enable features

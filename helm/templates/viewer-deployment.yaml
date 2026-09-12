@@ -43,6 +43,14 @@ spec:
               value: {{ .Values.viewer.port | default "80" | quote }}
             - name: WEBRES6_API_URL
               value: "http://{{ include "webres6.fullname" . }}-api:{{ .Values.api.port | default 6400 }}"
+            {{- $archiveSrc := .Values.viewer.archiveSrc | default "" }}
+            {{- if and (not $archiveSrc) (has .Values.api.s3DeliveryStrategy (list "public" "presigned")) .Values.api.s3Endpoint .Values.api.s3Bucket }}
+            {{- $archiveSrc = printf "%s/%s/" (trimSuffix "/" .Values.api.s3Endpoint) .Values.api.s3Bucket }}
+            {{- end }}
+            {{- if $archiveSrc }}
+            - name: WEBRES6_ARCHIVE_SRC
+              value: {{ $archiveSrc | quote }}
+            {{- end }}
             {{- if and (eq .Values.dnsprobe.mode "external") .Values.dnsprobe.url }}
             - name: DNSPROBE_API_URL
               value: {{ .Values.dnsprobe.url | quote }}

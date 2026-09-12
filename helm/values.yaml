@@ -195,6 +195,14 @@ viewer:
     tag: ""             # overrides image.tag
     pullPolicy: Always
   port: 6480
+  # CSP connect-src source for direct report loading from S3/CDN. Scope it to the
+  # bucket path with a trailing "/" (CSP prefix match) so only our bucket — not the
+  # whole shared S3 endpoint — is a valid fetch target. Leave empty for same-origin
+  # delivery (local/valkey or S3 "private"). When empty and api.s3DeliveryStrategy
+  # is "public"/"presigned", it defaults to "{api.s3Endpoint}/{api.s3Bucket}/".
+  # Set explicitly for a CDN (api.resultCDNTemplate) or real AWS with s3Endpoint
+  # unset, e.g. "https://s3.eu-central-1.amazonaws.com/mybucket/".
+  archiveSrc: ""
   service:
     type: ClusterIP
     port: 80
