@@ -5,6 +5,6 @@
   "description": "Static assets for the webres6 viewer. jQuery is vendored into the image at build time; this manifest exists so Dependabot tracks jQuery updates via the npm ecosystem.",
   "license": "Apache-2.0",
   "dependencies": {
-    "jquery": "3.7.1"
+    "jquery": "4.0.0"
   }
 }
