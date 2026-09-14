@@ -1,0 +1,10 @@
+{
+  "name": "webres6-viewer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Static assets for the webres6 viewer. jQuery is vendored into the image at build time; this manifest exists so Dependabot tracks jQuery updates via the npm ecosystem.",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "jquery": "3.7.1"
+  }
+}
