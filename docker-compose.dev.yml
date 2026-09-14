@@ -67,7 +67,7 @@ services:
       # Reports are served same-origin here, so no extra CSP connect-src source is
       # needed. For public/presigned S3 or CDN delivery, set this to the archive
       # source scoped to the bucket path (trailing "/"), e.g.
-      - WEBRES6_ARCHIVE_SRC=https://s3.eu-central-1.amazonaws.com/mybucket/
+      # - WEBRES6_ARCHIVE_SRC=https://s3.eu-central-1.amazonaws.com/mybucket/
     networks:
       - webres6-network
     ports:

@@ -69,6 +69,15 @@ updates:
     patterns: ["*"]
     labels: [dependencies]
 
+  - package-ecosystem: npm
+    directory: /viewer
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+    groups:
+      all:
+        patterns: ["*"]
+
   - package-ecosystem: docker-compose
     directory: /
     multi-ecosystem-group: docker
