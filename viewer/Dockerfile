@@ -5,7 +5,7 @@
 # Resolve vendored JS dependencies (jQuery) from the pinned package-lock.json.
 # Kept in a separate stage so no node/npm toolchain ships in the runtime image.
 # node:24-trixie-slim matches the Debian trixie base used across the other images.
-FROM node:24-trixie-slim AS jsdeps
+FROM node:26-trixie-slim AS jsdeps
 WORKDIR /build
 COPY viewer/package.json viewer/package-lock.json ./
 RUN npm ci --omit=dev
