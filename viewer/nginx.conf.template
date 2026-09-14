@@ -24,7 +24,7 @@ server {
     # WEBRES6_ARCHIVE_SRC is a CSP source scoped to the bucket path (trailing "/"
     # = prefix match) so only our bucket is allowed, not the whole S3 endpoint.
     # It is empty for same-origin (local/valkey/private) setups.
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' ${WEBRES6_ARCHIVE_SRC}; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' blob:; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ${WEBRES6_ARCHIVE_SRC}; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'" always;
     location / {
         index viewer.html;
     }
