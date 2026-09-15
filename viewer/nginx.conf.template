@@ -32,7 +32,7 @@ server {
       expires 604800s;
     }
     location ~* \.(css|js|html)$ {
-      expires 30s;
+      expires 5400s;
     }
     location ~ ^/res6/report/(?<id>[a-z0-9-]+)$ {
       expires 604800s;

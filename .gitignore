@@ -13,3 +13,6 @@ api/serverconfig/*.crx
 api/TEST*
 helm/charts/**
 helm/Chart.lock
+# viewer npm build artifacts (jquery is vendored at build time; see viewer/package.json)
+node_modules/
+viewer/jquery.min.js

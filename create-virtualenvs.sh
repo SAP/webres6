@@ -34,3 +34,16 @@ if [ ! -d "$SCRIPT_DIR/mcp/.venv" ]; then
   create_venv "$SCRIPT_DIR/mcp"
 fi
 
+# Ensure jquery is available in the viewer directory (needed to serve the viewer
+# locally through the API in dev). Runs regardless of venv state; skips cleanly
+# when npm is not installed, since the viewer is optional for API/CLI/MCP work.
+VIEWER_DIR="$SCRIPT_DIR/viewer"
+if [ -f "$VIEWER_DIR/jquery.min.js" ]; then
+  echo "jquery.min.js already present — skipping viewer dependency install."
+elif command -v npm >/dev/null 2>&1; then
+  echo "Downloading jquery.min.js into the viewer directory..."
+  ( cd "$VIEWER_DIR" && npm ci --omit=dev )
+else
+  echo "npm not found — skipping viewer jquery download. Install Node.js/npm and run 'cd viewer && npm ci' if you want to serve the viewer locally."
+fi
+
