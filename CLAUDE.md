@@ -124,4 +124,4 @@ GitHub Actions workflows are in `.github/workflows/`:
 
 ## Versioning
 
-The canonical version lives in `VERSION`. The pre-commit hook (registered by `create-virtualenvs.sh`) enforces that `api/webres6_api.py`, `api/pyproject.toml`, `mcp/pyproject.toml`, and both `version` and `appVersion` fields in `helm/Chart.yaml` all match `VERSION`. Update all of them when bumping the version.
+The canonical version lives in `VERSION`. The pre-commit hook (registered by `create-virtualenvs.sh`) enforces that `api/webres6_api.py`, `api/pyproject.toml`, `mcp/pyproject.toml`, both `version` and `appVersion` fields in `helm/Chart.yaml`, and `viewer/package.json` (plus its `viewer/package-lock.json`) all match `VERSION`. Update all of them when bumping the version. After bumping `viewer/package.json`, run `npm install --package-lock-only` in `viewer/` to sync the lockfile.

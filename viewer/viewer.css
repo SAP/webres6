@@ -59,6 +59,8 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
   padding: 24px 24px 20px 24px;
   margin-bottom: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .contents-container h2 {
   margin-top: 0px;

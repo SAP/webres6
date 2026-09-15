@@ -4,8 +4,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Verify that VERSION, api/webres6_api.py, api/pyproject.toml,
-# mcp/pyproject.toml, and helm/Chart.yaml all declare the same version
-# before every commit.
+# mcp/pyproject.toml, helm/Chart.yaml, and viewer/package.json (+ its
+# lockfile) all declare the same version before every commit.
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -35,5 +35,11 @@ check "helm/Chart.yaml (version)" \
 
 check "helm/Chart.yaml (appVersion)" \
     "$(grep '^appVersion:' helm/Chart.yaml | sed 's/appVersion:[[:space:]]*"\(.*\)"/\1/')"
+
+check "viewer/package.json" \
+    "$(grep '"version"' viewer/package.json | head -1 | sed 's/.*:[[:space:]]*"\(.*\)".*/\1/')"
+
+check "viewer/package-lock.json" \
+    "$(grep '"version"' viewer/package-lock.json | head -1 | sed 's/.*:[[:space:]]*"\(.*\)".*/\1/')"
 
 echo "pre-commit: version check passed ($VERSION)"
