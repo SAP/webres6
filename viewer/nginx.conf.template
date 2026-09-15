@@ -5,10 +5,24 @@ server {
     listen [::]:${NGINX_PORT};
     listen 0.0.0.0:${NGINX_PORT};
     listen unix:/var/run/nginx.webres6.sock;
+
     merge_slashes off;
     rewrite ^/+(.*)$ /$1;
     root /usr/share/nginx/html;
     server_tokens off;
+
+    # gzip compression for text-based responses. text/html is compressed
+    # implicitly; already-compressed assets (woff2/woff, png/ico) are omitted.
+    # gzip_vary adds "Vary: Accept-Encoding" so caches key on it; gzip_proxied any
+    # also compresses proxied API/report responses.
+    gzip on;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_types text/plain text/html text/css application/javascript application/json
+               application/manifest+json image/svg+xml application/xml text/xml;
+
     # Security headers. Set at server level with `always` so they also apply to
     # error pages. NOTE: `add_header` inside a `location` cancels all inherited
     # `add_header`s, so cache lifetimes below use `expires` (a separate directive)
@@ -25,6 +39,7 @@ server {
     # = prefix match) so only our bucket is allowed, not the whole S3 endpoint.
     # It is empty for same-origin (local/valkey/private) setups.
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' blob:; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ${WEBRES6_ARCHIVE_SRC}; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'" always;
+
     location / {
         index viewer.html;
     }
@@ -61,13 +76,14 @@ server {
     error_page  404               /404.html;
     error_page  500 502 503 504   /50x.html;
 }
+upstream webres6-viewer {
+    server unix:/var/run/nginx.webres6.sock;
+}
+
 server {
     listen unix:/var/run/nginx.disabled.sock;
     root /usr/share/nginx/html;
     rewrite ^/(.*)$ /disabled.html;
-}
-upstream webres6-viewer {
-    server unix:/var/run/nginx.webres6.sock;
 }
 upstream disabled {
     server unix:/var/run/nginx.disabled.sock;
