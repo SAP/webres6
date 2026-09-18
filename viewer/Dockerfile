@@ -31,5 +31,5 @@ COPY viewer/fonts/ ./fonts/
 # Vendored jQuery from the deps stage (see viewer/package.json; tracked by Dependabot).
 COPY --from=jsdeps /build/node_modules/jquery/dist/jquery.min.js ./jquery.min.js
 COPY viewer/nginx.conf.template /etc/nginx/templates/default.conf.template
-RUN mkdir -p .well-known/acme-challenge res6/report && \
+RUN mkdir -p .well-known/acme-challenge res6/report /var/cache/nginx/webres6 && \
     ln -s ./.well-known/site.css ./site.css

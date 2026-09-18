@@ -1,6 +1,18 @@
 # SPDX-FileCopyrightText: 2026 SAP SE and IPv6 Web Resource Checker contributors
 #
 # SPDX-License-Identifier: Apache-2.0
+#
+# Proxy cache zone for API and report responses. Declared at http level (this
+# file is included inside nginx's http {} block via conf.d). TTLs are driven
+# entirely by upstream Cache-Control headers; no proxy_cache_valid override.
+# Cache dir is created by the Dockerfile RUN step.
+proxy_cache_path /var/cache/nginx/webres6
+    levels=1:2
+    keys_zone=webres6:4m
+    max_size=2g
+    inactive=7d
+    use_temp_path=off;
+
 server {
     listen [::]:${NGINX_PORT};
     listen 0.0.0.0:${NGINX_PORT};
@@ -41,14 +53,20 @@ server {
     location /res6/ {
         proxy_pass ${WEBRES6_API_URL}/res6/;
         proxy_set_header Host $host;
+        proxy_cache webres6;
+        proxy_cache_lock on;
     }
     location @api {
         proxy_pass ${WEBRES6_API_URL}/$uri;
         proxy_set_header Host $host;
+        proxy_cache webres6;
+        proxy_cache_lock on;
     }
     location /dnsprobe/  {
         proxy_pass ${DNSPROBE_API_URL}/dnsprobe/;
         proxy_set_header Host $host;
+        proxy_cache webres6;
+        proxy_cache_lock on;
     }
 
     location = /mcp        { proxy_pass ${WEBRES6_MCP_URL}; proxy_set_header Host $host; }

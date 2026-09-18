@@ -74,6 +74,7 @@ services:
       - "6480:6480"
     volumes:
       - ./local_cache/reports:/usr/share/nginx/html/res6/report:ro
+      - ./local_cache/nginx-cache:/var/cache/nginx/webres6
       - ./viewer/site.dev.css:/usr/share/nginx/html/.well-known/site.css:ro
     depends_on:
       - webres6-api
