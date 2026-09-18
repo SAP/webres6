@@ -1,0 +1,51 @@
+# IPv6 Web Resource Checker (webres6)
+
+> Tests whether a web page or app is ready for IPv6-only clients. Drives
+> Chromium via Selenium, captures each resource's remote IP address, runs an
+> IPv6-only-strict DNS probe (Unbound), and produces a structured JSON report
+> with per-host readiness scores, optional screenshots, and WHOIS data.
+
+This page is a JavaScript single-page application. Crawling it directly
+yields no useful content beyond what is described here. Use the MCP or REST
+API instead to interact with the service programmatically.
+
+## MCP
+
+An MCP server may be available directly at `/mcp` on this host (streamable-http
+transport) — try registering it before installing anything locally.
+
+If no MCP is available on this host, a local stdio MCP can be installed from
+the project repository at https://github.com/SAP/webres6.
+
+**Tools:**
+
+- `check_website_ipv6_readiness` — crawl a URL; returns a trimmed report plus resource links for drill-down into per-host detail, DNS traces, and screenshots. Prefer this over the raw REST endpoint — the raw response can be very large.
+- `resolve_dns_v6only` — IPv6-only-strict DNS probe for a single hostname.
+- `get_websites_IPv6only_scoreboard` — fetch recent public results from the scoreboard.
+
+**Resources** (URI-addressed):
+
+- `webres6://report/{report_id}` — full trimmed report.
+- `webres6://report/{report_id}/summary` — top-level scores and counts only.
+- `webres6://report/{report_id}/host/{hostname}` — full host subtree including IP addresses, DNS status, WHOIS.
+- `webres6://report/{report_id}/host/{hostname}/dns_trace` — Unbound trace for DNS delegation failures.
+- `webres6://report/{report_id}/screenshot` — PNG screenshot (when captured).
+
+## REST API
+
+All endpoints return JSON. Replace `<url>` and `<hostname>` with real values;
+`<report_id>` is the UUID returned by the check endpoint.
+
+**Warning:** `GET /res6/url(<url>)` and `GET /res6/report/<report_id>` can
+return very large JSON payloads. Fetching reports pre-sliced through the MCP
+resources above is strongly recommended over direct REST access.
+
+- [Server config](/res6/serverconfig): `GET /res6/serverconfig` — available extensions, screenshot modes, feature flags, version.
+- [Check URL](/res6/url(https://example.com)): `GET /res6/url(<url>)` — crawl a URL; returns a full IPv6 readiness report (200) or a polling token (202 while in progress). Query params: `wait` (seconds), `timeout`, `screenshot` (none/small/medium/full), `scoreboard` (true/false).
+- [Get report](/res6/report/): `GET /res6/report/<report_id>` — retrieve a stored report by ID.
+- [Scoreboard](/res6/scoreboard): `GET /res6/scoreboard?limit=12` — recent public results ordered by timestamp.
+- [DNS probe](/dnsprobe/resolve6only(example.com)): `GET /dnsprobe/resolve6only(<hostname>)` — IPv6-only-strict DNS resolution; returns AAAA records, rcode, and an Unbound trace on failure.
+
+## Optional
+
+- [Project repository](https://github.com/SAP/webres6): Source code, architecture documentation, installation instructions, and contribution guide.

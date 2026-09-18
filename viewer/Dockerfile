@@ -26,7 +26,7 @@ ENV NGINX_PORT=6480
 
 # Copy viewer files
 WORKDIR /usr/share/nginx/html
-COPY viewer/viewer.* viewer/favicon.* viewer/404.html viewer/50x.html viewer/disabled.html ./
+COPY viewer/viewer.* viewer/favicon.* viewer/404.html viewer/50x.html viewer/disabled.html viewer/llms.txt ./
 COPY viewer/fonts/ ./fonts/
 # Vendored jQuery from the deps stage (see viewer/package.json; tracked by Dependabot).
 COPY --from=jsdeps /build/node_modules/jquery/dist/jquery.min.js ./jquery.min.js
