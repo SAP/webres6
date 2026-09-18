@@ -54,6 +54,8 @@ webres6-mcp --transport http               # HTTP on FASTMCP_HOST:FASTMCP_PORT
 
 **Exposed tools:** `check_website_ipv6_readiness`, `resolve_dns_v6only`, `get_websites_IPv6only_scoreboard`
 
+When adding, removing, or renaming MCP tools or resources, update `viewer/llms.txt` to keep the tool and resource list in sync.
+
 **Exposed resources** (templated, addressed by URI):
 - `webres6://report/{report_id}` — full trimmed report
 - `webres6://report/{report_id}/summary` — top-level scores + counts only
