@@ -33,24 +33,39 @@ spec:
             type: PathPrefix
             value: /res6
       backendRefs:
+        {{- if .Values.viewer.cacheApiRequests }}
+        - name: {{ include "webres6.fullname" . }}-viewer
+          port: {{ .Values.viewer.service.port }}
+        {{- else }}
         - name: {{ include "webres6.fullname" . }}-api
           port: {{ .Values.api.service.port }}
+        {{- end }}
     {{- if and .Values.dnsprobe.exposeIngress (eq .Values.dnsprobe.mode "service") }}
     - matches:
         - path:
             type: PathPrefix
             value: /dnsprobe
       backendRefs:
+        {{- if .Values.viewer.cacheApiRequests }}
+        - name: {{ include "webres6.fullname" . }}-viewer
+          port: {{ .Values.viewer.service.port }}
+        {{- else }}
         - name: {{ include "webres6.fullname" . }}-dnsprobe
           port: {{ .Values.dnsprobe.service.port }}
+        {{- end }}
     {{- else if and .Values.dnsprobe.exposeIngress (eq .Values.dnsprobe.mode "internal") }}
     - matches:
         - path:
             type: PathPrefix
             value: /dnsprobe
       backendRefs:
+        {{- if .Values.viewer.cacheApiRequests }}
+        - name: {{ include "webres6.fullname" . }}-viewer
+          port: {{ .Values.viewer.service.port }}
+        {{- else }}
         - name: {{ include "webres6.fullname" . }}-api
           port: {{ .Values.api.service.port }}
+        {{- end }}
     {{- end }}
     {{- if .Values.mcp.enabled }}
     - matches:
