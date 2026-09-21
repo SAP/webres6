@@ -203,6 +203,9 @@ viewer:
   # Set explicitly for a CDN (api.resultCDNTemplate) or real AWS with s3Endpoint
   # unset, e.g. "https://s3.eu-central-1.amazonaws.com/mybucket/".
   archiveSrc: ""
+  # Route /res6 (and /dnsprobe) through the viewer nginx instead of directly to the API service.
+  # When true, the viewer's proxy_cache layer is active for external API traffic.
+  cacheApiRequests: false
   service:
     type: ClusterIP
     port: 80

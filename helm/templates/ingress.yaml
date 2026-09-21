@@ -34,9 +34,15 @@ spec:
             pathType: Prefix
             backend:
               service:
+                {{- if $.Values.viewer.cacheApiRequests }}
+                name: {{ include "webres6.fullname" $ }}-viewer
+                port:
+                  number: {{ $.Values.viewer.service.port }}
+                {{- else }}
                 name: {{ include "webres6.fullname" $ }}-api
                 port:
                   number: {{ $.Values.api.service.port }}
+                {{- end }}
           {{- with $.Values.ingress.additionalPaths }}
           {{- toYaml . | nindent 10 }}
           {{- end }}
@@ -45,18 +51,30 @@ spec:
             pathType: Prefix
             backend:
               service:
+                {{- if $.Values.viewer.cacheApiRequests }}
+                name: {{ include "webres6.fullname" $ }}-viewer
+                port:
+                  number: {{ $.Values.viewer.service.port }}
+                {{- else }}
                 name: {{ include "webres6.fullname" $ }}-dnsprobe
                 port:
                   number: {{ $.Values.dnsprobe.service.port }}
+                {{- end }}
           {{- end }}
           {{- if and ($.Values.dnsprobe.exposeIngress) (eq $.Values.dnsprobe.mode "internal") }}
           - path: /dnsprobe
             pathType: Prefix
             backend:
               service:
+                {{- if $.Values.viewer.cacheApiRequests }}
+                name: {{ include "webres6.fullname" $ }}-viewer
+                port:
+                  number: {{ $.Values.viewer.service.port }}
+                {{- else }}
                 name: {{ include "webres6.fullname" $ }}-api
                 port:
                   number: {{ $.Values.api.service.port }}
+                {{- end }}
           {{- end }}
           {{- if $.Values.mcp.enabled }}
           - path: /mcp
