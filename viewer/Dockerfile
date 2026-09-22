@@ -23,6 +23,7 @@ ENV WEBRES6_MCP_URL=http://disabled
 # (local/valkey/private delivery), e.g. "https://s3.eu-central-1.amazonaws.com/mybucket/".
 ENV WEBRES6_ARCHIVE_SRC=""
 ENV NGINX_PORT=6480
+ENV NGINX_CACHE_MAX_SIZE=2g
 
 # Copy viewer files
 WORKDIR /usr/share/nginx/html
