@@ -206,6 +206,7 @@ viewer:
   # Route /res6 (and /dnsprobe) through the viewer nginx instead of directly to the API service.
   # When true, the viewer's proxy_cache layer is active for external API traffic.
   cacheApiRequests: false
+  cacheMaxSize: "2g"
   service:
     type: ClusterIP
     port: 80

@@ -9,7 +9,7 @@
 proxy_cache_path /var/cache/nginx/webres6
     levels=1:2
     keys_zone=webres6:4m
-    max_size=2g
+    max_size=${NGINX_CACHE_MAX_SIZE}
     inactive=7d
     use_temp_path=off;
 
