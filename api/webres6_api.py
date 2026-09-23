@@ -83,6 +83,7 @@ whois_jobs        = int(getenv("WHOIS_JOBS", 2*crawl_jobs))
 enable_scoreboard = getenv("ENABLE_SCOREBOARD", 'true').lower() in ['true', '1', 'yes']
 block_ip_literals     = getenv("BLOCK_IP_LITERALS", 'true').lower() in ['true', '1', 'yes']
 scoreboard_request_limit = int(getenv("SCOREBOARD_REQUEST_LIMIT", 1024))
+scoreboard_default_limit = int(getenv("SCOREBOARD_DEFAULT_LIMIT", 15))
 screenshot_modes  = ['none', 'small', 'medium', 'full']
 check_selenium_health = True
 check_dnsprobe_health = True
@@ -1071,7 +1072,7 @@ def setup_res6_endpoints(app, srv_message=None, privacy_policy=None):
             try:
                 limit = int(request.args.get('limit'))
             except (TypeError, ValueError):
-                limit = 12
+                limit = scoreboard_default_limit
             if limit > scoreboard_request_limit:
                 limit = scoreboard_request_limit
             res = jsonify(scoreboard.get_entries(limit=limit))
@@ -1120,7 +1121,7 @@ def setup_res6_endpoints(app, srv_message=None, privacy_policy=None):
             def viewer_debug():
                 return jsonify({
                     "workspace": {
-                        "root": f"{viewer_dir}/",
+                        "root": f"{os.path.dirname(app_home)}/",
                         "uuid": uuid.uuid4(),
                     }}), 200
 

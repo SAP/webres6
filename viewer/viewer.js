@@ -10,7 +10,6 @@ function getAPIBase() {
 }
 
 const timeFormatOptions = { timeZoneName: 'short', hour12: false , month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'};
-const scoreboardDefaultLimit=12;
 /* Load server config
  * this loads and renders messages, browser extensions in remote Selenium, screenshot modes, whois support and more
  */
@@ -21,7 +20,7 @@ var serverMaxRetryTime = 180; // seconds - if server indicates that crawl is sti
 async function loadSrvConfig() {
   // load config
   try {
-    const resp = await fetch(getAPIBase() + '/serverconfig');
+    const resp = await fetch(getAPIBase() + '/serverconfig', { credentials: 'include' });
     if (resp.ok) {
       const srvconfig = await resp.json();
       // render server message (if available)
@@ -377,7 +376,7 @@ async function analyzeURL(url, wait = 2, scoreboard_entry = false, screenshot = 
   }
   while (true) {
     try {
-      const response = await fetch(apiUrl);
+      const response = await fetch(apiUrl, { credentials: 'include' });
       if (response.status === 202) {
         const elapsed = (Date.now() - startTime) / 1000;
         if (elapsed >= serverMaxRetryTime) {
@@ -436,7 +435,7 @@ async function analyzeReport(report) {
   // Fetch report data
   reportUrl = srvArchiveLinkTemplate(report);
   try {
-    const response = await fetch(reportUrl);
+    const response = await fetch(reportUrl, { credentials: 'include' });
     if (response.ok) {
       // Success - process the response
       domContainer.find('.overview .status.status-loading').remove();
@@ -574,15 +573,18 @@ function showUnboundTrace(hostname, traceB64) {
 }
 
 /* Load and render scoreboard */
-async function loadScoreboard(resultsLimit=scoreboardDefaultLimit) {
+async function loadScoreboard(resultsLimit=undefined) {
   // Check if scoreboard is supported
   if (!srvSupportsScoreboard) {
     return;
   }
   // Fetch scoreboard data
-  const scoreboardUrl = getAPIBase() + `/scoreboard?limit=${resultsLimit}`;
+  var scoreboardUrl = getAPIBase() + `/scoreboard`;
+  if (resultsLimit) {
+    scoreboardUrl = getAPIBase() + `/scoreboard?limit=${resultsLimit}`;
+  }
   try {
-    const response = await fetch(scoreboardUrl);
+    const response = await fetch(scoreboardUrl, { credentials: 'include' });
     if (response.ok) {
       // parse data
       const data = await response.json();
@@ -601,6 +603,10 @@ async function loadScoreboard(resultsLimit=scoreboardDefaultLimit) {
             }
           }
         });
+        // set results limit if undefined
+        if(!resultsLimit) {
+          resultsLimit = data.length;
+        }
         // Sort data by score (by timestamp, newest first, and then URL as tiebreaker)
         data.sort(function(a, b) {
           var score = -compareScoreboardEntries(a, b, 'ts');
@@ -617,7 +623,6 @@ async function loadScoreboard(resultsLimit=scoreboardDefaultLimit) {
           const reverse = $(this).hasClass('sorted-ascending');
           $('#scoreboard th.sortable').removeClass('sorted-ascending sorted-descending');
           if (reverse) {
-
             $(this).addClass('sorted-descending');
           } else {
             $(this).addClass('sorted-ascending');
@@ -786,7 +791,7 @@ function handleAnchor(anchor) {
     analyzeReport(target)
     return true;
   } else if (verb.toLowerCase() === 'scoreboard') {
-    loadScoreboard(parseInt(target) || scoreboardDefaultLimit);
+    loadScoreboard(parseInt(target) || undefined);
     return true;
   } else {
     return false;
@@ -794,7 +799,7 @@ function handleAnchor(anchor) {
 }
 
 /* Load server config and register callbacks */ 
-$(document).ready( async function() {
+$(async function() {
   // Drag and drop support
   document.body.ondragover = function(e) { e.preventDefault(); }
   document.body.ondrop = function(e) { e.preventDefault(); handleDrop(e); };
@@ -812,7 +817,7 @@ $(document).ready( async function() {
   const anchor = document.URL.split('#')[1];
   if (!anchor || !handleAnchor(anchor.split(':'))) {
     // enable scoreboard
-    loadScoreboard(scoreboardDefaultLimit);
+    loadScoreboard();
     // show input form and add handlers
     $('#input').removeClass('template');
   }

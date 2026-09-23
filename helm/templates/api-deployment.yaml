@@ -155,6 +155,14 @@ spec:
             {{- end }}
             - name: ENABLE_SCOREBOARD
               value: {{ .Values.api.scoreboard.enabled | quote | default "true" }}
+            {{- if .Values.api.scoreboard.defaultLimit }}
+            - name: SCOREBOARD_DEFAULT_LIMIT
+              value: {{ .Values.api.scoreboard.defaultLimit | quote }}
+            {{- end }}
+            {{- if .Values.api.scoreboard.requestLimit }}
+            - name: SCOREBOARD_REQUEST_LIMIT
+              value: {{ .Values.api.scoreboard.requestLimit | quote }}
+            {{- end }}
             - name: CRAWL_JOBS
               value: {{ .Values.api.crawlJobs | quote }}
             {{- if .Values.api.timeout.crawl }}

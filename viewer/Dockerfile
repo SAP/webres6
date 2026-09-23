@@ -8,7 +8,9 @@
 FROM node:26-trixie-slim AS jsdeps
 WORKDIR /build
 COPY viewer/package.json viewer/package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci
+COPY viewer/viewer.js ./
+RUN npm run build
 
 # Use official NGINX mainline image
 FROM nginx:1.31.5
@@ -31,6 +33,8 @@ COPY viewer/viewer.* viewer/favicon.* viewer/404.html viewer/50x.html viewer/dis
 COPY viewer/fonts/ ./fonts/
 # Vendored jQuery from the deps stage (see viewer/package.json; tracked by Dependabot).
 COPY --from=jsdeps /build/node_modules/jquery/dist/jquery.min.js ./jquery.min.js
+# Minified viewer.js from the deps stage (overwrites the source copy above).
+COPY --from=jsdeps /build/viewer.min.js ./viewer.js
 COPY viewer/nginx.conf.template /etc/nginx/templates/default.conf.template
 RUN mkdir -p .well-known/acme-challenge res6/report /var/cache/nginx/webres6 && \
     ln -s ./.well-known/site.css ./site.css
