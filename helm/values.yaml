@@ -82,6 +82,8 @@ api:
   # scoreboard
   scoreboard:
     enabled: true
+    defaultLimit: 15     # SCOREBOARD_DEFAULT_LIMIT: entries returned by /res6/scoreboard by default
+    requestLimit: 1024   # SCOREBOARD_REQUEST_LIMIT: max entries a client may request
     S3backup: true
     S3backupSchedule: "@daily"
     PVCbackup: false
