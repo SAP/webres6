@@ -35,11 +35,108 @@
 }
 :root {
   color-scheme: light dark; /* both supported */
+
+  /* Brand / primary blue */
+  --color-brand:                #2a4d7a;
+  --color-brand-bg:             #e0f0ffd0;
+  --color-brand-border:         #eaf1fb;
+  --color-brand-loading:        #1a5a9a;
+  --color-heading:              var(--color-brand);
+  --color-progress-accent:      auto;
+
+  /* Accent fill (buttons, table headers) */
+  --color-accent:               #2a4d7ae0;
+  --color-accent-fg:            #e4f4ff;
+
+  /* IPv6-ready */
+  --color-ready:                #1a7a1a;
+  --color-ready-bg:             #e6fbe6c0;
+
+  /* Not-ready / error */
+  --color-not-ready:            #b32020;
+  --color-not-ready-bg:         #efc1c1c0;
+  --color-error-banner-bg:      #b30000f0;
+  --color-error-banner-fg:      #fddede;
+  --color-error-banner-border:  #300010;
+
+  /* Warning */
+  --color-warning:              #e3b010;
+
+  /* Unknown */
+  --color-unknown-bg:           #d3d3d3c0;
+  --color-unknown-fg:           #501030;
+
+  /* IP address coloring */
+  --color-ipv4:                 Red;
+  --color-ipv6:                 Darkgreen;
+
+  /* Page surface */
+  --color-body-bg:              #f4f4f9;
+  --color-body-fg:              #222;
+  --color-surface:              rgba(255,255,255,0.6);
+  --color-surface-border:       rgba(255, 255, 255, 0.85);
+  --color-field-bg:             rgba(250, 252, 255, 0.6);
+  --color-shadow:               rgba(0,0,0,0.2);
+  --color-shadow-sm:            rgba(0,0,0,0.1);
+
+  /* Interaction */
+  --color-hover-bg:             #ffe0f0e0;
+  --color-muted:                gray;
+  --color-muted-border:         darkgray;
+  --color-muted-light:          lightgray;
+
+  /* Form inputs */
+  --color-input-fg:             var(--color-body-fg);
+
+  /* Notification */
+  --color-srvmsg-bg:            #ffa0cd80;
+  --color-srvmsg-fg:            var(--color-body-fg);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-brand:                #4aa8d8;
+    --color-brand-bg:             #2a3b4ec0;
+    --color-brand-border:         #2a3b4e;
+    --color-brand-loading:        var(--color-brand-bg);
+
+    --color-ready:                lightseagreen;
+    --color-ready-bg:             rgb(20 84 80 / 0.7);
+
+    --color-not-ready:            red;
+    --color-not-ready-bg:         rgba(96, 0, 0, 0.7);
+    --color-error-banner-bg:      #aa6680e0;
+    --color-error-banner-fg:      aliceblue;
+    --color-error-banner-border:  #ff8080;
+
+    --color-unknown-bg:           rgba(169, 169, 169, 0.7);
+
+    --color-ipv4:                 red;
+    --color-ipv6:                 lightseagreen;
+
+    --color-body-bg:              #101014;
+    --color-body-fg:              #ababba;
+    --color-surface:              #1e1e1ea0;
+    --color-field-bg:             #333333a0;
+    --color-shadow:               rgba(0,0,0,0.5);
+
+    --color-hover-bg:             #3e2f4690;
+    --color-muted:                #666;
+    --color-muted-border:         gray;
+
+    --color-heading:              #4aa8d8;
+    --color-progress-accent:      var(--color-ready);
+    --color-input-fg:             #ddd;
+    --color-accent:               #2a3b4ec0;
+    --color-accent-fg:            #4aa8d8;
+
+    --color-srvmsg-bg:            #aa6680e0;
+    --color-srvmsg-fg:            aliceblue;
+  }
 }
 body {
   font-family: '72', Arial, sans-serif;
-  background: #f4f4f9;
-  color: #222;
+  background: var(--color-body-bg);
+  color: var(--color-body-fg);
   margin: 0;
   padding: 0;
 }
@@ -51,12 +148,12 @@ body {
   padding: 0px 20px 20px 20px;
 }
 .contents-container {
-  background: rgba(255,255,255,0.6);
+  background: var(--color-surface);
   backdrop-filter: blur(18px) saturate(160%);
   -webkit-backdrop-filter: blur(18px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--color-surface-border);
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 8px var(--color-shadow);
   padding: 24px 24px 20px 24px;
   margin-bottom: 20px;
   overflow-x: auto;
@@ -81,12 +178,12 @@ body {
 .footer {
   text-align: center;
   font-size: small;
-  color: gray;
+  color: var(--color-muted);
   margin-top: 20px;
   margin-bottom: 20px;
 }
 h1 {
-  color: #2a4d7a;
+  color: var(--color-heading);
 }
 .results h2 {
   max-width: 100%;
@@ -102,38 +199,38 @@ h1 {
   margin: 8px 0;
   padding: 8px 12px;
   border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-  background: #e0f0ffd0;
-  color: #2a4d7a;
+  box-shadow: 0 1px 4px var(--color-shadow);
+  background: var(--color-brand-bg);
+  color: var(--color-brand);
 }
 .status.error {
-  background: #b30000f0;
-  color: #fddede;
-  border: 2px dashed #300010;
+  background: var(--color-error-banner-bg);
+  color: var(--color-error-banner-fg);
+  border: 2px dashed var(--color-error-banner-border);
 }
 .status.ipv6only-ready {
-  background: #e6fbe6c0;
-  color: #1a7a1a;
+  background: var(--color-ready-bg);
+  color: var(--color-ready);
 }
 .status.ipv6only-not-ready {
-  background: #efc1c1c0;
-  color: #b32020;
+  background: var(--color-not-ready-bg);
+  color: var(--color-not-ready);
 }
 .status.ipv6only-unknown {
-  background: #d3d3d3c0;
-  color: #501030;
+  background: var(--color-unknown-bg);
+  color: var(--color-unknown-fg);
 }
 meter {
   height: 2ex;
 }
 meter ::-webkit-meter-optimum-value, meter:-moz-meter-optimum::-moz-meter-bar {
-  background: #1a7a1a;
+  background: var(--color-ready);
 }
 meter ::-webkit-meter-sub-optimum-value, meter:-moz-meter-sub-optimum::-moz-meter-bar {
-  background: #e3b010
+  background: var(--color-warning);
 }
 meter ::-webkit-meter-even-less-good-value, meter:-moz-meter-sub-sub-optimum::-moz-meter-bar {
-  background: #b32020;
+  background: var(--color-not-ready);
 }
 .overview-item {
   min-height: 1lh;
@@ -156,6 +253,7 @@ meter ::-webkit-meter-even-less-good-value, meter:-moz-meter-sub-sub-optimum::-m
 }
 progress {
   height: 2ex;
+  accent-color: var(--color-progress-accent);
 }
 .status-loading .loading-progress-container {
   position: relative;
@@ -164,15 +262,15 @@ progress {
 .status-loading progress {
   width: 100%;
   height: 2.5ex;
-  accent-color: #1a5a9a;
+  accent-color: var(--color-brand-loading);
 }
 .status-loading span.placeholder {
   float: right;
 }
 button {
   padding: 8px 20px;
-  background-color: #2a4d7a;
-  color: white;
+  background-color: var(--color-accent);
+  color: var(--color-accent-fg);
   border: none;
   border-radius: 4px;
 }
@@ -181,9 +279,14 @@ button {
 }
 input[type="text"] {
   padding: 10px;
-  border: 1px solid darkgray;
+  border: 1px solid var(--color-muted-border);
   border-radius: 6px;
   box-sizing: border-box;
+  background: var(--color-field-bg);
+  color: var(--color-input-fg);
+}
+input[type="checkbox"] {
+  accent-color: var(--color-accent);
 }
 .input-parameter-container {
   display: inline-flex;
@@ -193,18 +296,19 @@ input[type="text"] {
   white-space: nowrap;
 }
 #srvmessage {
-  background: #ffa0cd80;
+  background: var(--color-srvmsg-bg);
+  color: var(--color-srvmsg-fg);
 }
 #input form {
   display: inline-block;
   width: 100%;
 }
 .input-parameter-container button {
-  min-width: 19%; 
+  min-width: 19%;
 }
 #submit-button {
   float: right;
-  min-width: 19%; 
+  min-width: 19%;
   margin-right: 0px;
 }
 #submit-button button {
@@ -228,13 +332,15 @@ input[type="text"] {
   text-align: left;
 }
 table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   width: 100%;
   margin: 0px 0px 12px 0;
-  padding: 2px 4px;
+  padding: 0;
   border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-  background: rgba(250, 252, 255, 0.6);
+  overflow: hidden;
+  box-shadow: 0 1px 4px var(--color-shadow);
+  background: var(--color-field-bg);
 }
 th, td {
   /* border: 1px solid #e0e6ef; */
@@ -247,21 +353,21 @@ td.hide, th.hide {
   width: 0;
 }
 thead {
-  background: #e0f0ffd0;
-  color: #2a4d7a;
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
 }
 tr:hover {
-  background: #ffe0f0e0;
+  background: var(--color-hover-bg);
 }
 tbody {
-  border-top: 1px solid #eaf1fb;
+  border-top: 1px solid var(--color-brand-border);
 }
 table.scoreboard-table{
   table-layout: fixed;
   font-size: small;
 }
 .scoreboard-table tr {
-  border-top: 1px solid #eaf1fb;
+  border-top: 1px solid var(--color-brand-border);
 }
 td.scoreboard-ipv6only-score, th.scoreboard-ipv6only-score {
   text-align: left;
@@ -294,13 +400,13 @@ th.scoreboard-timestamp, td.scoreboard-timestamp {
   min-width: 19%;
 }
 .scoreboard-table tr:hover {
-  background: #ffe0f0e0;
+  background: var(--color-hover-bg);
 }
 .hosts tbody.host-block:hover {
-  background: #ffe0f0e0;
+  background: var(--color-hover-bg);
 }
 td.protocol {
-  color: gray;
+  color: var(--color-muted);
   width: 7%;
   max-width: 8em;
   text-wrap-mode: nowrap;
@@ -312,7 +418,7 @@ td.protocol {
 }
 td.host-localpart {
   min-width: 3em;
-  color: gray;
+  color: var(--color-muted);
   text-align: right;
   padding-right: 0;
   overflow-wrap: break-all;
@@ -327,13 +433,13 @@ td.dns-status, th.dns-status {
   text-align: center;
 }
 .dns-status-not-ipv6-only-ready {
-  color: Red;
+  color: var(--color-ipv4);
 }
 .dns-status-not-ipv6-only-ready::after {
   content: "✘";
 }
 .dns-status-ipv6-only-ready {
-  color: Darkgreen;
+  color: var(--color-ready);
 }
 .dns-status-ipv6-only-ready::after {
   content: "✓";
@@ -341,7 +447,7 @@ td.dns-status, th.dns-status {
 .dns-status-ipv6-only-ready-aaaa::after {
   content: "AAAA";
   font-size: x-small;
-  border: 1px solid Darkgreen;
+  border: 1px solid var(--color-ready);
   border-radius: 4px;
   padding: 1px 2px;
   margin-left: 2px;
@@ -350,7 +456,7 @@ td.dns-status, th.dns-status {
 .dns-status-ipv6-only-ready-no-aaaa::after {
   content: "A only";
   font-size: x-small;
-  border: 1px solid Darkgreen;
+  border: 1px solid var(--color-ready);
   border-radius: 4px;
   padding: 1px 2px;
   margin-left: 2px;
@@ -360,13 +466,13 @@ td.dns-status, th.dns-status {
   content: "?";
 }
 td.as-number {
-  color: gray;
+  color: var(--color-muted);
   max-width: 10%;
   font-family: '72Mono', monospace;
   text-align: right;
 }
 td.as-descr {
-  color: gray;
+  color: var(--color-muted);
   max-width: 10%;
   text-align: left;
 }
@@ -383,26 +489,26 @@ td.ip-netname {
   text-align: left;
 }
 .ipv4 {
-  color: Red;
+  color: var(--color-ipv4);
 }
 .ipv6 {
-  color: Darkgreen;
+  color: var(--color-ipv6);
 }
 .nat64 {
-  color: Red;
+  color: var(--color-ipv4);
 }
 .hide {
   display: none;
 }
 .hide-button {
   float: right;
-  color: lightgray;
+  color: var(--color-muted-light);
   margin-left: 1em;
 }
 .host-info-block td div {
   max-width: initial;
   font-size: small;
-  color: gray;
+  color: var(--color-muted);
   margin-left: 24px;
   text-wrap: wrap;
   word-break: break-all;
@@ -426,17 +532,17 @@ td.ip-netname {
 .screenshot-wrapper img {
   max-width: 100%;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px var(--color-shadow-sm);
 }
 .timestamp {
   font-size: small;
   float: right;
-  color: gray;
+  color: var(--color-muted);
   margin-bottom: 10px;
 }
 .timings {
   font-size: small;
-  color: gray;
+  color: var(--color-muted);
   float: left;
 }
 .archivelink {
@@ -448,120 +554,6 @@ td.ip-netname {
   font-size: small;
   float: right;
   padding-left: 1em;
-}
-@media (prefers-color-scheme: dark) {
-  body {
-    background: #101014;
-    color: #ababba
-  }
-  .contents-container {
-    background: #1e1e1ea0;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-  }
-  .overview-item {
-    background: #2a3b4ec0;
-    color: #aad4ff;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.5);
-  }
-  .status.error {
-    background: #aa6680e0;
-    color: aliceblue;
-    border: 2px dashed #ff8080;
-  }
-  #srvmessage {
-    background: #aa6680e0;
-    color: aliceblue
-  }
-  h1 {
-   color: lightslategray;
-  }
-  button {
-    background-color: #2a3b4ec0;
-  }
-  table {
-    background: #333333a0;
-  }
-  thead {
-    background: #2a3b4ea0;
-    color: #aad4ff;
-  }
-  tbody {
-    border-top: 1px solid #2a3b4e;
-  }
-  .scoreboard-table tr {
-    border-top: 1px solid #2a3b4e;
-  }
-  .scoreboard-table tr:hover {
-    background: #3e2f4690;
-  }
-  .hosts tbody.host-block:hover {
-    background: #3e2f4690;
-  }
-  input[type="text"] {
-    background: #333;
-    color: #ddd;
-    border: 1px solid gray;
-  }
-  .status.ipv6only-ready {
-    background: rgba(32, 178, 171, 0.7);
-    color: #003300;
-  }
-  .status.ipv6only-not-ready {
-    background: rgba(139, 0, 0, 0.7);
-    color: #ffb2b2;
-  }
-  .status.ipv6only-unknown {
-    background: rgba(169, 169, 169, 0.7);
-    color: #501030;
-  }
-  progress {
-    accent-color: lightseagreen;
-  }
-  .status-loading progress {
-    accent-color: #4aa8d8;
-  }
-  td.protocol {
-    color: #666
-  }
-  .host-localpart {
-    color: #666
-  }
-  .dns-status-not-ipv6-only-ready {
-    color: red
-  }
-  .dns-status-ipv6-only-ready {
-    color: lightseagreen
-  }
-  .dns-status-ipv6-only-ready-aaaa::after {
-    border: 1px solid lightseagreen;
-  }
-  .dns-status-ipv6-only-ready-no-aaaa::after {
-    border: 1px solid lightseagreen;
-  }
-  meter::-webkit-meter-optimum-value, meter:-moz-meter-optimum::-moz-meter-bar {
-    background: lightseagreen
-  }
-  meter::-webkit-meter-sub-optimum-value, meter:-moz-meter-sub-optimum::-moz-meter-bar {
-    background: #e3b010
-  }
-  meter::-webkit-meter-even-less-good-value, meter:-moz-meter-sub-sub-optimum::-moz-meter-bar {
-    background: red;
-  }
-  .ipv4 {
-    color: red
-  }
-  .ipv6 {
-    color: lightseagreen
-  }
-  .nat64 {
-    color: red;
-  }
-  td.as-number {
-    color: #666
-  }
-  .host-info-block td div {
-    color: #666
-  }
 }
 @media screen and (max-width: 720px) {
   .container {
