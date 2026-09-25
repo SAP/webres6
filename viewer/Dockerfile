@@ -13,7 +13,7 @@ COPY viewer/viewer.js ./
 RUN npm run build
 
 # Use official NGINX mainline image
-FROM nginx:1.31.5
+FROM nginx:1.31.6
 
 # Set default environment variables
 ENV WEBRES6_API_URL=http://disabled
