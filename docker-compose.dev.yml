@@ -126,7 +126,7 @@ services:
       - webres6-api
 
   selenium:
-    image: selenium/standalone-chromium:152.0.7977.75
+    image: selenium/standalone-chromium:152.0.7977.82
     container_name: webres6-selenium
     networks:
       - webres6-network
