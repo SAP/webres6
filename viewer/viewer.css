@@ -67,17 +67,17 @@
   --color-unknown-fg:           #501030;
 
   /* IP address coloring */
-  --color-ipv4:                 Red;
-  --color-ipv6:                 Darkgreen;
+  --color-ipv4:                 red;
+  --color-ipv6:                 darkgreen;
 
   /* Page surface */
-  --color-body-bg:              #f4f4f9;
+  --color-body-bg:              linear-gradient(160deg, #e7f9f1, #c3e0d3);
   --color-body-fg:              #222;
-  --color-surface:              rgba(255,255,255,0.6);
-  --color-surface-border:       rgba(255, 255, 255, 0.85);
-  --color-field-bg:             rgba(250, 252, 255, 0.6);
-  --color-shadow:               rgba(0,0,0,0.2);
-  --color-shadow-sm:            rgba(0,0,0,0.1);
+  --color-surface:              #ffffff99;
+  --color-surface-border:       #ffffffd9;
+  --color-field-bg:             #fafcff99;
+  --color-shadow:               #00000033;
+  --color-shadow-sm:            #0000001a;
 
   /* Interaction */
   --color-hover-bg:             #ffe0f0e0;
@@ -100,24 +100,24 @@
     --color-brand-loading:        var(--color-brand-bg);
 
     --color-ready:                lightseagreen;
-    --color-ready-bg:             rgb(20 84 80 / 0.7);
+    --color-ready-bg:             #145450b3;
 
     --color-not-ready:            red;
-    --color-not-ready-bg:         rgba(96, 0, 0, 0.7);
+    --color-not-ready-bg:         #600000b3;
     --color-error-banner-bg:      #aa6680e0;
     --color-error-banner-fg:      aliceblue;
     --color-error-banner-border:  #ff8080;
 
-    --color-unknown-bg:           rgba(169, 169, 169, 0.7);
+    --color-unknown-bg:           #a9a9a9b3;
 
     --color-ipv4:                 red;
     --color-ipv6:                 lightseagreen;
 
-    --color-body-bg:              #101014;
+    --color-body-bg:              linear-gradient(160deg, #101410, #1a381a);
     --color-body-fg:              #ababba;
     --color-surface:              #1e1e1ea0;
     --color-field-bg:             #333333a0;
-    --color-shadow:               rgba(0,0,0,0.5);
+    --color-shadow:               #00000080;
 
     --color-hover-bg:             #3e2f4690;
     --color-muted-fg:             #666;
