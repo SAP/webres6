@@ -39,8 +39,8 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.api.serviceAccountName -}}
-      serviceAccountName: {{ .Values.api.serviceAccountName }}
+      {{- with (include "webres6.serviceAccountName" .) }}
+      serviceAccountName: {{ . }}
       {{- end }}
       containers:
         - name: webres6-api
@@ -151,7 +151,11 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.api.awsSecret }}
-                  key: secretAccessKey  
+                  key: secretAccessKey
+            {{- end }}
+            {{- if .Values.api.awsRegion }}
+            - name: AWS_REGION
+              value: {{ .Values.api.awsRegion | quote }}
             {{- end }}
             - name: ENABLE_SCOREBOARD
               value: {{ .Values.api.scoreboard.enabled | quote | default "true" }}

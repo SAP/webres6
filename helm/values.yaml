@@ -4,13 +4,22 @@
 nameOverride: ""
 fullnameOverride: ""
 
+# ServiceAccount — set create: true to let the chart render a ServiceAccount and wire it up
+# to every workload automatically. Annotations are passed through verbatim, which is the
+# standard hook for both IRSA (eks.amazonaws.com/role-arn) and EKS Pod Identity.
+# When create: false (default), name is used as an override for an externally-managed account.
+serviceAccount:
+  create: false
+  name: ""          # when create: true, defaults to the chart fullname; when false, no override
+  annotations: {}   # e.g. eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role>
+
 # Image pull secrets for private registries
 imagePullSecrets:
   - name: hyperspace-docker
 
 # Default image for all services unless overridden per-service
 image:
-  repository: my-repository/  # must end with a slash
+  repository: ghcr.io/sap/  # must end with a slash
   tag: "latest"
 
 # Server message, privacy text, and extension hook configuration
@@ -68,8 +77,8 @@ api:
     jobs: 32            # concurrent whois lookups; high values may trigger rate limiting
     cacheTTL: "86400"
   # storage
-  serviceAccountName: ""
-  awsSecret: ""         # Kubernetes secret name with accessKeyID and secretAccessKey keys
+  awsSecret: ""         # Kubernetes secret name with accessKeyID and secretAccessKey keys; leave empty when using IRSA/EKS Pod Identity
+  awsRegion: ""         # AWS region (e.g. "eu-central-1"); required for S3 access when not using IMDS (IRSA / IPv6-only clusters)
   s3Bucket: ""
   s3Endpoint: ""
   s3DeliveryStrategy: "presigned"  # "public", "presigned", or "private"

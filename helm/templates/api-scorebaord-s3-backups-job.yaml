@@ -28,8 +28,8 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if .Values.api.serviceAccountName }}
-          serviceAccountName: {{ .Values.api.serviceAccountName }}
+          {{- with (include "webres6.serviceAccountName" .) }}
+          serviceAccountName: {{ . }}
           {{- end }}
           restartPolicy: OnFailure
           containers:
@@ -51,8 +51,6 @@ spec:
                   value: {{ .Values.api.s3Endpoint | quote }}
                 {{- end }}
                 {{- if .Values.api.awsSecret }}
-                - name: ENABLE_SCOREBOARD
-                  value: "true"
                 - name: AWS_ACCESS_KEY_ID
                   valueFrom:
                     secretKeyRef:
@@ -63,6 +61,12 @@ spec:
                     secretKeyRef:
                       name: {{ .Values.api.awsSecret }}
                       key: secretAccessKey
+                {{- end }}
+                - name: ENABLE_SCOREBOARD
+                  value: "true"
+                {{- if .Values.api.awsRegion }}
+                - name: AWS_REGION
+                  value: {{ .Values.api.awsRegion | quote }}
                 {{- end }}
               {{- with .Values.api.securityContext }}
               securityContext:

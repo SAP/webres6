@@ -28,8 +28,8 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if .Values.api.serviceAccountName }}
-          serviceAccountName: {{ .Values.api.serviceAccountName }}
+          {{- with (include "webres6.serviceAccountName" .) }}
+          serviceAccountName: {{ . }}
           {{- end }}
           restartPolicy: OnFailure
           volumes:
@@ -65,6 +65,10 @@ spec:
                     secretKeyRef:
                       name: {{ .Values.api.awsSecret }}
                       key: secretAccessKey
+                {{- end }}
+                {{- if .Values.api.awsRegion }}
+                - name: AWS_REGION
+                  value: {{ .Values.api.awsRegion | quote }}
                 {{- end }}
                 {{- if .Values.api.archiveDir }}
                 - name: ARCHIVE_DIR

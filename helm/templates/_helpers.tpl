@@ -54,11 +54,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 Create the name of the service account to use
 */}}
 {{- define "webres6.serviceAccountName" -}}
-{{- if .Values.serviceAccount.create }}
-{{- default (include "webres6.fullname" .) .Values.serviceAccount.name }}
-{{- else }}
-{{- default "default" .Values.serviceAccount.name }}
-{{- end }}
+{{- if ((.Values.serviceAccount).create) -}}
+{{- default (include "webres6.fullname" .) ((.Values.serviceAccount).name) -}}
+{{- else -}}
+{{- ((.Values.serviceAccount).name) -}}
+{{- end -}}
 {{- end }}
 
 {{/*
