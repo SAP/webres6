@@ -185,11 +185,29 @@ def crawl_page(url, driver=None, extension=None, extension_data=None, wait=2, ti
 
         # wait for page load complete if time budget allows
         span.add_event("wait_for_page_ready")
+        page_ready = False
         while time.time() - start_time < timeout:
             if driver.execute_script("return document.readyState") == "complete":
                 span.add_event("page_ready", {"elapsed_seconds": time.time() - start_time})
+                page_ready = True
                 break
             time.sleep(0.5)
+
+        # check for error page
+        if driver.current_url.startswith("chrome-error://"):
+            error_page = driver.current_url.replace("chrome-error://", "")
+            span.set_status(Status(StatusCode.ERROR, "chrome error page encountered: " + error_page))
+            return False, f"Error page encountered: {error_page}"
+
+        # check for certificate error interstitial ("Your connection is not private")
+        if driver.execute_script("return typeof window.certificateErrorPageController !== 'undefined'"):
+            span.set_status(Status(StatusCode.ERROR, "certificate error"))
+            return False, "Certificate error — connection is not private"
+
+        # check if page was ready within the timeout
+        if not page_ready:
+            span.set_status(Status(StatusCode.ERROR, "page not ready within timeout"))
+            return False, f"Page not ready after {time.time() - start_time:.2f} seconds"
 
     except TimeoutException as e:
         span.record_exception(e)
