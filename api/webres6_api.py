@@ -21,12 +21,10 @@ from os import getenv
 from ipaddress import ip_address, IPv4Address, IPv6Address
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
-from tempfile import mkdtemp
-from shutil import rmtree
 from urllib.parse import urlparse
 import flask
 from flask import Flask, redirect, request, jsonify, send_from_directory
-from prometheus_client import Counter, Gauge, Histogram, CollectorRegistry, multiprocess, disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Gauge, Histogram, REGISTRY, disable_created_metrics, generate_latest, CONTENT_TYPE_LATEST
 
 # OpenTelemetry imports
 from opentelemetry import trace, context as otel_context
@@ -156,7 +154,6 @@ crawl_executor = TracedThreadPoolExecutor(tracer, max_workers=crawl_jobs, thread
 whois_executor = TracedThreadPoolExecutor(tracer, max_workers=whois_jobs, thread_name_prefix="whois-")
 
 # Prometheus metrics
-prometheus_mp_temp_dir = None
 disable_created_metrics()
 webres6_tested_total = Counter('webres6_tested_total', 'Total number of checks performed')
 webres6_tested_results = Counter('webres6_results_total', 'Total number of results for checks performed', ['result'])
@@ -943,6 +940,28 @@ def check_component_health():
     return status, all_healthy
 
 
+def _warn_if_multiple_workers():
+    """Prometheus metrics are kept in-process (no mmap multiprocess collector,
+    which is unsafe under this service's heavy multi-threading). That requires a
+    single gunicorn worker: with more than one, each worker process keeps its own
+    counters and /metrics only reflects whichever worker served the scrape. Scale
+    out via replicas, not workers. Warn if the config asks for more than one.
+    """
+    workers = None
+    args = os.getenv('GUNICORN_CMD_ARGS', '').replace('=', ' ').split()
+    for flag in ('-w', '--workers'):
+        if flag in args:
+            idx = args.index(flag)
+            if idx + 1 < len(args) and args[idx + 1].isdigit():
+                workers = int(args[idx + 1])
+    if workers is None and os.getenv('WEB_CONCURRENCY', '').isdigit():
+        workers = int(os.environ['WEB_CONCURRENCY'])
+    if workers and workers > 1:
+        print(f"WARNING: {workers} gunicorn workers configured, but Prometheus metrics are "
+              "kept in-process; /metrics will under-report. Run a single worker and scale "
+              "via replicas instead.", file=sys.stderr)
+
+
 def create_http_app():
     """ Common setup for Flask app instance, including instrumentation, endpoints, and configuration.
 
@@ -981,11 +1000,10 @@ def create_http_app():
         return jsonify({'status': 'ok', 'ts': datetime.now(timezone.utc).isoformat()}), 200
 
     print("\t/metrics                      get Prometheus compatible metrics", file=sys.stderr)
+    _warn_if_multiple_workers()
     @app.route('/metrics', methods=['GET'])
     def metrics():
-        registry = CollectorRegistry()
-        multiprocess.MultiProcessCollector(registry)
-        return app.response_class(generate_latest(registry), mimetype=CONTENT_TYPE_LATEST)
+        return app.response_class(generate_latest(REGISTRY), mimetype=CONTENT_TYPE_LATEST)
 
     # return the app instance
     return app
@@ -1265,15 +1283,7 @@ def signal_handler(sig, frame):
     if storage_manager and storage_manager.can_persist():
         print("Persisting local cache to disk...", file=sys.stderr)
         storage_manager.persist()
-    if prometheus_mp_temp_dir:
-        print(f"Removing temporary directory {prometheus_mp_temp_dir}", file=sys.stderr)
-        rmtree(prometheus_mp_temp_dir)
     sys.exit(0)
-
-# hadnle worker exit in gunicorn
-def child_exit(server, worker):
-    # tell prometheus client
-    multiprocess.mark_process_dead(worker.pid)
 
 # main entry point
 if __name__ == "__main__":
@@ -1351,12 +1361,6 @@ if __name__ == "__main__":
     # register signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-
-    # set PROMETHEUS_MULTIPROC_DIR to temp dir if not set
-    if not os.getenv('PROMETHEUS_MULTIPROC_DIR'):
-        prometheus_mp_temp_dir = mkdtemp(prefix=f"webres6-{os.getpid()}-prometheus-")
-        os.environ['PROMETHEUS_MULTIPROC_DIR'] = prometheus_mp_temp_dir
-        print(f"Set PROMETHEUS_MULTIPROC_DIR to temporary directory {prometheus_mp_temp_dir}", file=sys.stderr)
 
     # create and run app
     if args.dnsprobe_only:
