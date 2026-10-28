@@ -23,11 +23,9 @@ export TZ='UTC'
 # Fix python buffering
 export PYTHONUNBUFFERED=1
 
-# Directory for gunicorn and prometheus
+# Directory for gunicorn runtime files
 export XDG_RUNTIME_DIR="/app/run"
 mkdir -p "${XDG_RUNTIME_DIR}"
-export PROMETHEUS_MULTIPROC_DIR="/app/run/prometheus-mp"
-mkdir -p "${PROMETHEUS_MULTIPROC_DIR}"
 
 set -e
 

@@ -13,9 +13,6 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# temp directory for prometheus data
-export PROMETHEUS_MULTIPROC_DIR="$(mktemp -d)"
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -95,11 +92,7 @@ if [ -n "$SPECIFIC_TEST" ]; then
 fi
 
 echo ""
-
-# clean up prometheus data directory after tests
-if [ -d "$PROMETHEUS_MULTIPROC_DIR" ]; then
-    trap "rm -rf $PROMETHEUS_MULTIPROC_DIR" EXIT
-fi 
+ 
 
 # Run tests
 if $PYTEST_CMD; then

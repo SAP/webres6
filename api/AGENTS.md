@@ -68,6 +68,8 @@ The API runs a built-in DNS probe by default. In Docker Compose (`docker-compose
 
 The API emits OpenTelemetry traces (OTLP) and exposes Prometheus metrics. An example collector config is at `otel-collector-config.yaml` in the repo root. Tracing is enabled automatically when `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is set.
 
+Prometheus metrics are kept **in-process** (`/metrics` serves the default registry; `prometheus_client` multiprocess/mmap mode is intentionally not used — it is unsafe under the heavy multi-threading this service uses, where unlocked scrape reads race worker-thread writes). This requires running **exactly one gunicorn worker** per pod: with more than one worker each process keeps its own counters and `/metrics` only reflects whichever worker served the scrape. Scale out via replicas, not workers. `create_http_app()` logs a warning if `-w`/`--workers` (in `GUNICORN_CMD_ARGS`) or `WEB_CONCURRENCY` is greater than 1.
+
 | Variable | Purpose |
 |----------|---------|
 | `SELENIUM_REMOTE_URL` | Remote WebDriver URL; omit for local ChromeDriver |
