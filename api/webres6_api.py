@@ -155,15 +155,20 @@ whois_executor = TracedThreadPoolExecutor(tracer, max_workers=whois_jobs, thread
 
 # Prometheus metrics
 disable_created_metrics()
-webres6_tested_total = Counter('webres6_tested_total', 'Total number of checks performed')
 webres6_tested_results = Counter('webres6_results_total', 'Total number of results for checks performed', ['result'])
+for _result in ('errors', 'ipv6_only_ready', 'not_ipv6_only_ready'):
+    webres6_tested_results.labels(result=_result)
 webres6_scores_total = Histogram('webres6_scores_total', 'Histogram of scores results ', ['score_type'], buckets=(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0))
 webres6_cache_hits_total = Counter('webres6_cache_hits_total', 'Total number of cache hits', ['type'])
+for _type in ('report', 'error', 'sentinel', 'unknown'):
+    webres6_cache_hits_total.labels(type=_type)
 webres6_archive_total = Counter('webres6_archive_hits_total', 'Total number reports requested from archive', ['result'])
+for _result in ('success', 'not_found'):
+    webres6_archive_total.labels(result=_result)
 webres6_time_spent = Counter('webres6_time_spent_seconds_total', 'Time spent in different processing phases', ['phase'])
+for _phase in ('init', 'crawl', 'screenshot', 'extract', 'dnsprobe', 'whois', 'finalize'):
+    webres6_time_spent.labels(phase=_phase)
 webres6_response_time = Histogram('webres6_response_time_seconds_total', 'Response time for checks performed', ['whois', 'screenshot'], buckets=(0.2, 0.5, 1, 2, 5, 10, 20, 30, 60, 90, 120, 150, 180))
-webres6_whois_cache_size = Gauge('webres6_whois_cache_size_total', 'Number of entries in whois cache')
-webres6_whois_cache_size.set_function(lambda: storage_manager.whois_cache_size() if storage_manager else 0)
 webres6_dnsprobe_results_total = Counter('webres6_dnsprobe_results_total', 'Total number of DNSProbe results', ['rcode', 'aaaa_ok'])
 webres6_crawl_jobs = Gauge('webres6_crawl_jobs_total', 'Crawl worker jobs pending/running', ['state'])
 webres6_whois_jobs = Gauge('webres6_whois_jobs_total', 'WHOIS worker jobs pending/running', ['state'])
@@ -537,7 +542,6 @@ def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
         report_id = gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, report_node)
     span.set_attribute("webres6.report_id", report_id)
     lp = f"res6 {report_id:.25} "
-    webres6_tested_total.inc()
     print(f"{lp}testing {url.geturl().translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
     print(f"{lp}options: wait={wait}s, timeout={timeout}s, scoreboard={scoreboard_entry}, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
 
