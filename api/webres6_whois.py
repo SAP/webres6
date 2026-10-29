@@ -20,6 +20,8 @@ tracer = trace.get_tracer(__name__)
 URLLibInstrumentor().instrument()
 
 webres6_whois_lookups = Counter('webres6_whois_lookups_total', 'WHOIS lookups performed', ['type'])
+for _whois_lookup_type in ('cache-global', 'cache-local', 'whois-success', 'whois-fail'):
+    webres6_whois_lookups.labels(type=_whois_lookup_type)
 
 @tracer.start_as_current_span("whois.lookup")
 def get_whois_info(ip, local_cache, local_cache_lock, storage_manager, debug=False):
