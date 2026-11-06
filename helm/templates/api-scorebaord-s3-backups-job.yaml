@@ -68,6 +68,9 @@ spec:
                 - name: AWS_REGION
                   value: {{ .Values.api.awsRegion | quote }}
                 {{- end }}
+                {{- if .Values.api.awsRoleARN }}
+                {{- include "webres6.irsa.env" . | nindent 16 }}
+                {{- end }}
               {{- with .Values.api.securityContext }}
               securityContext:
                 {{- toYaml . | nindent 16 }}
@@ -75,6 +78,10 @@ spec:
               {{- with .Values.api.scoreboard.backupResources }}
               resources:
                 {{- toYaml . | nindent 16 }}
+              {{- end }}
+              {{- if .Values.api.awsRoleARN }}
+              volumeMounts:
+                {{- include "webres6.irsa.volumeMount" . | nindent 16 }}
               {{- end }}
           {{- with .Values.nodeSelector }}
           nodeSelector:
@@ -87,5 +94,9 @@ spec:
           {{- with .Values.tolerations }}
           tolerations:
             {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.api.awsRoleARN }}
+          volumes:
+            {{- include "webres6.irsa.volume" . | nindent 12 }}
           {{- end }}
 {{- end }}
