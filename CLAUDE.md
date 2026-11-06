@@ -111,6 +111,8 @@ When adding or updating chart dependencies, also run:
 helm dependency update helm/
 ```
 
+For credential-free S3 access on a Gardener shoot (OIDC workload identity federation instead of a static `awsSecret`), see `doc/s3-workload-identity-gardener.md`.
+
 ## Integration testing
 
 To do proper integration testing, build the latest docker containers and start them using `docker-compose.dev.yml`.

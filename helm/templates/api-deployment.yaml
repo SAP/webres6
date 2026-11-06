@@ -1,3 +1,4 @@
+{{- $irsaRoleArn := .Values.api.awsRoleARN | default "" -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -157,6 +158,9 @@ spec:
             - name: AWS_REGION
               value: {{ .Values.api.awsRegion | quote }}
             {{- end }}
+            {{- if $irsaRoleArn }}
+            {{- include "webres6.irsa.env" . | nindent 12 }}
+            {{- end }}
             - name: ENABLE_SCOREBOARD
               value: {{ .Values.api.scoreboard.enabled | quote | default "true" }}
             {{- if .Values.api.scoreboard.defaultLimit }}
@@ -267,6 +271,9 @@ spec:
             - name: serverconfig
               mountPath: /app/serverconfig
               readOnly: true
+            {{- if $irsaRoleArn }}
+            {{- include "webres6.irsa.volumeMount" . | nindent 12 }}
+            {{- end }}
           {{- with .Values.api.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
@@ -279,6 +286,9 @@ spec:
         - name: serverconfig
           configMap:
             name: {{ include "webres6.fullname" . }}-serverconfig
+        {{- if $irsaRoleArn }}
+        {{- include "webres6.irsa.volume" . | nindent 8 }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
