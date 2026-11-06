@@ -1,7 +1,4 @@
-{{- $irsaRoleArn := "" -}}
-{{- if and .Values.serviceAccount .Values.serviceAccount.annotations -}}
-{{- $irsaRoleArn = index .Values.serviceAccount.annotations "eks.amazonaws.com/role-arn" | default "" -}}
-{{- end -}}
+{{- $irsaRoleArn := .Values.api.awsRoleARN | default "" -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -299,7 +296,7 @@ spec:
           projected:
             sources:
             - serviceAccountToken:
-                audience: {{ (.Values.serviceAccount.tokenAudience | default "sts.amazonaws.com") | quote }}
+                audience: {{ (.Values.api.serviceAccount.tokenAudience | default "sts.amazonaws.com") | quote }}
                 expirationSeconds: 86400
                 path: token
         {{- end }}

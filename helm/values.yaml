@@ -4,16 +4,6 @@
 nameOverride: ""
 fullnameOverride: ""
 
-# ServiceAccount — set create: true to let the chart render a ServiceAccount and wire it up
-# to every workload automatically. Annotations are passed through verbatim, which is the
-# standard hook for both IRSA (eks.amazonaws.com/role-arn) and EKS Pod Identity.
-# When create: false (default), name is used as an override for an externally-managed account.
-serviceAccount:
-  create: false
-  name: ""          # when create: true, defaults to the chart fullname; when false, no override
-  annotations: {}   # e.g. eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role>
-  tokenAudience: "sts.amazonaws.com"  # projected token audience; EKS: sts.amazonaws.com, Gardener: cluster-specific
-
 # Image pull secrets for private registries
 imagePullSecrets:
   - name: hyperspace-docker
@@ -80,6 +70,15 @@ api:
   # storage
   awsSecret: ""         # Kubernetes secret name with accessKeyID and secretAccessKey keys; leave empty when using IRSA/EKS Pod Identity
   awsRegion: ""         # AWS region (e.g. "eu-central-1"); required for S3 access when not using IMDS (IRSA / IPv6-only clusters)
+  awsRoleARN: ""        # IAM role ARN for IRSA; when set, the chart adds the eks.amazonaws.com/role-arn annotation to the ServiceAccount and injects web-identity env vars + a projected token volume into the API pod
+  # ServiceAccount — set create: true to let the chart render a ServiceAccount and wire it up
+  # to the API and its backup jobs. When create: false (default), name is used as an override
+  # for an externally-managed account.
+  serviceAccount:
+    create: false
+    name: ""            # when create: true, defaults to the chart fullname; when false, no override
+    annotations: {}     # extra SA annotations (passthrough); the IRSA role-arn is generated from awsRoleARN
+    tokenAudience: "sts.amazonaws.com"  # projected token audience; EKS: sts.amazonaws.com, Gardener: cluster-specific
   s3Bucket: ""
   s3Endpoint: ""
   s3DeliveryStrategy: "presigned"  # "public", "presigned", or "private"
