@@ -1,3 +1,7 @@
+{{- $irsaRoleArn := "" -}}
+{{- if and .Values.serviceAccount .Values.serviceAccount.annotations -}}
+{{- $irsaRoleArn = index .Values.serviceAccount.annotations "eks.amazonaws.com/role-arn" | default "" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -157,6 +161,12 @@ spec:
             - name: AWS_REGION
               value: {{ .Values.api.awsRegion | quote }}
             {{- end }}
+            {{- if $irsaRoleArn }}
+            - name: AWS_ROLE_ARN
+              value: {{ $irsaRoleArn | quote }}
+            - name: AWS_WEB_IDENTITY_TOKEN_FILE
+              value: "/var/run/secrets/sts-token/token"
+            {{- end }}
             - name: ENABLE_SCOREBOARD
               value: {{ .Values.api.scoreboard.enabled | quote | default "true" }}
             {{- if .Values.api.scoreboard.defaultLimit }}
@@ -267,6 +277,11 @@ spec:
             - name: serverconfig
               mountPath: /app/serverconfig
               readOnly: true
+            {{- if $irsaRoleArn }}
+            - name: sts-token
+              mountPath: /var/run/secrets/sts-token
+              readOnly: true
+            {{- end }}
           {{- with .Values.api.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
@@ -279,6 +294,15 @@ spec:
         - name: serverconfig
           configMap:
             name: {{ include "webres6.fullname" . }}-serverconfig
+        {{- if $irsaRoleArn }}
+        - name: sts-token
+          projected:
+            sources:
+            - serviceAccountToken:
+                audience: {{ (.Values.serviceAccount.tokenAudience | default "sts.amazonaws.com") | quote }}
+                expirationSeconds: 86400
+                path: token
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

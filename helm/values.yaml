@@ -12,6 +12,7 @@ serviceAccount:
   create: false
   name: ""          # when create: true, defaults to the chart fullname; when false, no override
   annotations: {}   # e.g. eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/<role>
+  tokenAudience: "sts.amazonaws.com"  # projected token audience; EKS: sts.amazonaws.com, Gardener: cluster-specific
 
 # Image pull secrets for private registries
 imagePullSecrets:
