@@ -54,11 +54,43 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 Create the name of the service account to use
 */}}
 {{- define "webres6.serviceAccountName" -}}
-{{- if ((.Values.serviceAccount).create) -}}
-{{- default (include "webres6.fullname" .) ((.Values.serviceAccount).name) -}}
+{{- if (((.Values.api).serviceAccount).create) -}}
+{{- default (include "webres6.fullname" .) (((.Values.api).serviceAccount).name) -}}
 {{- else -}}
-{{- ((.Values.serviceAccount).name) -}}
+{{- (((.Values.api).serviceAccount).name) -}}
 {{- end -}}
+{{- end }}
+
+{{/*
+IRSA / OIDC workload-identity wiring, shared by the API deployment and the S3
+scoreboard-backup job. Rendered only when api.awsRoleARN is set; each block is
+guarded by the caller with `{{- if .Values.api.awsRoleARN }}`.
+
+On EKS the pod-identity webhook would inject these from the ServiceAccount
+annotation; on clusters without that webhook (e.g. Gardener) we inject them
+explicitly here so any pod that needs AWS credentials gets the same treatment.
+*/}}
+{{- define "webres6.irsa.env" -}}
+- name: AWS_ROLE_ARN
+  value: {{ .Values.api.awsRoleARN | quote }}
+- name: AWS_WEB_IDENTITY_TOKEN_FILE
+  value: "/var/run/secrets/sts-token/token"
+{{- end }}
+
+{{- define "webres6.irsa.volumeMount" -}}
+- name: sts-token
+  mountPath: /var/run/secrets/sts-token
+  readOnly: true
+{{- end }}
+
+{{- define "webres6.irsa.volume" -}}
+- name: sts-token
+  projected:
+    sources:
+    - serviceAccountToken:
+        audience: {{ (.Values.api.serviceAccount.tokenAudience | default "sts.amazonaws.com") | quote }}
+        expirationSeconds: 86400
+        path: token
 {{- end }}
 
 {{/*
