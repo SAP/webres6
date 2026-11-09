@@ -364,6 +364,7 @@ async function analyzeURL(url, wait = 2, scoreboard_entry = false, screenshot = 
   const defaultDelay = 15;
   const progressBar = loadingStatus.find('progress.loading-progress');
   const timeDisplay = loadingStatus.find('span.placeholder');
+  const phaseLog = loadingStatus.find('.phase-log');
   let serverProgress = 0;
   let serverPhase = '';
   let serverUpdate = 0;
@@ -372,7 +373,7 @@ async function analyzeURL(url, wait = 2, scoreboard_entry = false, screenshot = 
     const timeProgress = // logarithmic progress with slowdown to progress+linear extrapolation for the first 60s
       Math.min((Math.log1p(elapsed) / Math.log1p(serverMaxRetryTime)), (serverProgress + (elapsed - serverUpdate)/90));
     progressBar.attr('value', timeProgress);
-    timeDisplay.text(`${serverPhase ? `${serverPhase} – ` : ''} ${Math.round(elapsed)}s`);
+    timeDisplay.text(`${Math.round(elapsed)}s`);
   }, 50);
   function cleanup() {
     clearInterval(progressInterval);
@@ -395,7 +396,13 @@ async function analyzeURL(url, wait = 2, scoreboard_entry = false, screenshot = 
         try {
           const body = await response.json();
           if (body.progress != null) serverProgress = body.progress;
-          if (body.phase) serverPhase = body.phase;
+          if (body.phase && body.phases_done) {
+            phaseLog.empty();
+            body.phases_done.forEach(ph => phaseLog.append($('<span class="phase-done">').text(`${ph} ✓`)));
+            phaseLog.append($('<span class="phase-current">').text(`${body.phase} ⏳`));
+            const el = phaseLog[0];
+            el.scrollLeft = el.scrollWidth;
+          }
         } catch (e) {}
         const refreshHeader = response.headers.get('Refresh');
         const delay = refreshHeader ? parseFloat(refreshHeader) : defaultDelay;

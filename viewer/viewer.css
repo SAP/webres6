@@ -274,6 +274,28 @@ progress {
 .status-loading span.placeholder {
   float: right;
 }
+.status-loading .phase-log {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.5em;
+  overflow: hidden;
+  margin-top: 0.35em;
+  font-size: 0.82em;
+  min-height: 1.3em;
+}
+.status-loading .phase-done {
+  white-space: nowrap;
+  flex-shrink: 0;
+  color: var(--color-ready);
+  opacity: 0.8;
+}
+.status-loading .phase-current {
+  white-space: nowrap;
+  flex-shrink: 0;
+  color: var(--color-brand-loading);
+  font-style: italic;
+}
 button {
   padding: 8px 20px;
   background-color: var(--color-accent);
