@@ -12,7 +12,7 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 VENV_DIR="$SCRIPT_DIR/.venv"
 BUILD_DIR="$VENV_DIR/unbound_build"   # libunbound installed here
 MAX_TARGET_NX=25                         # same as Dockerfile; works around CDN issues
-UNBOUND_IMAGE="https://nlnetlabs.nl/downloads/unbound/unbound-1.25.0.tar.gz"
+UNBOUND_IMAGE="https://nlnetlabs.nl/downloads/unbound/unbound-1.26.2.tar.gz"
 
 OS="$(uname -s)"
 JOBS=$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)

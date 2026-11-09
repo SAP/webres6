@@ -8,7 +8,7 @@ WORKDIR /build
 
 # Set MAX_TARGET_NX to 25 (upstream: 5) to work around CDN issues with many IPv4-only DNS servers
 ARG MAX_TARGET_NX=25
-ARG UNBOUND_IMAGE="https://nlnetlabs.nl/downloads/unbound/unbound-1.25.0.tar.gz"
+ARG UNBOUND_IMAGE="https://nlnetlabs.nl/downloads/unbound/unbound-1.26.2.tar.gz"
 
 RUN apt-get update -q \
   && apt upgrade -q --yes \
