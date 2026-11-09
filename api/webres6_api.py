@@ -507,7 +507,8 @@ def gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, re
 @tracer.start_as_current_span("crawl_and_analyze_url")
 def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
                           screenshot_mode, lookup_whois,
-                          report_id, report_node, progress_callback=(lambda progress, phase: None)):
+                          report_id, report_node,
+                          progress_callback=(lambda progress, phase, last_phase: None)):
     """ Internal implementation of crawl_and_analyze_url with optional span parameter.
     """
 
@@ -527,9 +528,9 @@ def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
     timings = {}
     ts = datetime.now(timezone.utc)
     progress = 0.0
-    last_ts = ts
-    last_key = 'init'
-    last_share = 0.2
+    last_ts = None
+    last_key = None
+    last_share = 0
 
     def next_phase(key, share=0):
         nonlocal last_ts
@@ -538,14 +539,17 @@ def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
         nonlocal progress
         nonlocal span
         now = datetime.now(timezone.utc)
-        spent = (now - last_ts).total_seconds()
-        timings[last_key] = spent
-        webres6_time_spent.labels(phase=last_key).inc(spent)
         progress += last_share
-        progress_callback(progress, key)
+        if last_ts:
+            spent = (now - last_ts).total_seconds()
+            timings[last_key] = spent
+            webres6_time_spent.labels(phase=last_key).inc(spent)
+        progress_callback(progress, key, last_key)
         last_ts = now
         last_key = key
         last_share = share
+
+    next_phase('init', share=0.2)
 
     # init logging
     if not report_id:
@@ -710,7 +714,8 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
 
     def send_in_progress_response(report_id, sentinel, refresh=client_retry_base):
         response = jsonify({ 'error': 'Crawl in progress - please come back later', 'report_id': report_id,
-                             'phase': sentinel.get('phase', 'unknown'), 'progress': sentinel.get('progress', None) })
+                             'phase': sentinel.get('phase', 'unknown'), 'phases_done': sentinel.get('phases_done', None),
+                             'progress': sentinel.get('progress', None) })
         response.headers['Refresh'] = int(refresh)
         return response, 202
 
@@ -759,14 +764,16 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
     # Put a sentinel entry into the cache to avoid multiple concurrent crawls for the same URL
     sentinel = { 'type': 'sentinel', 'ts': ts, 'report_id': report_id,
                     'data': "crawl in progress - please come back later",
-                    'phase': 'queued', 'progress': 0.0 }
+                    'phase': 'queued', 'phases_done': [], 'progress': 0.0 }
     storage_manager.put_result_cacheline(cache_key, sentinel, crawl_timeout, False) # no overwrite to avoid races
 
     # define progress callback to update progress in cache
-    def _progress_callback(progress, phase):
+    def _progress_callback(progress, phase, last_phase):
         nonlocal sentinel
         sentinel['progress'] = progress
         sentinel['phase'] = phase
+        if last_phase:
+            sentinel['phases_done'].append(last_phase)
         storage_manager.put_result_cacheline(cache_key, sentinel, crawl_timeout, True)
 
     # run crawl and analysis in background thread to avoid blocking the main server thread

@@ -12,7 +12,6 @@ import argparse
 import json
 from ipaddress import ip_address, ip_network
 from time import sleep
-import threading
 import urllib3
 from urllib.parse import urlparse, quote_plus as encodeURIComponent
 
@@ -20,7 +19,7 @@ webres6_version = "1.6.2"
 api_url = environ.get('WEBRES6_API_URL', 'https://webres6.dev.sap').rstrip("/").rstrip("/res6") + "/res6"
 retry = urllib3.util.Retry(total=5, connect=5, backoff_factor=2)
 http = urllib3.PoolManager(happy_eyeballs=True, retries=retry)
-max_retries = 5
+max_retries = 25
 
 # Define ANSI color codes for terminal output
 color = {
@@ -56,25 +55,16 @@ def fetch_res6_json(api_url, url, ext=None, screenshot='none', whois=False, wait
     if scoreboard:
         params['scoreboard'] = "true"
 
-    # spinner setup
-    _stop = threading.Event()
-    if not quiet:
-        _frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠣⠏"
-        def _spin():
-            _idx = 0
-            while not _stop.wait(0.2):
-                _idx = (_idx + 1) % len(_frames)
-                print(f'\b\b{_frames[_idx]} ', end='', flush=True, file=sys.stderr)
-        _t = threading.Thread(target=_spin, daemon=True)
-        _t.start()
-    def advance_spinner():
-        if not quiet:
-            print('\b\b⠿  ', end='', flush=True, file=sys.stderr)
-    def stop_spinner():
-        if not quiet:
-            _stop.set()
-            _t.join()
-            print('\b\b⠿ ', end='', flush=True, file=sys.stderr)
+    def _print_progress(phases_done, phase):
+        parts = [f'{color["success"]}{ph} ✓{color["reset"]}' for ph in phases_done]
+        if phase:
+            parts.append(f'{phase} ⏳')
+        print(('\r  ' + '  '.join(parts) if parts else '\r') + '\033[1D', end='', flush=True, file=sys.stderr)
+
+    def _clear_progress():
+        # \033[u restores cursor to the saved position (end of URL line in main),
+        # \033[J erases from there to end of screen (wipes the progress line)
+        print('\r\033[u\033[J', end='', flush=True, file=sys.stderr)
 
     retry_count = 0
     while retry_count < max_retries:
@@ -83,33 +73,33 @@ def fetch_res6_json(api_url, url, ext=None, screenshot='none', whois=False, wait
         try:
             r = http.request("GET", f"{api_url}/url({encodeURIComponent(url)})", fields=params)
         except Exception as e:
-            stop_spinner()
+            _clear_progress()
             print(f"\nERROR: Failed to connect to {api_url}: {e}", file=sys.stderr)
             return None
 
         if r.status == 200:
-            stop_spinner()
+            _clear_progress()
             return r.json()
         elif r.status == 202:
-                advance_spinner()
-                if r.headers.get('refresh'):
-                    wait_time = int(float(r.headers['refresh']))
-                else:
-                    wait_time = 20
-                sleep(wait_time)
+            if not quiet:
+                try:
+                    body = r.json()
+                    _print_progress(body.get('phases_done') or [], body.get('phase') or '')
+                except Exception:
+                    pass
+            wait_time = int(float(r.headers['refresh'])) if r.headers.get('refresh') else 20
+            sleep(wait_time)
         elif r.status == 503:
-                # retry with exponential backoff
-                wait_time = 15 * 2 ** retry_count
-                print(f"\nServer busy {r.status}, retrying in {wait_time}s... (retry {retry_count+1}/{max_retries})  ", end='', file=sys.stderr)
-                sleep(wait_time)
+            wait_time = 15 * 2 ** retry_count
+            print(f"\nServer busy {r.status}, retrying in {wait_time}s... (retry {retry_count+1}/{max_retries})  ", end='', file=sys.stderr)
+            sleep(wait_time)
         else:
-            stop_spinner()
+            _clear_progress()
             print(f"\nERROR: Server returned status {r.status} with message: {r.data.decode('utf-8')}", file=sys.stderr)
             return None
 
-    # max retries reached
-    stop_spinner()
-    print(f"\rERROR: Maximum retries ({max_retries}) reached. Please try again later.", file=sys.stderr)
+    _clear_progress()
+    print(f"\nERROR: Maximum retries ({max_retries}) reached. Please try again later.", file=sys.stderr)
     return None
 
 def fetch_res6_report(api_url, report_id):
@@ -171,8 +161,8 @@ def print_server_config(res):
             print(f"    {line}")
 
 
-def gen_fancy_hostlist(hosts, original_host=None, show_proto=False, 
-                         show_asn=True, show_asd=True, show_prfxinfo=False):
+def gen_fancy_hostlist(hosts, original_host=None, show_proto=False,
+                         show_asn=True, show_asd=True, show_prfxinfo=False, report_id=None):
     """
     Generates a table of host names and IP addresses from the hosts dictionary.
     IPv4 addresses are colored red, IPv6 addresses are colored green.
@@ -321,7 +311,11 @@ def gen_fancy_hostlist(hosts, original_host=None, show_proto=False,
 
     # print DNS traces if available
     for hostname in dns_traces:
-        yield(f"  DNS trace available for {hostname} - you may use `-j | jq -r '.hosts[\"{hostname}\"].dns.unbound_trace' | base64 -d` to view it")
+        if report_id:
+            cmd = f"{sys.argv[0]} -R {report_id} -j | jq -r '.hosts[\"{hostname}\"].dns.unbound_trace' | base64 -d"
+        else:
+            cmd = f"-j | jq -r '.hosts[\"{hostname}\"].dns.unbound_trace' | base64 -d"
+        yield(f"  DNS trace available for {hostname}: {cmd}")
 
 
 def display_image_in_iterm2(image_data, filename="screenshot", width=None):
@@ -379,7 +373,7 @@ def display_results(res, args):
     # generate output
     output_lines = gen_fancy_hostlist(res.get('hosts', {}), original_host=urlparse(args.url).hostname,
                                     show_proto=not(args.hide_proto), show_prfxinfo = args.show_network,
-                                    show_asn=args.show_asn, show_asd=args.show_asd)
+                                    show_asn=args.show_asn, show_asd=args.show_asd, report_id=res.get('ID'))
     width = next(output_lines)  # first line is rule length
 
     # print screenshot if available
@@ -483,13 +477,13 @@ def main():
             url = 'https://' + url
 
         print(f"API endpoint: {args.api}", file=sys.stderr)
-        print(f"Fetching results for: {url}   ", file=sys.stderr, end='', flush=True)
+        print(f"Fetching results for: {url}\033[s", file=sys.stderr)
         if res := fetch_res6_json(args.api, url, ext=args.extension, screenshot=args.screenshot,
                                   whois=True, wait=args.wait, timeout=args.timeout, scoreboard=(not args.private),
                                   quiet=args.quiet):
-            print("done", file=sys.stderr)
+            print(" ... done", file=sys.stderr)
         else:
-            print(f"ERROR: Failed to fetch from {args.api}: {e}", file=sys.stderr)
+            print(f"ERROR: Failed to fetch from {args.api}", file=sys.stderr)
             sys.exit(2)
 
     # save JSON if requested
