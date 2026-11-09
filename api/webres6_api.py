@@ -39,7 +39,7 @@ import webres6_nat64  # noqa: F401 — applies NAT64 monkey-patch to IPv6Address
 from webres6_stackoverflow import TracedThreadPoolExecutor
 
 # config/flag variables
-webres6_version   = "1.9.0"
+webres6_version   = "1.10.0"
 debug_whois       = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo    = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask       = 'flask'    in getenv("DEBUG", '').lower().split(',')
@@ -652,7 +652,7 @@ def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
         if report[key] is None:
             del report[key]
 
-    next_phase('done')
+    next_phase('archive')
 
     print(f"{lp}time spent: total={sum(timings.values()):.2f}s " +
           ' '.join([f"{k}={v:.3f}s" for k, v in timings.items()]), file=sys.stderr)
