@@ -72,7 +72,7 @@ max_timeout       = int(getenv("SELENIUM_TIMEOUT_MAX", 90)) # max timeout for se
 max_wait          = max_timeout//3 # max wait time for page load
 default_wait      = 2
 crawl_timeout     = int(getenv("CRAWL_TIMEOUT", 4*max_timeout)) # timeout for the entire crawl operation, including dnsprobe and whois lookups
-client_retry_base = int(getenv("CLIENT_RETRY_BASE", 6)) # min seconds to wait before client retries fetching report
+client_retry_base = int(getenv("CLIENT_RETRY_BASE", 3)) # min seconds to wait before client retries fetching report
 enable_whois      = getenv("ENABLE_WHOIS", 'true').lower() in ['true', '1', 'yes']
 whois_cache_ttl   = int(getenv("WHOIS_CACHE_TTL", 270000)) # seconds
 crawl_jobs        = int(getenv("CRAWL_JOBS", "4"))
@@ -507,7 +507,7 @@ def gen_report_id(url, wait, timeout, ext, screenshot_mode, lookup_whois, ts, re
 @tracer.start_as_current_span("crawl_and_analyze_url")
 def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
                           screenshot_mode, lookup_whois,
-                          report_id, report_node):
+                          report_id, report_node, progress_callback=(lambda progress, phase: None)):
     """ Internal implementation of crawl_and_analyze_url with optional span parameter.
     """
 
@@ -526,16 +526,26 @@ def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
     # collect timing stats
     timings = {}
     ts = datetime.now(timezone.utc)
+    progress = 0.0
     last_ts = ts
+    last_key = 'init'
+    last_share = 0.2
 
-    def push_timing(key):
+    def next_phase(key, share=0):
         nonlocal last_ts
+        nonlocal last_key
+        nonlocal last_share
+        nonlocal progress
         nonlocal span
         now = datetime.now(timezone.utc)
         spent = (now - last_ts).total_seconds()
-        timings[key] = spent
-        webres6_time_spent.labels(phase=key).inc(spent)
+        timings[last_key] = spent
+        webres6_time_spent.labels(phase=last_key).inc(spent)
+        progress += last_share
+        progress_callback(progress, key)
         last_ts = now
+        last_key = key
+        last_share = share
 
     # init logging
     if not report_id:
@@ -564,22 +574,22 @@ def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
         "webres6.browser.accept_insecure_certs": browser_info.get('acceptInsecureCerts', False),
     })
 
-    push_timing('init')
-
     # perform crawl
+    next_phase('crawl', share=0.3)
     crawl, err = crawl_page(url.geturl(), driver, extension=ext, extension_data=extension_data, wait=wait, timeout=timeout, log_prefix=lp);
     if crawl:
         print(f"{lp}page crawl done", file=sys.stderr)
-    push_timing('crawl')
 
     # take screenshot if requested
     screenshot = None
     if screenshot_mode:
+        next_phase('screenshot')
         screenshot = take_screenshot(driver, mode=screenshot_mode, log_prefix=lp)
-        push_timing('screenshot')
     elif not crawl:
+        next_phase('screenshot')
         screenshot = take_screenshot(driver, mode='small', log_prefix=lp)
-        push_timing('screenshot')
+
+    next_phase('extract', share=0.1)
 
     # handle crawl errors
     if not crawl:
@@ -588,21 +598,21 @@ def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
         webres6_tested_results.labels(result='errors').inc()
         return gen_json(url, report_id=report_id, screenshot=screenshot, timestamp=ts, timings=timings, error=err, error_code=200), 200
 
-
     # collect host info and analyze
     hosts = get_hostinfo(driver, log_prefix=lp)
     print(f"{lp}found {len(hosts)} hosts", file=sys.stderr)
     cleanup_crawl(driver, extension=ext, extension_data=extension_data, log_prefix=lp)
-    push_timing('extract')
 
     # add dnsprobe info if configured
     if dnsprobe:
+        next_phase('dnsprobe', share=0.1)
         add_dnsprobe_info(hosts, log_prefix=lp)
-        push_timing('dnsprobe')
 
     if lookup_whois and enable_whois:
+        next_phase('whois', share=0.2)
         add_whois_info(hosts, log_prefix=lp)
-        push_timing('whois')
+
+    next_phase('finalize', share=0.1)
 
     # report statistics
     score, http_score, dns_score, ipv6_only_ready = get_ipv6_only_score(hosts, url.hostname)
@@ -638,7 +648,8 @@ def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
         if report[key] is None:
             del report[key]
 
-    push_timing('finalize')
+    next_phase('done')
+
     print(f"{lp}time spent: total={sum(timings.values()):.2f}s " +
           ' '.join([f"{k}={v:.3f}s" for k, v in timings.items()]), file=sys.stderr)
 
@@ -697,8 +708,9 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
         rr.headers['Cache-Control'] = f"private, max-age={ttl:.0f}"
         return rr, 303
 
-    def send_in_progress_response(report_id, refresh=client_retry_base):
-        response = jsonify({ 'error': 'Crawl in progress - please come back later', 'report_id': report_id })
+    def send_in_progress_response(report_id, sentinel, refresh=client_retry_base):
+        response = jsonify({ 'error': 'Crawl in progress - please come back later', 'report_id': report_id,
+                             'phase': sentinel.get('phase', 'unknown'), 'progress': sentinel.get('progress', None) })
         response.headers['Refresh'] = int(refresh)
         return response, 202
 
@@ -729,7 +741,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
         if type == 'sentinel':
             # calculate time passed
             elapsed = (datetime.now(timezone.utc) - ts).total_seconds()
-            return send_in_progress_response(report_id, refresh=max(client_retry_base, elapsed//4))
+            return send_in_progress_response(report_id, json_result, refresh=max(client_retry_base, elapsed//4))
         elif type == 'error':
             return jsonify(data), json_result.get('error_code', 500)
         elif type == 'report':
@@ -746,8 +758,16 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
 
     # Put a sentinel entry into the cache to avoid multiple concurrent crawls for the same URL
     sentinel = { 'type': 'sentinel', 'ts': ts, 'report_id': report_id,
-                    'data': "crawl in progress - please come back later"}
-    storage_manager.put_result_cacheline(cache_key, sentinel, crawl_timeout, False)
+                    'data': "crawl in progress - please come back later",
+                    'phase': 'queued', 'progress': 0.0 }
+    storage_manager.put_result_cacheline(cache_key, sentinel, crawl_timeout, False) # no overwrite to avoid races
+
+    # define progress callback to update progress in cache
+    def _progress_callback(progress, phase):
+        nonlocal sentinel
+        sentinel['progress'] = progress
+        sentinel['phase'] = phase
+        storage_manager.put_result_cacheline(cache_key, sentinel, crawl_timeout, True)
 
     # run crawl and analysis in background thread to avoid blocking the main server thread
     # capture the request span context now (on the request thread, while the span is still active)
@@ -771,7 +791,8 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
                 scoreboard_entry=scoreboard_entry,
                 screenshot_mode=screenshot_mode,
                 lookup_whois=lookup_whois,
-                report_id=report_id, report_node=report_node)
+                report_id=report_id, report_node=report_node,
+                progress_callback=_progress_callback)
 
             if error_code != 200:
                 error_cache_line = { 'type': 'error', 'ts': ts, 'report_id': report_id,
@@ -803,7 +824,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
     future = crawl_executor.submit(_background_crawl)
     future.add_done_callback(lambda _: webres6_crawl_jobs.labels('queued').dec())
     span.add_event("webres6.crawl_queued", {"report_id": report_id})
-    return send_in_progress_response(report_id, refresh=client_retry_base*2)
+    return send_in_progress_response(report_id, sentinel, refresh=(max(client_retry_base, wait)))
 
 
 

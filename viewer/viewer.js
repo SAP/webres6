@@ -364,11 +364,15 @@ async function analyzeURL(url, wait = 2, scoreboard_entry = false, screenshot = 
   const defaultDelay = 15;
   const progressBar = loadingStatus.find('progress.loading-progress');
   const timeDisplay = loadingStatus.find('span.placeholder');
+  let serverProgress = 0;
+  let serverPhase = '';
+  let serverUpdate = 0;
   const progressInterval = setInterval(function() {
     const elapsed = (Date.now() - startTime) / 1000;
-    const barValue = Math.min((Math.log1p(elapsed) / Math.log1p(serverMaxRetryTime)), elapsed/60); // logarithmic progress with slowdown to linear for the first minute
-    progressBar.attr('value', barValue) ;
-    timeDisplay.text(`${Math.round(elapsed)}s`);
+    const timeProgress = // logarithmic progress with slowdown to progress+linear extrapolation for the first 60s
+      Math.min((Math.log1p(elapsed) / Math.log1p(serverMaxRetryTime)), (serverProgress + (elapsed - serverUpdate)/90));
+    progressBar.attr('value', timeProgress);
+    timeDisplay.text(`${serverPhase ? `${serverPhase} – ` : ''} ${Math.round(elapsed)}s`);
   }, 50);
   function cleanup() {
     clearInterval(progressInterval);
@@ -387,6 +391,12 @@ async function analyzeURL(url, wait = 2, scoreboard_entry = false, screenshot = 
           overview.append(errStatus);
           return;
         }
+        serverUpdate = elapsed;
+        try {
+          const body = await response.json();
+          if (body.progress != null) serverProgress = body.progress;
+          if (body.phase) serverPhase = body.phase;
+        } catch (e) {}
         const refreshHeader = response.headers.get('Refresh');
         const delay = refreshHeader ? parseFloat(refreshHeader) : defaultDelay;
         await new Promise(resolve => setTimeout(resolve, delay * 1000));
