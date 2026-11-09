@@ -72,7 +72,7 @@ max_timeout       = int(getenv("SELENIUM_TIMEOUT_MAX", 90)) # max timeout for se
 max_wait          = max_timeout//3 # max wait time for page load
 default_wait      = 2
 crawl_timeout     = int(getenv("CRAWL_TIMEOUT", 4*max_timeout)) # timeout for the entire crawl operation, including dnsprobe and whois lookups
-client_retry_base = int(getenv("CLIENT_RETRY_BASE", 6)) # min seconds to wait before client retries fetching report
+client_retry_base = int(getenv("CLIENT_RETRY_BASE", 3)) # min seconds to wait before client retries fetching report
 enable_whois      = getenv("ENABLE_WHOIS", 'true').lower() in ['true', '1', 'yes']
 whois_cache_ttl   = int(getenv("WHOIS_CACHE_TTL", 270000)) # seconds
 crawl_jobs        = int(getenv("CRAWL_JOBS", "4"))
@@ -760,7 +760,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
     sentinel = { 'type': 'sentinel', 'ts': ts, 'report_id': report_id,
                     'data': "crawl in progress - please come back later",
                     'phase': 'queued', 'progress': 0.0 }
-    storage_manager.put_result_cacheline(cache_key, sentinel, crawl_timeout, False)
+    storage_manager.put_result_cacheline(cache_key, sentinel, crawl_timeout, False) # no overwrite to avoid races
 
     # define progress callback to update progress in cache
     def _progress_callback(progress, phase):
@@ -824,7 +824,7 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
     future = crawl_executor.submit(_background_crawl)
     future.add_done_callback(lambda _: webres6_crawl_jobs.labels('queued').dec())
     span.add_event("webres6.crawl_queued", {"report_id": report_id})
-    return send_in_progress_response(report_id, sentinel, refresh=client_retry_base*2)
+    return send_in_progress_response(report_id, sentinel, refresh=(max(client_retry_base, wait)))
 
 
 
