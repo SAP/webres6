@@ -593,7 +593,7 @@ def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
         next_phase('screenshot')
         screenshot = take_screenshot(driver, mode='small', log_prefix=lp)
 
-    next_phase('extract', share=0.1)
+    next_phase('extract', share=0.05)
 
     # handle crawl errors
     if not crawl:
@@ -613,10 +613,10 @@ def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
         add_dnsprobe_info(hosts, log_prefix=lp)
 
     if lookup_whois and enable_whois:
-        next_phase('whois', share=0.2)
+        next_phase('whois', share=0.3)
         add_whois_info(hosts, log_prefix=lp)
 
-    next_phase('finalize', share=0.1)
+    next_phase('finalize', share=0.02)
 
     # report statistics
     score, http_score, dns_score, ipv6_only_ready = get_ipv6_only_score(hosts, url.hostname)
