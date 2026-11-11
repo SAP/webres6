@@ -275,24 +275,20 @@ progress {
   float: right;
 }
 .status-loading .phase-log {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  gap: 0.5em;
-  overflow: hidden;
-  margin-top: 0.35em;
-  font-size: 0.82em;
-  min-height: 1.3em;
+  display: block;
+  margin-top: 0.2em;
+  font-size: small;
 }
 .status-loading .phase-done {
+  display: inline-block;
   white-space: nowrap;
-  flex-shrink: 0;
   color: var(--color-ready);
   opacity: 0.8;
+  padding-right: 1em;
 }
 .status-loading .phase-current {
+  display: inline-block;
   white-space: nowrap;
-  flex-shrink: 0;
   color: var(--color-brand-loading);
   font-style: italic;
 }

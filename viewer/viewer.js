@@ -404,8 +404,6 @@ async function analyzeURL(url, wait = 2, scoreboard_entry = false, screenshot = 
             phaseLog.empty();
             body.phases_done.forEach(ph => phaseLog.append($('<span class="phase-done">').text(`${ph} ✓`)));
             phaseLog.append($('<span class="phase-current">').text(`${body.phase} ⏳`));
-            const el = phaseLog[0];
-            el.scrollLeft = el.scrollWidth;
           }
         } catch (e) {}
         const refreshHeader = response.headers.get('Refresh');
