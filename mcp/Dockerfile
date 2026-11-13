@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-FROM python:3.14-slim-trixie AS webres6-mcp
+FROM python:3.15-slim-trixie AS webres6-mcp
 
 WORKDIR /app
 
