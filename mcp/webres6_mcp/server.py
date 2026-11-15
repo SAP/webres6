@@ -19,10 +19,9 @@ from mcp.server.mcpserver import MCPServer
 _HTTP_CACHE_TTL = float(os.environ.get("WEBRES6_HTTP_CACHE_TTL", "600"))
 
 # Created at module load; lifespan closes it properly on shutdown.
-# Reports are content-addressed and the API/S3 send `Cache-Control: public,
-# immutable`, so a process-local cache massively reduces redundant fetches.
-# We cap entry lifetime at WEBRES6_HTTP_CACHE_TTL so upstream "immutable"
-# headers don't pin entries for weeks.
+# Reports are content-addressed (new crawl → new ID), so the API/S3 correctly
+# send `Cache-Control: public, immutable`; rfc=True honours those headers.
+# default_ttl is a fallback for responses without cache directives.
 _cache_dir = Path(tempfile.mkdtemp(prefix="webres6-mcp-cache-"))
 
 http_client: httpx.AsyncClient = hishel_httpx.AsyncCacheClient(
@@ -30,6 +29,7 @@ http_client: httpx.AsyncClient = hishel_httpx.AsyncCacheClient(
         database_path=_cache_dir / "http.db",
         default_ttl=_HTTP_CACHE_TTL,
     ),
+    rfc=True,
     follow_redirects=True,
     timeout=30,
 )
