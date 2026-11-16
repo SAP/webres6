@@ -135,6 +135,16 @@ selenium:
   username: "admin"
   password: "admin"
   secret: ""            # Kubernetes secret name from docker-selenium chart (keys: SE_ROUTER_USERNAME, SE_ROUTER_PASSWORD); takes precedence over username/password above
+  # Authentication for the API -> Selenium connection.
+  #   basic  - HTTP basic auth using username/password (or secret) above.
+  #   bearer - the API sends a projected-ServiceAccount-token bearer token for a
+  #            verifying proxy in front of Selenium to validate (no shared secret).
+  #            NOTE: deploying that verifying proxy is out of scope of this chart;
+  #            bearer mode only wires up the API client side (token volume + env).
+  auth:
+    mode: basic                          # basic | bearer
+    token:                               # only used when mode is bearer
+      audience: "webres6-selenium"       # audience stamped into the projected SA token
 
 # Selenium subchart values — only used when selenium.deploy is true.
 # Refer to https://github.com/SeleniumHQ/docker-selenium/blob/trunk/charts/selenium-grid/values.yaml

@@ -1,4 +1,5 @@
 {{- $irsaRoleArn := .Values.api.awsRoleARN | default "" -}}
+{{- $seleniumAuthMode := (.Values.selenium.auth | default dict).mode | default "basic" -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -54,6 +55,9 @@ spec:
             - name: SELENIUM_REMOTE_URL
               value: {{ include "webres6.selenium.url" . | quote }}
             {{- end }}
+            {{- if eq $seleniumAuthMode "bearer" }}
+            {{- include "webres6.selenium.bearer.env" . | nindent 12 }}
+            {{- else }}
             {{- if or .Values.selenium.deploy .Values.selenium.secret }}
             - name: SELENIUM_USERNAME
               valueFrom:
@@ -75,6 +79,7 @@ spec:
             {{- if .Values.selenium.password }}
             - name: SELENIUM_PASSWORD
               value: {{ .Values.selenium.password | quote }}
+            {{- end }}
             {{- end }}
             {{- end }}
             {{- if and (eq .Values.dnsprobe.mode "external") .Values.dnsprobe.url }}
@@ -274,6 +279,9 @@ spec:
             {{- if $irsaRoleArn }}
             {{- include "webres6.irsa.volumeMount" . | nindent 12 }}
             {{- end }}
+            {{- if eq $seleniumAuthMode "bearer" }}
+            {{- include "webres6.selenium.bearer.volumeMount" . | nindent 12 }}
+            {{- end }}
           {{- with .Values.api.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
@@ -288,6 +296,9 @@ spec:
             name: {{ include "webres6.fullname" . }}-serverconfig
         {{- if $irsaRoleArn }}
         {{- include "webres6.irsa.volume" . | nindent 8 }}
+        {{- end }}
+        {{- if eq $seleniumAuthMode "bearer" }}
+        {{- include "webres6.selenium.bearer.volume" . | nindent 8 }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

@@ -45,10 +45,6 @@ debug_hostinfo    = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask       = 'flask'    in getenv("DEBUG", '').lower().split(',')
 debug_viewer      = 'viewer'   in getenv("DEBUG", '').lower().split(',')
 admin_api_key     = getenv("ADMIN_API_KEY", None)
-selenium_remote   = getenv("SELENIUM_REMOTE_URL", None)
-selenium_username = getenv("SELENIUM_USERNAME", None)
-selenium_password = getenv("SELENIUM_PASSWORD", None)
-headless_selenium = getenv("HEADLESS_SELENIUM", False)
 dnsprobe_api_url  = getenv("DNSPROBE_API_URL", None)
 enable_dnsprobe   = getenv("ENABLE_DNSPROBE", 'true').lower() in ['true', '1', 'yes']
 valkey_url        = getenv("VALKEY_URL", None)
@@ -735,8 +731,12 @@ def crawl_and_analyze_url_cached(url, wait=2, timeout=10, scoreboard_entry=True,
         cache_age = datetime.now(timezone.utc) - ts
         type = json_result.get('type', None)
         data = json_result.get('data', None)
-        print(f"{lp}sending cached {type} age={cache_age.total_seconds():.1f}s {url.geturl().translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}", file=sys.stderr)
-        print(f"{lp}options: wait={wait}s, timeout={timeout}s, extension={ext}, screenshot={screenshot_mode}, whois={lookup_whois}", file=sys.stderr)
+        if phase := json_result.get('phase', None):
+            phase = f" phase={phase}"
+        else:
+            phase = ''
+        print_url = f" url={url.geturl().translate(str.maketrans('','', ''.join([chr(i) for i in range(1, 32)])))}"
+        print(f"{lp}sending cached {type} age={cache_age.total_seconds():.1f}s{phase}{print_url}", file=sys.stderr)
         span.add_event("webres6.cache_hit", {
             "webres6.cache_hit_type": type,
             "webres6.cache_age_seconds": cache_age.total_seconds(),

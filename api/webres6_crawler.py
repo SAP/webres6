@@ -14,7 +14,7 @@ from ipaddress import ip_address
 from urllib.parse import urlparse
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.client_config import ClientConfig
+from selenium.webdriver.remote.client_config import ClientConfig, AuthType
 from selenium.common.exceptions import WebDriverException, TimeoutException
 import urllib3
 from opentelemetry import trace
@@ -26,20 +26,52 @@ from webres6_extension import init_selenium_options, prepare_selenium_crawl, ope
 # config
 app_home          = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
 srvconfig_dir     = os.path.join(app_home, 'serverconfig')
-selenium_remote   = getenv("SELENIUM_REMOTE_URL", None)
-selenium_username = getenv("SELENIUM_USERNAME", None)
-selenium_password = getenv("SELENIUM_PASSWORD", None)
-headless_selenium = getenv("HEADLESS_SELENIUM", False)
-debug_hostinfo    = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
+selenium_remote     = getenv("SELENIUM_REMOTE_URL", None)
+selenium_username   = getenv("SELENIUM_USERNAME", None)
+selenium_password   = getenv("SELENIUM_PASSWORD", None)
+# Auth mode for the API -> Selenium connection: "basic" (shared username/password)
+# or "bearer" (workload-identity token, e.g. a projected Kubernetes ServiceAccount
+# token that the kubelet rotates).
+selenium_auth_mode  = getenv("SELENIUM_AUTH_MODE", "basic").lower()
+selenium_token_file = getenv("SELENIUM_TOKEN_FILE", "/var/run/secrets/tokens/selenium/token")
+headless_selenium   = getenv("HEADLESS_SELENIUM", False)
+debug_hostinfo      = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 
-# Selenium client config for remote driver
-selenium_client_config = None
-if selenium_remote:
-    selenium_client_config = ClientConfig(
+
+def build_selenium_client_config():
+    """Build a fresh ClientConfig for the remote Selenium connection.
+
+    The config is built per connection rather than cached at import time so that
+    a rotating bearer token (SELENIUM_AUTH_MODE=bearer) is re-read from disk on
+    every new WebDriver session — kubelet-projected ServiceAccount tokens are
+    refreshed roughly hourly, and a cached token would eventually be rejected.
+
+    Returns (client_config, error). client_config is None when no remote server
+    is configured (local Chrome) or when the bearer token cannot be read.
+    """
+    if not selenium_remote:
+        return None, None
+
+    if selenium_auth_mode == "bearer":
+        try:
+            with open(selenium_token_file) as f:
+                token = f.read().strip()
+        except OSError as e:
+            return None, f"Could not read Selenium bearer token from {selenium_token_file}: {e}"
+        if not token:
+            return None, f"Selenium bearer token at {selenium_token_file} is empty"
+        return ClientConfig(
+            remote_server_addr=selenium_remote,
+            auth_type=AuthType.BEARER,
+            token=token,
+        ), None
+
+    # default: HTTP Basic auth with a shared username/password
+    return ClientConfig(
         remote_server_addr=selenium_remote,
         username=selenium_username if selenium_username else 'admin',
         password=selenium_password if selenium_password else 'admin',
-    )
+    ), None
 
 # URL blocklist — defaults plus optional override file
 url_blocklist = ["*://localhost/*", "*://localhost.localdomain/*", "*://*.local/*", "*://*.internal/*"]
@@ -105,8 +137,13 @@ def init_webdriver(log_prefix='', implicit_wait=0.5, extension=None, extension_d
     driver = None
     try:
         if selenium_remote:
-            print(f"{log_prefix}connecting to remote Selenium server at {selenium_remote}", file=sys.stderr)
-            driver = webdriver.Remote(command_executor=selenium_remote, options=options, client_config=selenium_client_config)
+            client_config, err = build_selenium_client_config()
+            if err:
+                print(f"{log_prefix}ERROR: {err}", file=sys.stderr)
+                span.set_status(Status(StatusCode.ERROR, err))
+                return None, err
+            print(f"{log_prefix}connecting to remote Selenium server at {selenium_remote} (auth={selenium_auth_mode})", file=sys.stderr)
+            driver = webdriver.Remote(command_executor=selenium_remote, options=options, client_config=client_config)
         else:
             print(f"{log_prefix}starting local Selenium", file=sys.stderr)
             driver = webdriver.Chrome(options=options)
