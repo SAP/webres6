@@ -34,8 +34,10 @@ Environment variables:
   ADMIN_API_KEY               API key required for /admin/* endpoints. When unset, those endpoints are open (intentional, for trusted networks).
   DEBUG                       Comma-separated debug flags: whois, hostinfo, flask, viewer, trace, unbound
   SELENIUM_REMOTE_URL         Use a remote Selenium server instead of starting Selenium for each request
-  SELENIUM_USERNAME           Basic-auth username for SELENIUM_REMOTE_URL (optional)
-  SELENIUM_PASSWORD           Basic-auth password for SELENIUM_REMOTE_URL (optional)
+  SELENIUM_AUTH_MODE          Auth for the remote connection: basic (default) or bearer (workload-identity token)
+  SELENIUM_USERNAME           Basic-auth username for SELENIUM_REMOTE_URL (basic mode only, optional)
+  SELENIUM_PASSWORD           Basic-auth password for SELENIUM_REMOTE_URL (basic mode only, optional)
+  SELENIUM_TOKEN_FILE         Bearer token file for SELENIUM_AUTH_MODE=bearer (default: /var/run/secrets/tokens/selenium/token)
   HEADLESS_SELENIUM           Run Selenium in headless mode (default: false)
   SELENIUM_TIMEOUT_MIN        Min timeout for Selenium operations in seconds (default: 20)
   SELENIUM_TIMEOUT_MAX        Max timeout for Selenium operations in seconds (default: 90)

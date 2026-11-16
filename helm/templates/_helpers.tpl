@@ -116,6 +116,36 @@ Selenium basic-auth secret name — auto-derived when selenium.deploy is true, o
 {{- end }}
 
 {{/*
+Selenium bearer-token (workload-identity) wiring — used when selenium.auth.mode
+is "bearer". Analogous to the webres6.irsa.* helpers above: the API mounts a
+projected ServiceAccount token and sends it as a bearer token for a verifying
+proxy in front of Selenium to validate. Deploying that proxy is out of scope of
+this chart; these helpers only wire up the API client side.
+*/}}
+{{- define "webres6.selenium.bearer.env" -}}
+- name: SELENIUM_AUTH_MODE
+  value: "bearer"
+- name: SELENIUM_TOKEN_FILE
+  value: "/var/run/secrets/selenium-token/token"
+{{- end }}
+
+{{- define "webres6.selenium.bearer.volumeMount" -}}
+- name: selenium-token
+  mountPath: /var/run/secrets/selenium-token
+  readOnly: true
+{{- end }}
+
+{{- define "webres6.selenium.bearer.volume" -}}
+- name: selenium-token
+  projected:
+    sources:
+    - serviceAccountToken:
+        audience: {{ (.Values.selenium.auth.token.audience | default "webres6-selenium") | quote }}
+        expirationSeconds: 3600
+        path: token
+{{- end }}
+
+{{/*
 Guard: ingress and Gateway API routing are mutually exclusive — enabling both
 would double-expose every path. Fail rendering early with a clear message.
 */}}

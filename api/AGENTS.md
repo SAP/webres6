@@ -73,6 +73,9 @@ Prometheus metrics are kept **in-process** (`/metrics` serves the default regist
 | Variable | Purpose |
 |----------|---------|
 | `SELENIUM_REMOTE_URL` | Remote WebDriver URL; omit for local ChromeDriver |
+| `SELENIUM_AUTH_MODE` | Auth for the API→Selenium connection: `basic` (default — HTTP basic auth via `SELENIUM_USERNAME`/`SELENIUM_PASSWORD`) or `bearer` (workload-identity token read from `SELENIUM_TOKEN_FILE`) |
+| `SELENIUM_USERNAME`, `SELENIUM_PASSWORD` | Basic-auth credentials for `SELENIUM_REMOTE_URL` (used only when `SELENIUM_AUTH_MODE=basic`; default to `admin`/`admin`) |
+| `SELENIUM_TOKEN_FILE` | Bearer token path when `SELENIUM_AUTH_MODE=bearer` (default `/var/run/secrets/tokens/selenium/token`); re-read on every new WebDriver session so a rotated (e.g. projected ServiceAccount) token is picked up |
 | `NAT64_PREFIXES` | Comma-separated NAT64 prefixes |
 | `ADMIN_API_KEY` | Required for `/admin/*` endpoints (open when unset, intentional for trusted networks) |
 | `ENABLE_WHOIS` | Enable WHOIS lookups |
