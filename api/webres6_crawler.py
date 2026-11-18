@@ -123,7 +123,12 @@ def init_webdriver(log_prefix='', implicit_wait=0.5, extension=None, extension_d
     options.add_argument('--disable-gpu')
     options.add_argument('--disable-webrtc')
     options.add_argument('--disable-notifications')
-    options.add_experimental_option('perfLoggingPrefs', { 'enableNetwork' : True })
+    # use Chrome's Happy Eyeballs v3 connection engine (HttpStreamPool / HttpStreamAttempt)
+    options.add_argument('--enable-features=HappyEyeballsV3')
+    # enableNetwork delivers Network.* events; also enable Chrome's net-log
+    # (DNS, TCP connect attempts, Happy Eyeballs connect-job racing) to be fed
+    # into the performance log
+    options.add_experimental_option('perfLoggingPrefs', { 'enableNetwork' : True, 'traceCategories' : 'netlog' })
     options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
 
     if headless_selenium:
@@ -319,43 +324,75 @@ def split_hostname(hostname):
     return local_part, domain_part
 
 
+# net-log trace-event name prefixes worth keeping for Happy Eyeballs analysis.
+# Chrome runs Happy Eyeballs v3 (--enable-features=HappyEyeballsV3), whose connection
+# racing lives in the HTTP_STREAM_POOL attempt-manager and the per-family
+# TCP_STREAM_ATTEMPT / TLS_STREAM_ATTEMPT wrappers (the legacy CONNECT_JOB model is
+# gone). We keep those, plus DNS resolution, the low-level socket connect, UDP/QUIC
+# for HTTP/3, and URL_REQUEST/CANCELLED for context. Everything else (HTTP/2 window
+# updates, byte counters, cache lookups) is dropped to bound memory per crawl.
+NETLOG_CONNECT_PREFIXES = (
+    'URL_REQUEST',
+    'HOST_RESOLVER',
+    'HTTP_STREAM_POOL',
+    'TCP_STREAM_ATTEMPT',
+    'TLS_STREAM_ATTEMPT',
+    'TCP_CONNECT',
+    'UDP_CONNECT',
+    'QUIC_SESSION_CREATED',
+    'CANCELLED',
+)
+
+
+def ip_family(ip):
+    """Classify an ip_address as 'IPv4'/'IPv6'/'NAT64'/'IPv4_Mapped'/'Unknown'.
+
+    NAT64 and IPv4-mapped v6 addresses are reported distinctly (they are not native
+    IPv6 connectivity). Shared by get_hostinfo, _endpoint_family and the happy_eyeballs
+    aggregation so the family labels stay consistent everywhere.
+    """
+    match ip.version:
+        case 4:
+            return 'IPv4'
+        case 6 if ip.is_nat64():
+            return 'NAT64'
+        case 6 if ip.ipv4_mapped:
+            return 'IPv4_Mapped'
+        case 6:
+            return 'IPv6'
+        case _:
+            return 'Unknown'
+
+
 @tracer.start_as_current_span("selenium.get_hostinfo")
 def get_hostinfo(driver, log_prefix=''):
     """ Extracts host information using Selenium/Chromium network performance logs.
+
+    Returns (hosts, netlog_events): the per-host summary dict and the list of
+    net-log trace events (filtered to NETLOG_CONNECT_PREFIXES) harvested from the
+    same performance log for Happy Eyeballs analysis.
     """
     span = trace.get_current_span()
 
+    # check if public suffix list is available
+    if public_suffixes is None:
+        print(f"{log_prefix}WARNING: public suffix list not found, domain part extraction will always use the 2nd level domain.", file=sys.stderr)
+
     # Ask selenium for performance logs
+    span.add_event("fetching_performance_logs_start")
     try:
         # ugly work-around as >>> # perfs = driver.get_log('performance') <<< does not work with remote driver
         perfs = driver.execute('getLog', {'type': 'performance'})['value']
     except WebDriverException as e:
+        span.add_event("fetching_performance_logs_error", {"error": e.msg})
         print(f"Error fetching performance logs: {e.msg}", file=sys.stderr)
-        return None
+        return None, []
 
-    # dictionary to hold host-level summaries
+    span.add_event("fetching_performance_logs_end")
+
+    # dictionary to hold host-level summaries and helper functions for parsing the data
     hosts = {}
-
-    # check if public suffix list is available
-    if public_suffixes is None: 
-        print(f"{log_prefix}WARNING: public suffix list not found, domain part extraction will always use the 2nd level domain.", file=sys.stderr)
-
-    # Extract host info from performance logs
-    for perf in perfs:
-        # parse log entry
-        try:
-            msg = perf.get('message')
-            obj = json.loads(msg)
-        except Exception as e:
-            print(f"{log_prefix}ERROR: failed parsing log entry: {e}", file=sys.stderr)
-            span.add_event("log.parse_error", {"log_entry": str(e)})
-            webres6_hostinfo_parsed.labels(type='error').inc()
-            continue
-
-        # We are only interested in Network.responseReceived events
-        if 'message' not in obj or obj['message'].get('method') != 'Network.responseReceived':
-            webres6_hostinfo_parsed.labels(type='skipped').inc()
-            continue
+    def _parse_response_received(obj):
 
         # Check for valid IP in response
         response = obj['message']['params']['response']
@@ -365,7 +402,7 @@ def get_hostinfo(driver, log_prefix=''):
             if debug_hostinfo:
                 print(f"{log_prefix}WARNING: No valid IP address found in {response}", file=sys.stderr)
                 span.add_event("log.missing_ip", {"response": str(response)})
-            continue
+            return # skip this entry if no valid IP is found
         # Strip brackets from IPv6 addresses
         if remote_ip and remote_ip.startswith('[') and remote_ip.endswith(']'):
             remote_ip = remote_ip[1:-1]
@@ -378,19 +415,9 @@ def get_hostinfo(driver, log_prefix=''):
             print(f"{log_prefix}WARNING: Error parsing IP address: {remote_ip} - {e}", file=sys.stderr)
             span.add_event("log.invalid_ip", {"ip_address": remote_ip, "error": str(e)})
             ip = None
-            continue # skip the entry
+            return # skip the entry
         # add resource statistics
-        match ip.version:
-            case 4:
-                webres6_resources_total.labels(protocol='IPv4').inc()
-            case 6 if ip.is_nat64():
-                webres6_resources_total.labels(protocol='NAT64').inc()
-            case 6 if ip.ipv4_mapped:
-                webres6_resources_total.labels(protocol='IPv4_Mapped').inc()
-            case 6:
-                webres6_resources_total.labels(protocol='IPv6').inc()
-            case _:
-                webres6_resources_total.labels(protocol='Unknown').inc()
+        webres6_resources_total.labels(protocol=ip_family(ip)).inc()
 
         # Extract remainder of the response details
         url = urlparse(response.get('url'))
@@ -416,7 +443,7 @@ def get_hostinfo(driver, log_prefix=''):
             if debug_hostinfo:
                 print(f"{log_prefix}WARNING: No valid hostname found in URL {response.get('url')}", file=sys.stderr)
                 span.add_event("log.missing_hostname", {"url": response.get('url')})
-            continue
+            return # skip this entry if no valid hostname is found
 
         # Create a new host entry if it does not exist yet
         if url.hostname not in hosts:
@@ -424,28 +451,254 @@ def get_hostinfo(driver, log_prefix=''):
             hosts[url.hostname] = {
                 'domain_part': domain_part,
                 'local_part': local_part,
-                'urls': set(),
-                'ips': set(),
-                'protocols': {},
+                'ips': {},   # ip -> { (protocol, security_protocol): [urls] }
                 'subject_alt_names': set()
             }
             span.add_event("host.new", {"hostname": url.hostname, "domain_part": domain_part, "local_part": local_part})
         else:
             span.add_event("host.update", {"hostname": url.hostname})
 
-        # Add the URLs and additional IPs
-        hosts[url.hostname]['urls'].add(url.geturl())
-        hosts[url.hostname]['ips'].add(ip)
-        # Update protocols if they are not already set
-        if ip not in hosts[url.hostname]['protocols']:
-            hosts[url.hostname]['protocols'][ip] = [protocols]
-        elif protocols not in hosts[url.hostname]['protocols'][ip]:
-            hosts[url.hostname]['protocols'][ip].append(protocols)
+        # Persist which (ip, protocol) served this url
+        hosts[url.hostname]['ips'].setdefault(ip, {}).setdefault(protocols, []).append(url.geturl())
         # Update subject alt names if they are not already set
         if security_details:
             hosts[url.hostname]['subject_alt_names'].update(security_details.get('sanList'))
 
-    return hosts
+        # done processing this response entry
+
+    # net-log trace events harvested alongside the Network.* events
+    netlog_events = []
+    event_types = set()
+    def _parse_netlog_event(obj):
+        params = obj['message'].get('params', {})
+        event_types.add(params.get('name', ''))
+        if params.get('name', '').startswith(NETLOG_CONNECT_PREFIXES):
+            netlog_events.append(params)
+            #if debug_hostinfo:
+            #    print(f"{log_prefix}Tracing data name={params.get('name', '')}:  {json.dumps(obj['message'])}", file=sys.stderr)
+
+    # Extract host info from performance logs
+    perfs_done = 0
+    resp_recv_done = 0
+    for perf in perfs:
+        # parse log entry
+        try:
+            msg = perf.get('message')
+            obj = json.loads(msg)
+        except Exception as e:
+            print(f"{log_prefix}ERROR: failed parsing log entry: {e}", file=sys.stderr)
+            span.add_event("log.parse_error", {"log_entry": str(e)})
+            webres6_hostinfo_parsed.labels(type='error').inc()
+            continue
+
+        # show progress for every 100 performance log entries if debug is enabled
+        perfs_done += 1
+
+        # Harvest net-log trace events (delivered via traceCategories='netlog')
+        if obj.get('message', {}).get('method') == 'Tracing.dataCollected':
+            _parse_netlog_event(obj)
+            continue
+
+        # Harvest Network.responseReceived events
+        if  obj.get('message', {}).get('method') == 'Network.responseReceived':
+            resp_recv_done += 1
+            if debug_hostinfo and resp_recv_done % 100 == 0:
+                print(f"{log_prefix}Processed {resp_recv_done} Network.responseReceived events", file=sys.stderr)
+            _parse_response_received(obj)
+            continue
+
+        # Increment the skipped counter for non-relevant log entries
+        webres6_hostinfo_parsed.labels(type='skipped').inc()
+
+    # dump list of event types if debug is enabled
+    span.add_event("performance_logs_parsed", {
+        "perfs_done": perfs_done,
+        "response_received_events": resp_recv_done,
+        "netlog_events": len(netlog_events)
+    })
+    if debug_hostinfo:
+        print(f"{log_prefix}Processed {perfs_done} of {len(perfs)} performance log entries – {resp_recv_done} responseReceived events, {len(netlog_events)} netlog events", file=sys.stderr)
+        print(f"{log_prefix}Netlog event types encountered:\n\t{"\n\t".join(sorted(list(event_types)))}", file=sys.stderr)
+
+    # enrich each host with its Happy Eyeballs race summary
+    analyze_happy_eyeballs(hosts, netlog_events)
+
+    return hosts, netlog_events
+
+
+def _endpoint_family(address):
+    """Return the ip_family of an 'ip:port' net-log endpoint, or None if unparseable."""
+    if not address:
+        return None
+    host = address
+    if host.startswith('['):                 # [2606:4700::1]:443
+        host = host[1:host.index(']')] if ']' in host else host[1:]
+    elif host.count(':') == 1:               # 192.0.2.1:443
+        host = host.rsplit(':', 1)[0]
+    # otherwise an unbracketed IPv6 literal — leave as-is
+    try:
+        return ip_family(ip_address(host))
+    except ValueError:
+        return None
+
+
+def _new_attempt(ip_endpoint, protocol, start_us):
+    return {
+        'ip_endpoint': ip_endpoint,
+        'family': _endpoint_family(ip_endpoint),
+        'protocol': protocol,
+        'start_us': start_us,
+        'end_us': None,
+        'net_error': None,
+        'succeeded': None,
+    }
+
+
+def _event_hostname(params):
+    """Pull the destination hostname from an attempt-manager / QUIC-attempt event.
+
+    The attempt manager carries it as a URL under stream_key.destination (e.g.
+    'https://fonts.gstatic.com'); QUIC attempts carry it as metadata.target_name.
+    Returns a bare hostname or None.
+    """
+    dest = (params.get('stream_key') or {}).get('destination') or params.get('destination')
+    if dest:
+        return urlparse(dest).hostname or dest
+    return (params.get('metadata') or {}).get('target_name') or params.get('target_name')
+
+
+def analyze_happy_eyeballs(hosts, netlog_events):
+    """Reconstruct Happy Eyeballs v3 races and fold a per-host summary into hosts.
+
+    Under HappyEyeballsV3 the race is run by an HTTP_STREAM_POOL attempt manager.
+    Events are grouped by net-log source id (id2.local); each group yields a
+    connection record (keyed to a hostname via the manager's destination) with:
+      - dns_endpoints: the resolved candidate endpoints (DNS_RESOLUTION_FINISHED)
+      - attempts: one unified list of connection attempts, each with ip_endpoint,
+        family ('IPv4'/'IPv6'), protocol ('QUIC' for HTTP/3, else 'TCP'; the trace
+        does not carry the negotiated H2/H1 — that lives in response.protocol),
+        start/end timing and net_error outcome
+
+    TCP START/END are instant ('n') events carrying ip_endpoint and (on END)
+    net_error; several attempts may target the same endpoint, so START→END are
+    paired FIFO per endpoint, and unmatched START/END are tolerated. A TCP attempt
+    succeeded iff its END net_error == 0. QUIC attempts come from
+    HTTP_STREAM_POOL_QUIC_ATTEMPT_ALIVE begin/end and carry no outcome on their own
+    source, so their succeeded stays None — whether a family actually served a host
+    is derived from the response IPs, not from attempt outcomes.
+
+    Each host's attempts (aggregated across its net-log sources) are stored on the
+    matching host as a happy_eyeballs summary (mutates hosts in place): the raw
+    attempts plus ipv4_succeeded/ipv6_succeeded (a connection of that family either
+    established in the race or actually served the host). ipv6_available (from
+    HOST_RESOLVER_MANAGER_IPV6_REACHABILITY_CHECK) is returned, not stored per host
+    — it is a machine-global fact, not a host fact.
+    """
+    # group every event by its net-log source id (id2.local), in timestamp order
+    by_source = {}
+    for e in netlog_events:
+        sid = (e.get('id2') or {}).get('local')
+        if sid is None:
+            continue
+        by_source.setdefault(sid, []).append(e)
+    for evs in by_source.values():
+        evs.sort(key=lambda e: e.get('ts', 0))
+
+    ipv6_available = None
+    for e in netlog_events:
+        if e.get('name') == 'HOST_RESOLVER_MANAGER_IPV6_REACHABILITY_CHECK':
+            val = (e.get('args', {}).get('params') or {}).get('ipv6_available')
+            if val is not None:
+                ipv6_available = val
+                break
+
+    connections = []
+    for sid, evs in by_source.items():
+        dns_endpoints = None
+        hostname = None
+        attempts = []
+        open_by_endpoint = {}   # ip_endpoint -> FIFO of open TCP attempts
+        open_quic = []          # FIFO of open QUIC attempts
+        for e in evs:
+            name, ph = e.get('name'), e.get('ph')
+            params = e.get('args', {}).get('params', {}) or {}
+
+            if name == 'HTTP_STREAM_POOL_ATTEMPT_MANAGER_ALIVE':
+                # the manager's own source carries the destination, so no
+                # source-dependency chasing is needed to key the race to a host.
+                hostname = hostname or _event_hostname(params)
+
+            elif name == 'HTTP_STREAM_POOL_ATTEMPT_MANAGER_DNS_RESOLUTION_FINISHED':
+                dns_endpoints = params.get('endpoints', dns_endpoints)
+
+            elif name == 'HTTP_STREAM_POOL_TCP_BASED_ATTEMPT_START':
+                ep = params.get('ip_endpoint')
+                attempt = _new_attempt(ep, 'TCP', e.get('ts'))
+                attempts.append(attempt)
+                open_by_endpoint.setdefault(ep, []).append(attempt)
+
+            elif name == 'HTTP_STREAM_POOL_TCP_BASED_ATTEMPT_END':
+                ep = params.get('ip_endpoint')
+                queue = open_by_endpoint.get(ep)
+                attempt = queue.pop(0) if queue else None
+                if attempt is None:     # END without a captured START
+                    attempt = _new_attempt(ep, 'TCP', None)
+                    attempts.append(attempt)
+                ne = params.get('net_error')
+                attempt['end_us'] = e.get('ts')
+                attempt['net_error'] = ne
+                attempt['succeeded'] = (ne == 0)
+
+            elif name == 'HTTP_STREAM_POOL_QUIC_ATTEMPT_ALIVE' and ph == 'b':
+                hostname = hostname or _event_hostname(params)   # QUIC sources carry the host too
+                attempt = _new_attempt(params.get('ip_endpoint'), 'QUIC', e.get('ts'))
+                attempts.append(attempt)
+                open_quic.append(attempt)
+            elif name == 'HTTP_STREAM_POOL_QUIC_ATTEMPT_ALIVE' and ph == 'e' and open_quic:
+                open_quic.pop(0)['end_us'] = e.get('ts')
+
+        if dns_endpoints is None and not attempts:
+            continue  # not an attempt-manager source
+
+        # Store connection record for this source.
+        connections.append({
+            'source_id': sid,
+            'hostname': hostname,
+            'dns_endpoints': dns_endpoints,
+            'attempts': attempts,
+        })
+
+    # Attach a happy_eyeballs summary to every host. A host's activity is split across
+    # several net-log sources — the TCP attempt manager and each QUIC attempt are
+    # separate sources (hence separate connection records) that all resolve to the
+    # same hostname — so we aggregate every source's attempts per host. Hosts served
+    # over a coalesced/reused connection have no own race (attempts == []) but are
+    # still summarised via the response data.
+    #
+    # *_succeeded means a family's connection either established in the race or
+    # actually served the host. For TCP the race gives net_error == 0 (which catches
+    # even racing losers that established before being cancelled); as a secondary
+    # signal, any family that actually served a response (used_families, from the
+    # response IPs) also counts — this covers QUIC/h3 (no usable outcome in the trace)
+    # and connections reused via coalescing, which have no own race.
+    by_host = {}
+    for conn in connections:
+        h = conn.get('hostname')
+        if h in hosts:
+            by_host.setdefault(h, []).extend(conn['attempts'])
+    for h, info in hosts.items():
+        attempts = by_host.get(h, [])
+        used_families = {ip_family(ip) for ip in info['ips'] if hasattr(ip, 'version')}
+        v4_like = {'IPv4', 'NAT64', 'IPv4_Mapped'}
+        info['happy_eyeballs'] = {
+            'attempts': attempts,
+            'ipv4_succeeded': any(a['family'] in v4_like and a['succeeded'] for a in attempts)
+                              or bool(used_families & v4_like),
+            'ipv6_succeeded': any(a['family'] == 'IPv6' and a['succeeded'] for a in attempts)
+                              or 'IPv6' in used_families,
+        }
+
+    return ipv6_available
 
 
 @tracer.start_as_current_span("selenium.cleanup_crawl")

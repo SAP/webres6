@@ -337,8 +337,7 @@ class TestIPv6Scoring(unittest.TestCase):
         """Test scoring with IPv6-only hosts"""
         hosts = {
             'example.com': {
-                'urls': ['https://example.com/'],
-                'ips': {ip_address('2001:db8::1'): {}},
+                'ips': {ip_address('2001:db8::1'): {('h2', None): ['https://example.com/']}},
                 'dns': {'ipv6_only_ready': True}
             }
         }
@@ -354,13 +353,11 @@ class TestIPv6Scoring(unittest.TestCase):
         """Test scoring with mixed IPv4/IPv6 hosts"""
         hosts = {
             'ipv6.example.com': {
-                'urls': ['https://ipv6.example.com/image.png'],
-                'ips': {ip_address('2001:db8::1'): {}},
+                'ips': {ip_address('2001:db8::1'): {('h2', None): ['https://ipv6.example.com/image.png']}},
                 'dns': {'ipv6_only_ready': True}
             },
             'ipv4.example.com': {
-                'urls': ['https://ipv4.example.com/script.js'],
-                'ips': {ip_address('192.0.2.1'): {}},
+                'ips': {ip_address('192.0.2.1'): {('h2', None): ['https://ipv4.example.com/script.js']}},
                 'dns': {'ipv6_only_ready': False}
             }
         }
@@ -376,8 +373,7 @@ class TestIPv6Scoring(unittest.TestCase):
         """Test scoring with NAT64 addresses (should count as IPv4)"""
         hosts = {
             'nat64.example.com': {
-                'urls': ['https://nat64.example.com/'],
-                'ips': {ip_address('64:ff9b::192.0.2.1'): {}},
+                'ips': {ip_address('64:ff9b::192.0.2.1'): {('h2', None): ['https://nat64.example.com/']}},
                 'dns': {'ipv6_only_ready': True}
             }
         }
@@ -386,6 +382,21 @@ class TestIPv6Scoring(unittest.TestCase):
 
         self.assertEqual(http_score, 0.0)  # NAT64 doesn't count as native IPv6
         self.assertFalse(ready)
+
+    def test_get_ipv6_only_score_happy_eyeballs(self):
+        """A host served only over IPv4 but with a succeeded IPv6 Happy Eyeballs connection counts as IPv6-capable"""
+        hosts = {
+            'example.com': {
+                'ips': {ip_address('192.0.2.1'): {('h2', None): ['https://example.com/']}},
+                'happy_eyeballs': {'attempts': [], 'ipv4_succeeded': True, 'ipv6_succeeded': True},
+                'dns': {'ipv6_only_ready': True}
+            }
+        }
+
+        score, http_score, dns_score, ready = get_ipv6_only_score(hosts, 'example.com')
+
+        self.assertEqual(http_score, 1.0)  # IPv6 Happy Eyeballs connection succeeded
+        self.assertTrue(ready)
 
 
 class TestAuthorizationCheck(unittest.TestCase):
@@ -537,12 +548,11 @@ class TestGenJsonEdgeCases(unittest.TestCase):
 
     def _make_host(self, ip, protocols=None, dns=None):
         ip_obj = ip_address(ip)
+        proto_map = {tuple(p): ['https://example.com/'] for p in (protocols or [['tcp', 443]])}
         return {
             'local_part': '',
             'domain_part': 'example.com',
-            'urls': ['https://example.com/'],
-            'ips': {ip_obj},
-            'protocols': {ip_obj: protocols or [['tcp', 443]]},
+            'ips': {ip_obj: proto_map},
             'dns': dns or {},
             'subject_alt_names': set(),
             'whois': {},
@@ -589,9 +599,7 @@ class TestGenJsonEdgeCases(unittest.TestCase):
             'example.com': {
                 'local_part': '',
                 'domain_part': 'example.com',
-                'urls': ['https://example.com/'],
-                'ips': {'not-an-ip'},
-                'protocols': {'not-an-ip': [['tcp', 443]]},
+                'ips': {'not-an-ip': {('tcp', 443): ['https://example.com/']}},
                 'dns': {},
                 'subject_alt_names': set(),
                 'whois': {},
@@ -622,8 +630,7 @@ class TestAddDnsprobeInfo(unittest.TestCase):
     def _make_hosts(self, hostname='example.com'):
         return {
             hostname: {
-                'urls': [f'https://{hostname}/'],
-                'ips': [ip_address('2001:db8::1')],
+                'ips': {ip_address('2001:db8::1'): {('h2', None): [f'https://{hostname}/']}},
                 'local_part': '',
                 'domain_part': hostname,
                 'subject_alt_names': set(),
