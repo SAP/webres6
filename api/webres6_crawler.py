@@ -526,25 +526,47 @@ def get_hostinfo(driver, log_prefix=''):
     return hosts, netlog_events
 
 
+def _split_endpoint(address):
+    """Split an 'ip:port' net-log endpoint into (ip, port).
+
+    Handles bracketed IPv6 ('[2606:4700::1]:443'), IPv4 ('192.0.2.1:443') and a
+    bare IPv6 literal carrying no port. Returns (ip_str_or_None, port_int_or_None).
+    """
+    if not address:
+        return None, None
+    host, port = address, None
+    if address.startswith('['):                  # [2606:4700::1]:443
+        end = address.find(']')
+        host = address[1:end] if end != -1 else address[1:]
+        rest = address[end + 1:] if end != -1 else ''
+        if rest.startswith(':'):
+            port = rest[1:]
+    elif address.count(':') == 1:                # 192.0.2.1:443
+        host, _, port = address.rpartition(':')
+    # otherwise a bare unbracketed IPv6 literal — no port
+    try:
+        port = int(port) if port else None
+    except ValueError:
+        port = None
+    return host, port
+
+
 def _endpoint_family(address):
     """Return the ip_family of an 'ip:port' net-log endpoint, or None if unparseable."""
-    if not address:
+    ip, _ = _split_endpoint(address)
+    if ip is None:
         return None
-    host = address
-    if host.startswith('['):                 # [2606:4700::1]:443
-        host = host[1:host.index(']')] if ']' in host else host[1:]
-    elif host.count(':') == 1:               # 192.0.2.1:443
-        host = host.rsplit(':', 1)[0]
-    # otherwise an unbracketed IPv6 literal — leave as-is
     try:
-        return ip_family(ip_address(host))
+        return ip_family(ip_address(ip))
     except ValueError:
         return None
 
 
 def _new_attempt(ip_endpoint, protocol, start_us):
+    ip, port = _split_endpoint(ip_endpoint)
     return {
-        'ip_endpoint': ip_endpoint,
+        'ip': ip,
+        'port': port,
         'family': _endpoint_family(ip_endpoint),
         'protocol': protocol,
         'start_us': start_us,
@@ -574,10 +596,10 @@ def analyze_happy_eyeballs(hosts, netlog_events):
     Events are grouped by net-log source id (id2.local); each group yields a
     connection record (keyed to a hostname via the manager's destination) with:
       - dns_endpoints: the resolved candidate endpoints (DNS_RESOLUTION_FINISHED)
-      - attempts: one unified list of connection attempts, each with ip_endpoint,
-        family ('IPv4'/'IPv6'), protocol ('QUIC' for HTTP/3, else 'TCP'; the trace
-        does not carry the negotiated H2/H1 — that lives in response.protocol),
-        start/end timing and net_error outcome
+      - attempts: one unified list of connection attempts, each with ip and port
+        (split from the net-log endpoint), family ('IPv4'/'IPv6'), protocol ('QUIC'
+        for HTTP/3, else 'TCP'; the trace does not carry the negotiated H2/H1 — that
+        lives in response.protocol), start/end timing and net_error outcome
 
     TCP START/END are instant events logged on the manager's source and carrying
     ip_endpoint, the attempt's own net-log source id (source_dependency), and (on

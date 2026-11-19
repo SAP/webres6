@@ -310,6 +310,46 @@ function renderHostsTable(data, hostsContainer) {
           appendRow();
         });
       });
+      // append successful-but-unused Happy Eyeballs connections: a connection of
+      // that family/IP was established during the race but not used to serve any
+      // resource (so its IP is not in the regular IP list). Shown greyed with an
+      // "OK/unused" badge, mirroring the DNS "AAAA" badge.
+      const he = info.happy_eyeballs;
+      if (he && he.attempts && he.attempts.length) {
+        const unused = {};
+        $.each(he.attempts, function(ai, a) {
+          if (a.succeeded !== true || !a.ip) return;        // only established connections
+          if (info.ips && info.ips[a.ip]) return;           // skip IPs already shown as used
+          if (!unused[a.ip]) unused[a.ip] = [];
+          if (a.protocol && unused[a.ip].indexOf(a.protocol) === -1) unused[a.ip].push(a.protocol);
+        });
+        Object.keys(unused).sort().forEach(function(ip) {
+          // one sub-row per distinct protocol; put the transport (QUIC/TCP) in the
+          // second protocol column with a '_' placeholder in the first (the ALPN/TLS
+          // of an unused connection is not known), matching the normal-row convention
+          let pr = (unused[ip].length ? unused[ip] : ['_']).map(function(proto) {
+            return [$('<td class="protocol he-unused">').text('_'),
+                    $('<td class="protocol he-unused">').text(proto)];
+          });
+          const span = pr.length;
+          const asnCell       = $(`<td rowspan="${span}" class="as-number he-unused" />`);
+          const asDescrCell   = $(`<td rowspan="${span}" class="as-descr he-unused" />`);
+          // badge rides the always-visible IP cell (the netname column is hidden by default)
+          const ipCell        = $('<td>').attr('rowspan', span).addClass('ip-address he-unused he-ok-unused').text(ip)
+            .attr('title', 'Happy Eyeballs: connection established but not used to serve resources');
+          const ipNetnameCell = $('<td>').attr('rowspan', span).addClass('ip-netname he-unused');
+          row.append(pr[0]); pr.shift();
+          row.append(asnCell);
+          row.append(asDescrCell);
+          row.append(ipCell);
+          row.append(ipNetnameCell);
+          appendRow();
+          $.each(pr, function(pi, pe) {
+            row.append(pe);
+            appendRow();
+          });
+        });
+      }
       // render appendix with other per-host info
       const hostInfoDiv = $('<div>');
       row.addClass('host-info-block');

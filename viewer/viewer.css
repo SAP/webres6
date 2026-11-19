@@ -84,6 +84,7 @@
   --color-muted-fg:             gray;
   --color-muted-border:         darkgray;
   --color-muted-light:          lightgray;
+  --color-unused:               gray;
 
   /* Form inputs */
   --color-input-fg:             var(--color-body-fg);
@@ -122,6 +123,7 @@
     --color-hover-bg:             #3e2f4690;
     --color-muted-fg:             #666;
     --color-muted-border:         gray;
+    --color-unused:               #888;
 
     --color-heading:              #4aa8d8;
     --color-progress-accent:      var(--color-ready);
@@ -522,6 +524,19 @@ td.ip-netname {
 }
 .nat64 {
   color: var(--color-ipv4);
+}
+/* Happy Eyeballs: connection established during the race but not used */
+.he-unused {
+  color: var(--color-unused);
+}
+td.ip-address.he-ok-unused::before {
+  content: "unused";
+  font-size: x-small;
+  border: 1px solid var(--color-unused);
+  border-radius: 4px;
+  padding: 1px 2px;
+  margin-right: 4px;
+  text-wrap: nowrap;
 }
 .hide {
   display: none;
