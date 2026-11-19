@@ -37,7 +37,7 @@ SPDX-License-Identifier: Apache-2.0
         <div class="hide-button clickable">&#x2715;</div>
       </div>
       <form id="urlForm">
-        <input type="text" id="urlInput" placeholder="https://sap.com" required>
+        <input type="url" id="urlInput" pattern="https?://.*" placeholder="https://sap.com" required>
         <div class="input-parameter-container template" id="extensionSelectContainer" title="Select a Chrome extension to load in Selenium">
           <label for="extensionSelect"><strong>Extension:</strong></label>
           <select id="extensionSelect" name="extensionSelect">

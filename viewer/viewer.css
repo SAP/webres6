@@ -98,7 +98,7 @@
     --color-brand-fg:             #4aa8d8;
     --color-brand-bg:             #2a3b4ec0;
     --color-brand-border:         #2a3b4e;
-    --color-brand-loading:        var(--color-brand-bg);
+    --color-brand-loading:        #456181;
 
     --color-ready:                lightseagreen;
     --color-ready-bg:             #145450b3;
@@ -123,7 +123,7 @@
     --color-hover-bg:             #3e2f4690;
     --color-muted-fg:             #666;
     --color-muted-border:         gray;
-    --color-unused:               #888;
+    --color-unused:               #666;
 
     --color-heading:              #4aa8d8;
     --color-progress-accent:      var(--color-ready);

@@ -810,11 +810,6 @@ function handleDrop(event) {
 function handleFormSubmit(e) {
   let url = $('#urlInput').val().trim();
 
-  // Add https:// if no scheme is present
-  if (url && !url.match(/^[a-z][a-z0-9+.-]*:\/\//i)) {
-    url = 'https://' + url;
-  }
-
   // Check if URL has a scheme that is not http or https
   const schemeMatch = url.match(/^([a-z][a-z0-9+.-]*):\/\//i);
   if (schemeMatch) {
@@ -867,6 +862,16 @@ $(async function() {
   $(document).on('click', '.hide-button', function() {
     $(this).closest('.contents-container').hide();
   });
+  // Prepend https:// before browser native url validation can reject the value
+  function normalizeUrlInput() {
+    const $el = $('#urlInput');
+    const v = $el.val().trim();
+    if (v && !v.match(/^[a-z][a-z0-9+.-]*:\/\//i)) {
+      $el.val('https://' + v);
+    }
+  }
+  $('#urlInput').on('blur', normalizeUrlInput);
+  $('#urlInput').on('keydown', function(e) { if (e.key === 'Enter') normalizeUrlInput(); });
   // URL submission handler
   $('#urlForm').on('submit', function(e) { e.preventDefault(); handleFormSubmit(e); });
   // Load server config and enable features
