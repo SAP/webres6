@@ -18,6 +18,7 @@ source .venv/bin/activate
 ./run_tests.sh                        # all tests
 ./run_tests.sh -v                     # verbose
 ./run_tests.sh -c                     # with coverage (opens htmlcov/index.html on macOS)
+./run_tests.sh -i                     # also run live Selenium integration tests (opt-in)
 ./run_tests.sh -t test_webres6_api.py # single file
 pytest test_webres6_api.py::ClassName::test_method  # single test
 ```
@@ -26,10 +27,11 @@ Tests use mocked Selenium, Valkey, S3, and DNSProbe — no real services require
 Test files and what they cover:
 - `test_webres6_api.py` — API endpoints, `is_ip`, `DateTimeEncoder`, `gen_json` (all IP address families), `add_dnsprobe_info`, `get_ipv6_only_score`, `check_auth`, `validate_url`
 - `test_webres6_storage.py` — all four `StorageManager` implementations, `Scoreboard`, export/import functions
-- `test_webres6_crawler.py` — `split_hostname`
+- `test_webres6_crawler.py` — `split_hostname`, `ip_family`, `build_selenium_client_config`
 - `test_webres6_nat64.py` — NAT64 monkey-patch: `is_nat64`, `nat64_extract_ipv4`, custom `__str__`
+- `test_webres6_integration.py` — **opt-in** live-browser tests (real Selenium/Chrome), skipped unless `WEBRES6_INTEGRATION` is set, so CI (no network) never runs them. Two classes: `TestLiveCrawl` exercises the crawler primitives (`init_webdriver` → `crawl_page` → `get_hostinfo`) and Happy Eyeballs net-log capture; `TestCrawlAndAnalyze` drives the API orchestrator `crawl_and_analyze_url` end to end **without storage, dnsprobe, or whois** (dnsprobe/storage forced to `None`, `lookup_whois=False`) and asserts the assembled report. Target URL via `WEBRES6_INTEGRATION_URL` (default `https://www.google.com`); local Chrome by default, or a grid via `WEBRES6_INTEGRATION_REMOTE_URL` (a dedicated var, not `SELENIUM_REMOTE_URL`, so the tests are immune to the env other test modules set for their mocks). Run with `./run_tests.sh -i` or `WEBRES6_INTEGRATION=1 pytest test_webres6_integration.py`.
 
-CI runs the full test suite on Python 3.14 via `.github/workflows/api-tests.yml`.
+CI runs the full test suite on Python 3.14 via `.github/workflows/api-tests.yml`. The integration tests stay skipped there (no `WEBRES6_INTEGRATION`, no network).
 
 ## Architecture
 

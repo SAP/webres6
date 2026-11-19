@@ -35,6 +35,7 @@ color = {
     'asn': "\033[35m",               # purple
     'ipv6': "\033[32m",              # green
     'ipv4': "\033[31m",              # red
+    'unused': "\033[90m",            # dark gray — Happy Eyeballs established-but-unused
     'success': "\033[32m",           # green
     'fail': "\033[31m"               # red
 }
@@ -274,6 +275,36 @@ def gen_fancy_hostlist(hosts, original_host=None, show_proto=False,
             else:
                 lines.append((hostname, local_part, domain_part, dns_part, dns_color, "", "", asn, asd, ip_str, ip_prfx, ip_color))
                 # Clear same parts to make the table clearer
+                local_part = ""
+                domain_part = ""
+
+        # append successful-but-unused Happy Eyeballs connections: a connection of
+        # that family/IP was established during the race but not used to serve any
+        # resource (its IP is not in the regular IP list). Shown greyed with an
+        # "(unused)" label, mirroring the viewer.
+        he = info.get('happy_eyeballs') or {}
+        used_ips = set(info.get('ips') or {})
+        unused = {}
+        for a in he.get('attempts', []):
+            if a.get('succeeded') is True and a.get('ip') and a['ip'] not in used_ips:
+                unused.setdefault(a['ip'], [])
+                if a.get('protocol') and a['protocol'] not in unused[a['ip']]:
+                    unused[a['ip']].append(a['protocol'])
+        for ip_str in sorted(unused):
+            ip_text = '(unused) ' + ip_str
+            max_ip_length = max(max_ip_length, len(ip_text))
+            ip_color = color['unused']
+            if show_proto:
+                for proto in (unused[ip_str] or ['_']):
+                    sp = '/' + proto
+                    max_tp_length = max(max_tp_length, 1)
+                    max_sp_length = max(max_sp_length, len(sp))
+                    lines.append((hostname, local_part, domain_part, '', '', '_', sp, '', '', ip_text, '', ip_color))
+                    local_part = ""
+                    domain_part = ""
+                    ip_text = ""
+            else:
+                lines.append((hostname, local_part, domain_part, '', '', "", "", '', '', ip_text, '', ip_color))
                 local_part = ""
                 domain_part = ""
 

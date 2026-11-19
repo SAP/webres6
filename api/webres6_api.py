@@ -39,7 +39,7 @@ import webres6_nat64  # noqa: F401 — applies NAT64 monkey-patch to IPv6Address
 from webres6_stackoverflow import TracedThreadPoolExecutor
 
 # config/flag variables
-webres6_version   = "1.10.0"
+webres6_version   = "1.11.0"
 debug_whois       = 'whois'    in getenv("DEBUG", '').lower().split(',')
 debug_hostinfo    = 'hostinfo' in getenv("DEBUG", '').lower().split(',')
 debug_flask       = 'flask'    in getenv("DEBUG", '').lower().split(',')
@@ -393,9 +393,11 @@ def get_ipv6_only_score(hosts, main_hostname):
     resources_ipv6_overall = 0
     has_dnsinfo = False
     for hostname, info in hosts.items():
-        # calculate http score
-        has_ipv6 = False
-        resources = len(info.get('urls', []))
+        # calculate http score — a host is IPv6-capable if Happy Eyeballs established
+        # (or used) an IPv6 connection, or (fallback) it served from a native IPv6 IP
+        has_ipv6 = bool(info.get('happy_eyeballs', {}).get('ipv6_succeeded'))
+        resources = len({u for proto_urls in info.get('ips', {}).values()
+                           for urls in proto_urls.values() for u in urls})
         resources_total += resources
         for ip in info.get('ips', []):
             if not is_ip(ip):
@@ -460,7 +462,7 @@ def gen_json(url, domain=None, hosts={}, ipv6_only_ready=None, score=None, http_
 
         return {
             'address_family': address_family,
-            'transport': [ [tp , sp] for tp, sp in v['protocols'][ip] ],
+            'transport': [ [tp , sp] for tp, sp in v['ips'][ip] ],
             'whois': v['whois'].get(ip, None) if v.get('whois', None) else None
         }
 
@@ -479,12 +481,14 @@ def gen_json(url, domain=None, hosts={}, ipv6_only_ready=None, score=None, http_
              'hosts': { k: {
                  'local_part': str(v['local_part']),
                  'domain_part': str(v['domain_part']),
-                 'urls': list(v['urls']),
+                 'urls': sorted({u for proto_urls in v['ips'].values()
+                                   for urls in proto_urls.values() for u in urls}),
                  'ips': {
                      str(ip): gen_json_ips(ip, v) for ip in v['ips']
                  },
                  'dns': v.get('dns', None),
-                 'subject_alt_names': sorted(v['subject_alt_names'])
+                 'subject_alt_names': sorted(v['subject_alt_names']),
+                 'happy_eyeballs': v.get('happy_eyeballs', None)
                  } for k, v in hosts.items()
              },
              'screenshot': screenshot,
@@ -599,8 +603,8 @@ def crawl_and_analyze_url(url, wait, timeout, scoreboard_entry, ext,
         return gen_json(url, report_id=report_id, screenshot=screenshot, timestamp=ts, timings=timings, error=err, error_code=200), 200
 
     # collect host info and analyze
-    hosts = get_hostinfo(driver, log_prefix=lp)
-    print(f"{lp}found {len(hosts)} hosts", file=sys.stderr)
+    hosts, netlog_events = get_hostinfo(driver, log_prefix=lp)
+    print(f"{lp}found {len(hosts)} hosts, {len(netlog_events)} netlog events", file=sys.stderr)
     cleanup_crawl(driver, extension=ext, extension_data=extension_data, log_prefix=lp)
 
     # add dnsprobe info if configured
@@ -1025,7 +1029,7 @@ def create_http_app():
         else:
             status['status'] = 'degraded'
             return jsonify(status), 503
-    
+
     print("\t/ping                         liveliness endpoint", file=sys.stderr)
     @app.route('/ping', methods=['GET'])
     def ping():
@@ -1060,7 +1064,7 @@ def setup_res6_endpoints(app, srv_message=None, privacy_policy=None):
     def res6_serverconfig():
         res = jsonify({'version': webres6_version,
                         'message': srv_message, 'privacy_policy': privacy_policy,
-                        'max_wait': max_wait, 'max_timeout': max_timeout, 
+                        'max_wait': max_wait, 'max_timeout': max_timeout,
                         'crawl_timeout': crawl_timeout, 'error_cache_ttl': error_cache_ttl,
                         'extensions': get_extensions(),
                         'whois': enable_whois, 'screenshot_modes': screenshot_modes,
