@@ -22,6 +22,7 @@ NC='\033[0m' # No Color
 # Default options
 COVERAGE=0
 VERBOSE=0
+INTEGRATION=0
 SPECIFIC_TEST=""
 
 # Parse arguments
@@ -35,6 +36,10 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=1
             shift
             ;;
+        -i|--integration)
+            INTEGRATION=1
+            shift
+            ;;
         -t|--test)
             SPECIFIC_TEST="$2"
             shift 2
@@ -45,12 +50,14 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  -c, --coverage     Run tests with coverage report"
             echo "  -v, --verbose      Run tests with verbose output"
+            echo "  -i, --integration  Also run live Selenium integration tests (needs a browser + network)"
             echo "  -t, --test TEST    Run specific test file or pattern"
             echo "  -h, --help         Show this help message"
             echo ""
             echo "Examples:"
             echo "  $0                           # Run all tests"
             echo "  $0 -c                        # Run with coverage"
+            echo "  $0 -i                        # Include live Selenium integration tests"
             echo "  $0 -t test_webres6_api.py   # Run specific test file"
             echo "  $0 -c -v                     # Coverage with verbose output"
             exit 0
@@ -74,6 +81,11 @@ fi
 
 # Build pytest command
 PYTEST_CMD="pytest"
+
+if [ $INTEGRATION -eq 1 ]; then
+    export WEBRES6_INTEGRATION=1
+    echo -e "${YELLOW}Including live Selenium integration tests (WEBRES6_INTEGRATION=1)${NC}"
+fi
 
 if [ $VERBOSE -eq 1 ]; then
     PYTEST_CMD="$PYTEST_CMD -vv"

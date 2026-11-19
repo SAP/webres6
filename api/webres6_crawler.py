@@ -579,13 +579,17 @@ def analyze_happy_eyeballs(hosts, netlog_events):
         does not carry the negotiated H2/H1 — that lives in response.protocol),
         start/end timing and net_error outcome
 
-    TCP START/END are instant ('n') events carrying ip_endpoint and (on END)
-    net_error; several attempts may target the same endpoint, so START→END are
-    paired FIFO per endpoint, and unmatched START/END are tolerated. A TCP attempt
-    succeeded iff its END net_error == 0. QUIC attempts come from
-    HTTP_STREAM_POOL_QUIC_ATTEMPT_ALIVE begin/end and carry no outcome on their own
-    source, so their succeeded stays None — whether a family actually served a host
-    is derived from the response IPs, not from attempt outcomes.
+    TCP START/END are instant events logged on the manager's source and carrying
+    ip_endpoint, the attempt's own net-log source id (source_dependency), and (on
+    END) net_error (explicitly 0 on success). Because all of a host's TCP attempts
+    share this one source and interleave, START↔END are paired by that source id
+    (not by arrival order or endpoint), and an unmatched START/END is tolerated.
+    A TCP attempt succeeded iff its END net_error == 0. QUIC attempts come from the
+    HTTP_STREAM_POOL_QUIC_ATTEMPT_ALIVE begin/end pair, whose END is emitted via
+    EndEventWithNetErrorCode(result.value_or(ERR_ABORTED)): net_error is omitted when
+    the attempt reached OK and present+negative on failure/abort, so a QUIC attempt
+    succeeded iff its END carries no net_error. The response-IP signal (used_families)
+    is still folded in to cover coalesced/reused connections that run no race at all.
 
     Each host's attempts (aggregated across its net-log sources) are stored on the
     matching host as a happy_eyeballs summary (mutates hosts in place): the raw
@@ -617,8 +621,8 @@ def analyze_happy_eyeballs(hosts, netlog_events):
         dns_endpoints = None
         hostname = None
         attempts = []
-        open_by_endpoint = {}   # ip_endpoint -> FIFO of open TCP attempts
-        open_quic = []          # FIFO of open QUIC attempts
+        open_by_id = {}         # TCP attempt source id -> open attempt (robust to interleaving)
+        open_quic = {}          # QUIC attempt source id -> open attempt (ALIVE begin/end share it)
         for e in evs:
             name, ph = e.get('name'), e.get('ph')
             params = e.get('args', {}).get('params', {}) or {}
@@ -632,30 +636,53 @@ def analyze_happy_eyeballs(hosts, netlog_events):
                 dns_endpoints = params.get('endpoints', dns_endpoints)
 
             elif name == 'HTTP_STREAM_POOL_TCP_BASED_ATTEMPT_START':
-                ep = params.get('ip_endpoint')
-                attempt = _new_attempt(ep, 'TCP', e.get('ts'))
+                # START/END are both logged on the manager's source, so every TCP
+                # attempt shares this bucket and they interleave freely. Each event
+                # carries the attempt's own net-log source under source_dependency, so
+                # pair START↔END by that id rather than by arrival order or endpoint
+                # (two attempts to the same endpoint, or out-of-order ENDs, would break
+                # any positional/FIFO pairing).
+                aid = (params.get('source_dependency') or {}).get('id')
+                attempt = _new_attempt(params.get('ip_endpoint'), 'TCP', e.get('ts'))
                 attempts.append(attempt)
-                open_by_endpoint.setdefault(ep, []).append(attempt)
+                if aid is not None:
+                    open_by_id[aid] = attempt
 
             elif name == 'HTTP_STREAM_POOL_TCP_BASED_ATTEMPT_END':
-                ep = params.get('ip_endpoint')
-                queue = open_by_endpoint.get(ep)
-                attempt = queue.pop(0) if queue else None
-                if attempt is None:     # END without a captured START
-                    attempt = _new_attempt(ep, 'TCP', None)
+                aid = (params.get('source_dependency') or {}).get('id')
+                attempt = open_by_id.pop(aid, None) if aid is not None else None
+                if attempt is None:     # END whose START we never captured
+                    attempt = _new_attempt(params.get('ip_endpoint'), 'TCP', None)
                     attempts.append(attempt)
                 ne = params.get('net_error')
                 attempt['end_us'] = e.get('ts')
                 attempt['net_error'] = ne
-                attempt['succeeded'] = (ne == 0)
+                attempt['succeeded'] = bool(ne == 0)
 
             elif name == 'HTTP_STREAM_POOL_QUIC_ATTEMPT_ALIVE' and ph == 'b':
-                hostname = hostname or _event_hostname(params)   # QUIC sources carry the host too
+                # each QUIC attempt is logged on its OWN net-log source, so the ALIVE
+                # begin/end share this bucket's source id (id2.local) — pair them by it,
+                # the same "key by the attempt's own source" rule as TCP (which shares
+                # the manager source and so must key on source_dependency instead). The
+                # begin (ctor) carries the endpoint and target host.
+                qid = (e.get('id2') or {}).get('local')
+                hostname = hostname or _event_hostname(params)
                 attempt = _new_attempt(params.get('ip_endpoint'), 'QUIC', e.get('ts'))
                 attempts.append(attempt)
-                open_quic.append(attempt)
-            elif name == 'HTTP_STREAM_POOL_QUIC_ATTEMPT_ALIVE' and ph == 'e' and open_quic:
-                open_quic.pop(0)['end_us'] = e.get('ts')
+                if qid is not None:
+                    open_quic[qid] = attempt
+            elif name == 'HTTP_STREAM_POOL_QUIC_ATTEMPT_ALIVE' and ph == 'e':
+                # the end (dtor) is emitted via EndEventWithNetErrorCode(result.value_or(
+                # ERR_ABORTED)): net_error is omitted when the attempt reached OK and
+                # present+negative on failure/abort. So absence of net_error == success;
+                # normalise it to 0 so the stored outcome matches the TCP convention.
+                qid = (e.get('id2') or {}).get('local')
+                attempt = open_quic.pop(qid, None) if qid is not None else None
+                if attempt is not None:
+                    ne = params.get('net_error')
+                    attempt['end_us'] = e.get('ts')
+                    attempt['net_error'] = 0 if ne is None else ne
+                    attempt['succeeded'] = bool(ne is None or ne == 0)
 
         if dns_endpoints is None and not attempts:
             continue  # not an attempt-manager source
@@ -676,11 +703,11 @@ def analyze_happy_eyeballs(hosts, netlog_events):
     # still summarised via the response data.
     #
     # *_succeeded means a family's connection either established in the race or
-    # actually served the host. For TCP the race gives net_error == 0 (which catches
-    # even racing losers that established before being cancelled); as a secondary
-    # signal, any family that actually served a response (used_families, from the
-    # response IPs) also counts — this covers QUIC/h3 (no usable outcome in the trace)
-    # and connections reused via coalescing, which have no own race.
+    # actually served the host. The race gives net_error == 0 for both TCP (explicit)
+    # and QUIC (absent net_error on the ALIVE END), catching even racing losers that
+    # established before being cancelled. As a secondary signal, any family that
+    # actually served a response (used_families, from the response IPs) also counts —
+    # this covers connections reused via coalescing, which run no race of their own.
     by_host = {}
     for conn in connections:
         h = conn.get('hostname')
