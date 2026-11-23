@@ -121,8 +121,7 @@ Then run `curl http://localhost:6400/res6/url(URL)` and analyze the output.
 ## CI
 
 GitHub Actions workflows are in `.github/workflows/`:
-- `api-tests.yml` — runs the API unit test suite on Python 3.14; triggers on changes to `api/`
-- `api-integration-tests.yml` — runs the opt-in live-browser integration tests (`test_webres6_integration.py`) with `WEBRES6_INTEGRATION=1` against a real headless Chrome; triggers on changes to `api/` and on manual dispatch. Hosted runners are IPv4-only, so it covers the crawl plumbing and IPv4 path but not real IPv6 / dual-stack Happy Eyeballs racing.
+- `api-tests.yml` — runs the API unit test suite (with coverage) followed by the live-browser integration tests (`test_webres6_integration.py`) with `WEBRES6_INTEGRATION=1` against a real headless Chrome; two jobs: `unit` runs first, `integration` follows only if unit passes. Triggers on changes to `api/` and on manual dispatch. Hosted runners are IPv4-only, so it covers the crawl plumbing and IPv4 path but not real IPv6 / dual-stack Happy Eyeballs racing.
 - `helm-lint.yml` — lints and renders the Helm chart; triggers on changes to `helm/`
 - `docker-build.yml` — builds and pushes Docker images for api, viewer, and mcp; triggers on every push to `main` and version tags (no path filter — it is a required status check on GitHub so it must always run)
 - `reuse-lint.yml` — checks REUSE license compliance

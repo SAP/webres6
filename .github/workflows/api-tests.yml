@@ -4,6 +4,15 @@
 
 name: API Tests
 
+# Unit tests run first; integration tests follow only if unit tests pass.
+#
+# Integration tests launch a real headless Chrome, crawl a real URL, and assert
+# on the captured Happy Eyeballs net-log. GitHub-hosted runners are IPv4-only,
+# so they cover the full crawl plumbing and the IPv4/TCP path but not real IPv6
+# / dual-stack HEv3 racing (ipv6_succeeded stays False here).
+#
+# This workflow is used as a gate for docker-build.yml via workflow_run.
+
 on:
   push:
     branches: [main]
@@ -15,12 +24,13 @@ on:
     paths:
       - 'api/**'
       - '.github/workflows/api-tests.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  unit:
     runs-on: ubuntu-latest
 
     steps:
@@ -47,7 +57,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[test]"
 
-      - name: Run tests with coverage
+      - name: Run unit tests with coverage
         run: |
           cd api
           export PROMETHEUS_MULTIPROC_DIR=$(mktemp -d)
@@ -66,3 +76,46 @@ jobs:
         with:
           name: coverage-report
           path: api/coverage.xml
+
+  integration:
+    needs: [unit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+
+      - name: Cache pip packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-3.14-${{ hashFiles('api/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-3.14-
+
+      - name: Install dependencies
+        # unbound/pyunbound is not needed: the integration tests drive Selenium
+        # (init_webdriver -> crawl_page -> get_hostinfo) and never call dnsprobe.
+        run: |
+          cd api
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+
+      - name: Show Chrome version
+        # ubuntu-latest ships Google Chrome stable; Selenium Manager resolves the
+        # matching chromedriver automatically at runtime.
+        run: google-chrome --version || google-chrome-stable --version
+
+      - name: Run live integration tests
+        env:
+          WEBRES6_INTEGRATION: '1'
+          # headless is the default in the tests; make it explicit for CI
+          HEADLESS_SELENIUM: '1'
+        run: |
+          cd api
+          pytest test_webres6_integration.py -v
