@@ -808,26 +808,30 @@ function handleDrop(event) {
     
 /* Handle form submission for URL analysis */
 function handleFormSubmit(e) {
-  let url = $('#urlInput').val().trim();
+  const urlInput = $('#urlInput');
+  let url = urlInput.val().trim();
 
-  // Check if URL has a scheme that is not http or https
-  const schemeMatch = url.match(/^([a-z][a-z0-9+.-]*):\/\//i);
-  if (schemeMatch) {
-    const scheme = schemeMatch[1].toLowerCase();
-    if (scheme !== 'http' && scheme !== 'https') {
-      // Show error for invalid scheme
-      const [domContainer, overview] = createResultsDomContainer(url);
-      const errStatus = $('#results-template .overview .status.error').clone();
-      errStatus.find('.placeholder').text(`Invalid URL scheme "${scheme}://". Only http:// and https:// are supported.`);
-      errStatus.removeClass('template');
-      overview.append(errStatus);
-      return;
-    }
+  // Add https:// if no scheme is present
+  if (url && !url.match(/^[a-z][a-z0-9+.-]*:\/\//i)) {
+    url = 'https://' + url;
+    urlInput.val(url);
   }
 
-  analyzeURL(url, parseFloat($('#waitTime').val()), $('#scoreboardSwitch').is(':checked'), $('#screenshotSelect').val(), $('#extensionSelect').val(), $('#whoisLookup').is(':checked'));
-  $('#urlInput').val('');
-  // $('#scoreboard').addClass('hide');
+  // Validate; use setCustomValidity so our message always wins over browser quirks
+  let parsed;
+  try { parsed = new URL(url); } catch (_) { parsed = null; }
+  if (!parsed) {
+    urlInput[0].setCustomValidity('Please enter a valid URL.');
+    urlInput[0].reportValidity();
+  } else if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    urlInput[0].setCustomValidity(`Scheme "${parsed.protocol.replace(':', '')}" is not supported. Use http or https.`);
+    urlInput[0].reportValidity();
+  } else {
+    urlInput[0].setCustomValidity('');
+    analyzeURL(url, parseFloat($('#waitTime').val()), $('#scoreboardSwitch').is(':checked'), $('#screenshotSelect').val(), $('#extensionSelect').val(), $('#whoisLookup').is(':checked'));
+    urlInput.val('');
+    // $('#scoreboard').addClass('hide');
+  }
 }
 
 /* Handle URL anchors for direct loading of reports, URLs or the scoreboard */
@@ -862,16 +866,6 @@ $(async function() {
   $(document).on('click', '.hide-button', function() {
     $(this).closest('.contents-container').hide();
   });
-  // Prepend https:// before browser native url validation can reject the value
-  function normalizeUrlInput() {
-    const $el = $('#urlInput');
-    const v = $el.val().trim();
-    if (v && !v.match(/^[a-z][a-z0-9+.-]*:\/\//i)) {
-      $el.val('https://' + v);
-    }
-  }
-  $('#urlInput').on('blur', normalizeUrlInput);
-  $('#urlInput').on('keydown', function(e) { if (e.key === 'Enter') normalizeUrlInput(); });
   // URL submission handler
   $('#urlForm').on('submit', function(e) { e.preventDefault(); handleFormSubmit(e); });
   // Load server config and enable features
