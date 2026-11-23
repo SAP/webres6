@@ -332,12 +332,12 @@ function renderHostsTable(data, hostsContainer) {
                     $('<td class="protocol he-unused">').text(proto)];
           });
           const span = pr.length;
-          const asnCell       = $(`<td rowspan="${span}" class="as-number he-unused" />`);
-          const asDescrCell   = $(`<td rowspan="${span}" class="as-descr he-unused" />`);
+          const asnCell       = $('<td>').attr('rowspan', span).addClass('as-number he-unused').text(' ');
+          const asDescrCell   = $('<td>').attr('rowspan', span).addClass('as-descr he-unused').text(' ');
           // badge rides the always-visible IP cell (the netname column is hidden by default)
           const ipCell        = $('<td>').attr('rowspan', span).addClass('ip-address he-unused he-ok-unused').text(ip)
             .attr('title', 'Happy Eyeballs: connection established but not used to serve resources');
-          const ipNetnameCell = $('<td>').attr('rowspan', span).addClass('ip-netname he-unused');
+          const ipNetnameCell = $('<td>').attr('rowspan', span).addClass('ip-netname he-unused').text(' ');
           row.append(pr[0]); pr.shift();
           row.append(asnCell);
           row.append(asDescrCell);
