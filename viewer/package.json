@@ -9,7 +9,7 @@
     "build": "terser viewer.js -c -m -o viewer.min.js"
   },
   "dependencies": {
-    "jquery": "4.0.0"
+    "jquery": "4.1.0"
   },
   "devDependencies": {
     "terser": "^5"
